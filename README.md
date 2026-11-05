@@ -5,9 +5,9 @@ A Rust port of [Baritone](https://github.com/cabaletta/baritone), the Minecraft 
 
 ## Status
 
-**Nothing is ported yet, and there is no mod to use.** This repository holds the license, the credits and two
-test tools, described in [tools/README.md](tools/README.md). The scope, the crate layout and the way it hooks into
-Horizon have not been decided.
+**Nothing is ported yet, and there is no mod to use.** This repository holds the license, the credits, two test tools
+described in [tools/README.md](tools/README.md), the [plan](docs/PLAN.md) and the way the port gets checked,
+[Porting safety](docs/PORTING-SAFETY.md).
 
 ## Upstream
 

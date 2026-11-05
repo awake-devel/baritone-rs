@@ -1,6 +1,6 @@
 # Porting safety
 
-**Status: proposed on 2026-11-05. Not built yet, apart from the two tools named below.**
+**Status: approved on 2026-11-05. Not built yet, apart from the two tools named below.**
 
 How baritone-rs shows that the port behaves like Baritone, and where it knowingly doesn't. The ideas come from how
 Horizon checks itself against Minecraft ([parity workflow](https://github.com/horizon-rust/horizon/blob/main/docs/parity-workflow.md),
@@ -91,8 +91,14 @@ on which paths get chosen need no decision: fix them and record them. Fixes that
 owner's decision. Two examples are making spawner avoidance work, which is dead upstream, and the Y heuristic, which is
 kept as is for now.
 
-A bug that also exists upstream gets reported there. First check that it has no open pull request or report. Then open a
-pull request, or an issue when that fits better.
+A bug that also exists upstream is fixed here, in the port, and recorded as a deviation. This project doesn't maintain
+upstream, so nothing is sent there.
+
+The owner has decided to take three such fixes, although they change which paths get chosen:
+
+- Special blocks in the cache being looked up 64 blocks too low.
+- The bottom layer caution that never applies.
+- The inverted flow test for water at chunk edges.
 
 ## Java traps
 
