@@ -23,6 +23,8 @@ pub const COURSE: [Waypoint; 5] = [
 
 const ARRIVED: f64 = 0.3;
 const TIMEOUT_TICKS: u64 = 1200;
+const STEP_MARGIN: f64 = 0.25;
+const JUMP_RANGE: f64 = 1.0;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Output {
@@ -40,7 +42,6 @@ pub struct Walker {
     pub running: bool,
     next: usize,
     tick: u64,
-    jump_until: u64,
     rows: Vec<String>,
 }
 
@@ -69,10 +70,8 @@ impl Walker {
             out.yaw = Some((-dx).atan2(dz).to_degrees() as f32);
             out.forward = true;
             out.sprint = w.sprint;
-            if w.at[1] > p[1] + 0.5 && horizontal(p, w.at) < 1.6 && on_ground {
-                self.jump_until = self.tick + 4;
-            }
-            out.jump = self.tick < self.jump_until;
+            // Hold jump near a step, until the feet are level with the waypoint.
+            out.jump = w.at[1] - p[1] > STEP_MARGIN && horizontal(p, w.at) < JUMP_RANGE;
         }
         self.rows.push(format!(
             "{},{:.6},{:.6},{:.6},{:.3},{},{},{},{},{}",

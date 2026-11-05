@@ -2,10 +2,10 @@
 
 **Status: proposed on 2026-11-05. Not built yet, apart from the two tools named below.**
 
-How baritone-rs shows that the port behaves like Baritone, and where it knowingly doesn't. The method follows
-Horizon's for Minecraft ([parity workflow](https://github.com/horizon-rust/horizon/blob/main/docs/parity-workflow.md),
+How baritone-rs shows that the port behaves like Baritone, and where it knowingly doesn't. The ideas come from how
+Horizon checks itself against Minecraft ([parity workflow](https://github.com/horizon-rust/horizon/blob/main/docs/parity-workflow.md),
 [port ledger](https://github.com/horizon-rust/horizon/blob/main/docs/port-ledger.md)), scaled down to a small project
-on one laptop.
+on one laptop. Only the ideas: our tools are written here, without Horizon's code.
 
 ## The rules
 
@@ -39,7 +39,8 @@ Each level answers a different question. Passing one says nothing about the next
 - **L3** exists as a first step: [`tools/walk-test`](../tools/README.md) drives a fixed course. A scenario checks arrival,
   time and blocks changed. It does not claim tick-for-tick equality with Java Minecraft, because nothing compares them
   yet.
-- **L4** is manual and needs the owner's go-ahead for each server.
+- **L4** runs on anarchy servers that allow utility clients, such as 6b6t.org, as often as useful, at any stage. Each
+  result names its server.
 
 Layers we redesign (world access, threads, cache, processes) have no upstream behaviour to match line by line. They get
 ordinary tests for the properties that matter, such as "a cancelled search never installs a path", and then L2 and L3
@@ -85,9 +86,13 @@ This is also how the license's provenance requirement gets met: every file and f
 told to expect it. An exception must be as narrow as the behaviour. It names the function and the condition, never
 "ignore this function".
 
-Candidates from the audit are fixes such as the cache's wrong Y key and the inverted water flow test. Fixes that change
-which paths get chosen need the owner's decision. Two examples are making spawner avoidance work, which is dead upstream,
-and the Y heuristic, which is kept as is for now.
+Candidates from the audit are fixes such as the cache's wrong Y key and the inverted water flow test. Fixes with no effect
+on which paths get chosen need no decision: fix them and record them. Fixes that change which paths get chosen need the
+owner's decision. Two examples are making spawner avoidance work, which is dead upstream, and the Y heuristic, which is
+kept as is for now.
+
+A bug that also exists upstream gets reported there. First check that it has no open pull request or report. Then open a
+pull request, or an issue when that fits better.
 
 ## Java traps
 
@@ -153,8 +158,10 @@ Reports hold metadata only and may be committed. Generated data stays local.
 ### Keeping Horizon clean
 
 Horizon's contribution rules put LGPL code off limits, even to read. So this project's code must never be offered to
-Horizon. When we need a hook there, we ask for it by describing the need, and we don't send code from here. Horizon's own
-code is MIT, so copying from it is allowed, with its notice kept.
+Horizon. When we need a hook there, we ask for it by describing the need, and we don't send code from here.
+
+In the other direction, we read Horizon to learn its API and take ideas. We don't copy its code, although its MIT license
+would allow that.
 
 ## Stages
 
@@ -167,7 +174,7 @@ Each stage ends with a report to the owner, who decides whether to continue.
 | **S2** | Horizon's facts against Java's | L1 on all block states, with each difference explained |
 | **S3** | A*, partial paths and segments | L2 on a corpus of generated worlds |
 | **S4** | World access, threads, executor and glue | Property tests, then L3 scenarios |
-| **S5** | Servers, if the owner wants it | L4 reports, per server |
+| **S5** | Full server runs. Earlier stages can also test on servers. | L4 reports, per server |
 
 S2 comes before S3 on purpose. If Horizon's facts can't support the rules, that needs to be known before building more on
 top of them.
@@ -186,3 +193,6 @@ top of them.
 - Whether the checks in `tools/gate.py` should later also run on public CI. Without Minecraft there, CI could only run
   steps 1 to 4.
 - Whether Horizon's pinned revision stays at `4aa6854`, or moves to one with `native_movement_input`.
+- How to keep walking with the chat open, which is a requirement: players use Baritone while they talk or type commands.
+  At `4aa6854`, the game ignores movement keys while a screen is open, so `tools/walk-test` stops when the chat opens. L3
+  needs a scenario for this.
