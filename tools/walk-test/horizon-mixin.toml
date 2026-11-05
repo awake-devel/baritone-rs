@@ -1,0 +1,45 @@
+# Test bundle for baritone-rs: walks the player along a fixed course by writing the game's movement keys and yaw
+# from native_tick, and records every tick. Pinned: `keys`, `yaw` and `player` are private fields of Game, outside the
+# stable hook API, so this needs a rebase on each Horizon revision.
+[mod]
+id = "baritone_walk"
+version = "0.0.0"
+priority = 100
+
+[compatibility]
+horizon_revision = "4aa6854a886183440256f4f4a4a9d1ed853227a1"
+
+[[module]]
+id = "runtime"
+file = "crates/horizon-client/src/game.rs"
+name = "baritone_walk"
+source = "runtime.rs"
+
+[[injection]]
+id = "tick"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_tick"
+helper = "tick.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+]
+
+[[injection]]
+id = "command"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_command"
+helper = "command.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "command", ty = "&str", value = "command" },
+  { name = "ran", ty = "&mut bool", value = "&mut *ran" },
+]
+
+[[injection]]
+id = "list"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_mods"
+helper = "list.rs"
+bindings = [
+  { name = "mods", ty = "&mut Vec<crate::game::native_hooks::NativeMod>", value = "&mut *mods" },
+]
