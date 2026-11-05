@@ -32,7 +32,7 @@ M = [
     ("adjacent: falling ignored", "if !directly_above && s.falling && self.cfg.avoid_updating_falling", "if false && s.falling"),
     ("adjacent: strict liquid ignored", "if directly_above || self.cfg.strict_liquid_check {", "if directly_above {"),
     ("adjacent: source level", "if s.level == 0 {\n                return true;", "if s.level == 1 {\n                return true;"),
-    ("adjacent: skip east", "|| self.avoid_adjacent_breaking(x + 1, y, z, false)\n", "\n"),
+    ("adjacent: skip east", "self.avoid_adjacent_breaking(x + 1, y, z, false) || ", ""),
     ("break: ice allowed", 's.block == "ice" || s.infested', "s.infested"),
     ("break: extra penalty dropped", "result += self.cfg.break_penalty;", ""),
     ("break: falling stack ignored", "if above.falling {", "if false {"),

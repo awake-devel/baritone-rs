@@ -1,0 +1,672 @@
+class	method	status	commit	hash	covered_by	note
+AStarPathFinder	<init>	missing	1b8e87c	6c63beb1dc416301		
+AStarPathFinder	calculate0	missing	1b8e87c	ff1cb876659fb955		
+AbstractNodeCostSearch	<init>	missing	1b8e87c	186065221c2d7af3		
+AbstractNodeCostSearch	bestPathSoFar	missing	1b8e87c	f273828c8cc02918		
+AbstractNodeCostSearch	bestSoFar	missing	1b8e87c	9a46f85941037245		
+AbstractNodeCostSearch	calculate	missing	1b8e87c	c793b51e35154bcb		
+AbstractNodeCostSearch	calculate0	missing	1b8e87c	4aa0003e5cb2cd64		
+AbstractNodeCostSearch	cancel	missing	1b8e87c	cbf3dd85495e1b8e		
+AbstractNodeCostSearch	getDistFromStartSq	missing	1b8e87c	57bb0eea9a8fbf8a		
+AbstractNodeCostSearch	getGoal	missing	1b8e87c	9cc0af05d3f36268		
+AbstractNodeCostSearch	getNodeAtPosition	missing	1b8e87c	6d32706c819a5b12		
+AbstractNodeCostSearch	getStart	missing	1b8e87c	106a4659193ca569		
+AbstractNodeCostSearch	isFinished	missing	1b8e87c	c6335fd30a6ac66c		
+AbstractNodeCostSearch	mapSize	missing	1b8e87c	3d8c1eefa89c140c		
+AbstractNodeCostSearch	pathToMostRecentNodeConsidered	missing	1b8e87c	0520764f85fc79bb		
+ActionCosts	distanceToTicks	port	1b8e87c	66539f392ef9e3df	cost-compare	
+ActionCosts	generateFallNBlocksCost	port	1b8e87c	0a9e50921b3c966b	cost-compare	Built once and cached in a OnceLock.
+ActionCosts	oldFormula	drop	1b8e87c	0dbc7f355b38467b		Unused in upstream main code; only a formula kept for reference.
+ActionCosts	velocity	port	1b8e87c	4c2faa435c01bdb3	cost-compare	
+BetterWorldBorder	<init>	missing	1b8e87c	c801738720d0b7d9		
+BetterWorldBorder	canPlaceAt	port	1b8e87c	40bebb2ed52c7b25	cost-compare	
+BetterWorldBorder	entirelyContains	missing	1b8e87c	020955157dc84691		
+BinaryHeapOpenSet	<init>()	missing	1b8e87c	529fe85f77c361b8		
+BinaryHeapOpenSet	<init>(int)	missing	1b8e87c	74b9336521c5c66b		
+BinaryHeapOpenSet	insert	missing	1b8e87c	34b14aa509cab776		
+BinaryHeapOpenSet	isEmpty	missing	1b8e87c	8ee17edc4801074e		
+BinaryHeapOpenSet	removeLowest	missing	1b8e87c	4cc67b3e28f567da		
+BinaryHeapOpenSet	siftUp	missing	1b8e87c	e55f80167b7a8549		
+BinaryHeapOpenSet	size	missing	1b8e87c	22996621ae0759a4		
+BinaryHeapOpenSet	update	missing	1b8e87c	98fbae3ac199902a		
+BlockStateInterface	<init>(BetterWorldBorder,int,int)	missing	1b8e87c	1eda20ba48aae6ec		
+BlockStateInterface	<init>(IPlayerContext)	missing	1b8e87c	0539aaf67088d815		
+BlockStateInterface	<init>(IPlayerContext,boolean)	missing	1b8e87c	527c461524f246fa		
+BlockStateInterface	claimCache	missing	1b8e87c	c485ff16a60c6292		
+BlockStateInterface	get	missing	1b8e87c	4684538a73125906		
+BlockStateInterface	get0(BlockPos)	missing	1b8e87c	cfa53512fd84bce6		
+BlockStateInterface	get0(int,int,int)	missing	1b8e87c	4e908620206a7c99		
+BlockStateInterface	getBlock	missing	1b8e87c	03bdbff6f1a0ed4e		
+BlockStateInterface	getFromChunk(LevelChunk,int,int,int)	missing	1b8e87c	958980b714941679		
+BlockStateInterface	getFromChunk(LevelChunkSection[],int,int,int)	missing	1b8e87c	432785696527061b		
+BlockStateInterface	getUncached	missing	1b8e87c	2077484bf5878c40		
+BlockStateInterface	isLoaded	missing	1b8e87c	cea78bc4c6b82cb7		
+BlockStateInterface	releaseCache	missing	1b8e87c	57e630960605fef8		
+BlockStateInterface	worldContainsLoadedChunk	missing	1b8e87c	9a51597ac6b0d5b9		
+CachedChunk	<init>	later	1b8e87c	eb24195f9a2d5dfa		Persistent cache: after the processes; the first release has no cache.
+CachedChunk	calculateHeightMap()	later	1b8e87c	6f7af279998a8511		Persistent cache: after the processes; the first release has no cache.
+CachedChunk	calculateHeightMap(BitSet,int,int[])	later	1b8e87c	066b69000bb06c68		Persistent cache: after the processes; the first release has no cache.
+CachedChunk	getAbsoluteBlocks	later	1b8e87c	2244e24f64f1628e		Persistent cache: after the processes; the first release has no cache.
+CachedChunk	getBlock	later	1b8e87c	fa8638ad8b10a551		Persistent cache: after the processes; the first release has no cache.
+CachedChunk	getOverview	later	1b8e87c	0b47e315ea1ac57f		Persistent cache: after the processes; the first release has no cache.
+CachedChunk	getPositionIndex	later	1b8e87c	34ded41d5f16cd8b		Persistent cache: after the processes; the first release has no cache.
+CachedChunk	getRelativeBlocks	later	1b8e87c	bdbaace8106a15b3		Persistent cache: after the processes; the first release has no cache.
+CachedChunk	getType	later	1b8e87c	c7ef64171855c51c		Persistent cache: after the processes; the first release has no cache.
+CachedChunk	setSpecial	later	1b8e87c	c6d96c9e497dfaee		Persistent cache: after the processes; the first release has no cache.
+CachedChunk	size	later	1b8e87c	02953bab02d75011		Persistent cache: after the processes; the first release has no cache.
+CachedChunk	sizeInBytes	later	1b8e87c	b8713658205f61be		Persistent cache: after the processes; the first release has no cache.
+CachedChunk	toByteArray	later	1b8e87c	8b4a16fb1a4216b4		Persistent cache: after the processes; the first release has no cache.
+CachedChunk	validateSize	later	1b8e87c	0b24412be80abe8d		Persistent cache: after the processes; the first release has no cache.
+CachedRegion	<init>	later	1b8e87c	f428ad287793f0af		Persistent cache: after the processes; the first release has no cache.
+CachedRegion	getBlock	later	1b8e87c	28a971c16580d156		Persistent cache: after the processes; the first release has no cache.
+CachedRegion	getLocationsOf	later	1b8e87c	710ac34fb669e321		Persistent cache: after the processes; the first release has no cache.
+CachedRegion	getRegionFile	later	1b8e87c	a721a4f5c7f8004b		Persistent cache: after the processes; the first release has no cache.
+CachedRegion	getX	later	1b8e87c	293ea3ee7de690f8		Persistent cache: after the processes; the first release has no cache.
+CachedRegion	getZ	later	1b8e87c	0fd631fcad3c2544		Persistent cache: after the processes; the first release has no cache.
+CachedRegion	isCached	later	1b8e87c	36148b3152a6f4ea		Persistent cache: after the processes; the first release has no cache.
+CachedRegion	load	later	1b8e87c	82f623df99dbf5bb		Persistent cache: after the processes; the first release has no cache.
+CachedRegion	mostRecentlyModified	later	1b8e87c	a802981a3bee4a90		Persistent cache: after the processes; the first release has no cache.
+CachedRegion	removeExpired	later	1b8e87c	3c738fdea79814b2		Persistent cache: after the processes; the first release has no cache.
+CachedRegion	save	later	1b8e87c	68f464f885c726ef		Persistent cache: after the processes; the first release has no cache.
+CachedRegion	updateCachedChunk	later	1b8e87c	75e2d09e20114310		Persistent cache: after the processes; the first release has no cache.
+CachedWorld	<init>	later	1b8e87c	f5cc871b7ca18d75		Persistent cache: after the processes; the first release has no cache.
+CachedWorld	allRegions	later	1b8e87c	d468ad4b312f7afe		Persistent cache: after the processes; the first release has no cache.
+CachedWorld	getLocationsOf	later	1b8e87c	40683497df2be41a		Persistent cache: after the processes; the first release has no cache.
+CachedWorld	getOrCreateRegion	later	1b8e87c	79a4adb2610b364c		Persistent cache: after the processes; the first release has no cache.
+CachedWorld	getRegion	later	1b8e87c	66cb00579dd9fd56		Persistent cache: after the processes; the first release has no cache.
+CachedWorld	getRegionID	later	1b8e87c	0292180e79f4f6d6		Persistent cache: after the processes; the first release has no cache.
+CachedWorld	guessPosition	later	1b8e87c	74ca3b19f330d93b		Persistent cache: after the processes; the first release has no cache.
+CachedWorld	isCached	later	1b8e87c	63cc8c78b508f9be		Persistent cache: after the processes; the first release has no cache.
+CachedWorld	isRegionInWorld	later	1b8e87c	0daf662dc7802581		Persistent cache: after the processes; the first release has no cache.
+CachedWorld	prune	later	1b8e87c	b9a6b7c6382e8616		Persistent cache: after the processes; the first release has no cache.
+CachedWorld	queueForPacking	later	1b8e87c	135fb9ee8d9365d5		Persistent cache: after the processes; the first release has no cache.
+CachedWorld	regionLoaded	later	1b8e87c	fd1a3034ea5b9cc6		Persistent cache: after the processes; the first release has no cache.
+CachedWorld	reloadAllFromDisk	later	1b8e87c	bd2a3312249f0c63		Persistent cache: after the processes; the first release has no cache.
+CachedWorld	save	later	1b8e87c	f2b649b26364410d		Persistent cache: after the processes; the first release has no cache.
+CachedWorld	tryLoadFromDisk	later	1b8e87c	766e71d0611b41f8		Persistent cache: after the processes; the first release has no cache.
+CachedWorld	tryLoadFromDiskAsync	later	1b8e87c	ede917a9fb6ad660		Persistent cache: after the processes; the first release has no cache.
+CachedWorld	updateCachedChunk	later	1b8e87c	c75e3dd6a2acf8fe		Persistent cache: after the processes; the first release has no cache.
+CachedWorld.PackerThread	run	later	1b8e87c	ce55a3cfc29553ad		Persistent cache: after the processes; the first release has no cache.
+CalculationContext	<init>(IBaritone)	missing	1b8e87c	f791e3815f131fcf		
+CalculationContext	<init>(IBaritone,boolean)	missing	1b8e87c	2871e2e611c1dbf6		
+CalculationContext	<init>(IBaritone,boolean,Level,WorldData,BlockStateInterface,ToolSet,boolean,boolean,boolean,int,float)	redesign	1b8e87c	40c99304f837bec9	cost-compare	Settings arrive as Config. Only the waterWalkSpeed computation is translated, in Ctx::new.
+CalculationContext	breakCostMultiplierAt	port	1b8e87c	f1276c9905702bf9	cost-compare	allowBreakAnyway stays empty; isPossiblyProtected is always false upstream.
+CalculationContext	claimSearchCaches	missing	1b8e87c	72c1f047da5b064d		
+CalculationContext	costOfPlacingAt	port	1b8e87c	d784b144a3644243	cost-compare	isPossiblyProtected is always false upstream.
+CalculationContext	frostWalkerLevel	redesign	1b8e87c	ee744656c835b279	cost-compare	The enchantment lookup is not translated; the level arrives as Config.frost_walker.
+CalculationContext	get(BlockPos)	missing	1b8e87c	b838fc1560d5f2b6		
+CalculationContext	get(int,int,int)	port	1b8e87c	61c5a8a956d8d1d6	cost-compare	Outside the world the state is air; BlockStateInterface.get0 is not translated.
+CalculationContext	getBaritone	drop	1b8e87c	08de1327a8ac60af		Multi-instance Java API layer.
+CalculationContext	getBlock	missing	1b8e87c	ff9b056508b1e63b		
+CalculationContext	isLoaded	missing	1b8e87c	6116ae9c8a508ae9		
+CalculationContext	isPossiblyProtected	missing	1b8e87c	1948731765551e24		
+CalculationContext	newMiningKeys	missing	1b8e87c	4434c52d5c8de6b0		
+CalculationContext	placeBucketCost	missing	1b8e87c	16684b5f7de384fa		
+CalculationContext	releaseSearchCaches	missing	1b8e87c	0075d1545b6ceace		
+CalculationContext	waterSpeedMultiplier	redesign	1b8e87c	0a6e6f423e18b25c	cost-compare	The enchantment lookup is not translated; the multiplier arrives as Config.water_mult.
+ChunkPacker	<init>	later	1b8e87c	a3f1fd36dead1050		Persistent cache: after the processes; the first release has no cache.
+ChunkPacker	getPathingBlockType	later	1b8e87c	4a65e6e31454cfc3		Persistent cache: after the processes; the first release has no cache.
+ChunkPacker	pack	later	1b8e87c	5851b3cea208d4dc		Persistent cache: after the processes; the first release has no cache.
+ChunkPacker	pathingTypeToBlock	later	1b8e87c	b961cfc04aad98b2		Persistent cache: after the processes; the first release has no cache.
+CustomGoalProcess	<init>	missing	1b8e87c	abce76fb4c4963cf		
+CustomGoalProcess	displayName0	missing	1b8e87c	e53eb30222b7b304		
+CustomGoalProcess	getGoal	missing	1b8e87c	b54c19de1948e51d		
+CustomGoalProcess	isActive	missing	1b8e87c	07af9aa8085c8d6b		
+CustomGoalProcess	mostRecentGoal	missing	1b8e87c	f368e2331e466b40		
+CustomGoalProcess	onLostControl	missing	1b8e87c	02ba15f70dc67392		
+CustomGoalProcess	onTick	missing	1b8e87c	447f2ca527fd08ff		
+CustomGoalProcess	path	missing	1b8e87c	95f47ff15a96493c		
+CustomGoalProcess	setGoal	missing	1b8e87c	488fc75dee396526		
+CutoffPath	<init>(IPath,int)	missing	1b8e87c	06d1ae15b8266fe2		
+CutoffPath	<init>(IPath,int,int)	missing	1b8e87c	b263057bb466da39		
+CutoffPath	getGoal	missing	1b8e87c	50a9d398a5a822ff		
+CutoffPath	getNumNodesConsidered	missing	1b8e87c	4657048dd65c49a6		
+CutoffPath	movements	missing	1b8e87c	9ff71a2ec2408a25		
+CutoffPath	positions	missing	1b8e87c	b7e64f7afa055602		
+ExploreProcess	<init>	later	1b8e87c	51c9f51cc44c1095		Process: next after the first release (mine, follow, explore, in that order).
+ExploreProcess	applyJsonFilter	later	1b8e87c	ada0b134c95bc29d		Process: next after the first release (mine, follow, explore, in that order).
+ExploreProcess	calcFilter	later	1b8e87c	200fe40bf3ea908c		Process: next after the first release (mine, follow, explore, in that order).
+ExploreProcess	closestUncachedChunks	later	1b8e87c	e2d394ceb4c4607e		Process: next after the first release (mine, follow, explore, in that order).
+ExploreProcess	createGoal	later	1b8e87c	04aa92d40e3004ad		Process: next after the first release (mine, follow, explore, in that order).
+ExploreProcess	displayName0	later	1b8e87c	54f6306e7185d24c		Process: next after the first release (mine, follow, explore, in that order).
+ExploreProcess	explore	later	1b8e87c	4b2030fb845c3305		Process: next after the first release (mine, follow, explore, in that order).
+ExploreProcess	isActive	later	1b8e87c	570f58cddeafceac		Process: next after the first release (mine, follow, explore, in that order).
+ExploreProcess	onLostControl	later	1b8e87c	1d23f2a59c6c7270		Process: next after the first release (mine, follow, explore, in that order).
+ExploreProcess	onTick	later	1b8e87c	652a5f19d5c4523f		Process: next after the first release (mine, follow, explore, in that order).
+ExploreProcess.BaritoneChunkCache	countRemain	later	1b8e87c	e7b615a5a2ed3d00		Process: next after the first release (mine, follow, explore, in that order).
+ExploreProcess.BaritoneChunkCache	isAlreadyExplored	later	1b8e87c	8bda3db4029ff9fd		Process: next after the first release (mine, follow, explore, in that order).
+ExploreProcess.EitherChunk	<init>	later	1b8e87c	7cf29b5ffb37f075		Process: next after the first release (mine, follow, explore, in that order).
+ExploreProcess.EitherChunk	countRemain	later	1b8e87c	946d9d3dc75e5619		Process: next after the first release (mine, follow, explore, in that order).
+ExploreProcess.EitherChunk	isAlreadyExplored	later	1b8e87c	b1e8b8fd84dc69bc		Process: next after the first release (mine, follow, explore, in that order).
+ExploreProcess.IChunkFilter	countRemain	later	1b8e87c	8ecc364d8ff5ec65		Process: next after the first release (mine, follow, explore, in that order).
+ExploreProcess.IChunkFilter	isAlreadyExplored	later	1b8e87c	dc670bf5d24b3a66		Process: next after the first release (mine, follow, explore, in that order).
+ExploreProcess.JsonChunkFilter	<init>	later	1b8e87c	8866e4d1f070f2b7		Process: next after the first release (mine, follow, explore, in that order).
+ExploreProcess.JsonChunkFilter	countRemain	later	1b8e87c	01f45c8c68717029		Process: next after the first release (mine, follow, explore, in that order).
+ExploreProcess.JsonChunkFilter	isAlreadyExplored	later	1b8e87c	ab870a6ee4f61fc2		Process: next after the first release (mine, follow, explore, in that order).
+FollowProcess	<init>	later	1b8e87c	a40e4d6735efcaa2		Process: next after the first release (mine, follow, explore, in that order).
+FollowProcess	currentFilter	later	1b8e87c	5c113f6d2fa838c1		Process: next after the first release (mine, follow, explore, in that order).
+FollowProcess	displayName0	later	1b8e87c	0398b34e877c6f1f		Process: next after the first release (mine, follow, explore, in that order).
+FollowProcess	follow	later	1b8e87c	d142718dfa3c0e68		Process: next after the first release (mine, follow, explore, in that order).
+FollowProcess	followable	later	1b8e87c	58886ce5066d2f70		Process: next after the first release (mine, follow, explore, in that order).
+FollowProcess	following	later	1b8e87c	f457e05d48f2c567		Process: next after the first release (mine, follow, explore, in that order).
+FollowProcess	isActive	later	1b8e87c	df2dc3e8c9811514		Process: next after the first release (mine, follow, explore, in that order).
+FollowProcess	onLostControl	later	1b8e87c	40a1dc4cf6f1a700		Process: next after the first release (mine, follow, explore, in that order).
+FollowProcess	onTick	later	1b8e87c	e774687a82c9e44c		Process: next after the first release (mine, follow, explore, in that order).
+FollowProcess	pickup	later	1b8e87c	75d823431af51119		Process: next after the first release (mine, follow, explore, in that order).
+FollowProcess	scanWorld	later	1b8e87c	a794a49d26b7a5c0		Process: next after the first release (mine, follow, explore, in that order).
+FollowProcess	towards	later	1b8e87c	c9e548474908ecae		Process: next after the first release (mine, follow, explore, in that order).
+GetToBlockProcess	<init>	missing	1b8e87c	e1462b0576e82003		
+GetToBlockProcess	areAdjacent	missing	1b8e87c	35bb2c42eff4417f		
+GetToBlockProcess	blacklistClosest	missing	1b8e87c	1fb33c1ee9b790a1		
+GetToBlockProcess	blockOnTopMustBeRemoved	missing	1b8e87c	3d336dda0ec72e43		
+GetToBlockProcess	createGoal	missing	1b8e87c	e421b051ac5a3470		
+GetToBlockProcess	displayName0	missing	1b8e87c	f7fdd1f642e4f871		
+GetToBlockProcess	getToBlock	missing	1b8e87c	e6a0ecbf176076a0		
+GetToBlockProcess	isActive	missing	1b8e87c	7ec33c51b3164379		
+GetToBlockProcess	onLostControl	missing	1b8e87c	4dc1ee4764c899bd		
+GetToBlockProcess	onTick	missing	1b8e87c	0815e33e2e1ea51f		
+GetToBlockProcess	rescan	missing	1b8e87c	0f0aa69d090b7495		
+GetToBlockProcess	rightClick	missing	1b8e87c	597a58d8848ae8ac		
+GetToBlockProcess	rightClickOnArrival	missing	1b8e87c	69867b5af01c3123		
+GetToBlockProcess	walkIntoInsteadOfAdjacent	missing	1b8e87c	f06b54e55a3ee137		
+GetToBlockProcess.GetToBlockCalculationContext	<init>	missing	1b8e87c	81dc5357229f27c1		
+GetToBlockProcess.GetToBlockCalculationContext	breakCostMultiplierAt	missing	1b8e87c	bb01e1e18fde5c6e		
+Goal	heuristic()	missing	1b8e87c	76039b40b2f67ee5		
+Goal	heuristic(BlockPos)	missing	1b8e87c	d7a01e52903c5830		
+Goal	heuristic(int,int,int)	missing	1b8e87c	6b3a05c07414772a		
+Goal	isInGoal(BlockPos)	missing	1b8e87c	1f04448f7462f9b2		
+Goal	isInGoal(int,int,int)	missing	1b8e87c	905f9d1e967a0990		
+GoalAxis	equals	missing	1b8e87c	a9a555cf203dec67		
+GoalAxis	hashCode	missing	1b8e87c	d99503d1b195bf1c		
+GoalAxis	heuristic	missing	1b8e87c	5fbff4d938d35702		
+GoalAxis	isInGoal	missing	1b8e87c	578101519367883c		
+GoalAxis	toString	missing	1b8e87c	258022f92f9d4874		
+GoalBlock	<init>(BlockPos)	missing	1b8e87c	827b853b496c5b0f		
+GoalBlock	<init>(int,int,int)	missing	1b8e87c	60a156b0b312c657		
+GoalBlock	calculate	missing	1b8e87c	48d7886976ef1462		
+GoalBlock	equals	missing	1b8e87c	aef2d764da53896c		
+GoalBlock	getGoalPos	missing	1b8e87c	d854dd4afa577a93		
+GoalBlock	hashCode	missing	1b8e87c	571f31cf7db32b0d		
+GoalBlock	heuristic	missing	1b8e87c	c2e6f60c74e12d51		
+GoalBlock	isInGoal	missing	1b8e87c	0f155247a12f7e26		
+GoalBlock	toString	missing	1b8e87c	07c256d3e235a51a		
+GoalComposite	<init>	missing	1b8e87c	50a45b83aecc1de1		
+GoalComposite	equals	missing	1b8e87c	1a135b0cdcb0273e		
+GoalComposite	goals	missing	1b8e87c	a6b8d85a41657870		
+GoalComposite	hashCode	missing	1b8e87c	26b73da790b4e17c		
+GoalComposite	heuristic()	missing	1b8e87c	e4cc907a0bec54fd		
+GoalComposite	heuristic(int,int,int)	missing	1b8e87c	32e50dab6f7a3ff9		
+GoalComposite	isInGoal	missing	1b8e87c	80aaeefb9cbd27e0		
+GoalComposite	toString	missing	1b8e87c	0bca67444d7644cd		
+GoalGetToBlock	<init>	missing	1b8e87c	a5da83548d906c91		
+GoalGetToBlock	equals	missing	1b8e87c	750586549fc629bf		
+GoalGetToBlock	getGoalPos	missing	1b8e87c	d854dd4afa577a93		
+GoalGetToBlock	hashCode	missing	1b8e87c	bbf76c944cf75528		
+GoalGetToBlock	heuristic	missing	1b8e87c	378f97e4a823e5cb		
+GoalGetToBlock	isInGoal	missing	1b8e87c	4600ccf006ef1164		
+GoalGetToBlock	toString	missing	1b8e87c	80a19ab4bb662f02		
+GoalInverted	<init>	missing	1b8e87c	34592848df770fc3		
+GoalInverted	equals	missing	1b8e87c	103ffb735a807257		
+GoalInverted	hashCode	missing	1b8e87c	4c83c307c5eb021c		
+GoalInverted	heuristic()	missing	1b8e87c	e3c8f17953947965		
+GoalInverted	heuristic(int,int,int)	missing	1b8e87c	d1f7a13ef515d5a9		
+GoalInverted	isInGoal	missing	1b8e87c	8f8b1da1ffdb2ba8		
+GoalInverted	toString	missing	1b8e87c	67128c77adaa155d		
+GoalNear	<init>	missing	1b8e87c	4df47743f40832c1		
+GoalNear	equals	missing	1b8e87c	1276005d81cede62		
+GoalNear	getGoalPos	missing	1b8e87c	d854dd4afa577a93		
+GoalNear	hashCode	missing	1b8e87c	dec59103536b3c6a		
+GoalNear	heuristic()	missing	1b8e87c	e794a7c11c498842		
+GoalNear	heuristic(int,int,int)	missing	1b8e87c	f8131e1214f5c0e1		
+GoalNear	isInGoal	missing	1b8e87c	12fe03f31c4e6a3b		
+GoalNear	toString	missing	1b8e87c	7da6a6a37148e308		
+GoalRunAway	<init>(double,BlockPos...)	missing	1b8e87c	2e6d059aae7416b8		
+GoalRunAway	<init>(double,Integer,BlockPos...)	missing	1b8e87c	611c3b7c880894cd		
+GoalRunAway	equals	missing	1b8e87c	d17e7b3106d4d4a8		
+GoalRunAway	hashCode	missing	1b8e87c	a7160f8f5537cf42		
+GoalRunAway	heuristic()	missing	1b8e87c	3133c9b13f6a5d3f		
+GoalRunAway	heuristic(int,int,int)	missing	1b8e87c	218dd7be76aaf7f4		
+GoalRunAway	isInGoal	missing	1b8e87c	deb8336af4b6268c		
+GoalRunAway	toString	missing	1b8e87c	0da05bac6b7a45b7		
+GoalStrictDirection	<init>	missing	1b8e87c	40a48fb1939b6ac1		
+GoalStrictDirection	equals	missing	1b8e87c	f6432998b5e5f825		
+GoalStrictDirection	hashCode	missing	1b8e87c	d41a6c18cc70eac2		
+GoalStrictDirection	heuristic()	missing	1b8e87c	e3c8f17953947965		
+GoalStrictDirection	heuristic(int,int,int)	missing	1b8e87c	4cac1e11e1c9bd4f		
+GoalStrictDirection	isInGoal	missing	1b8e87c	8f8b1da1ffdb2ba8		
+GoalStrictDirection	toString	missing	1b8e87c	8d346fc6bc86ffab		
+GoalTwoBlocks	<init>(BlockPos)	missing	1b8e87c	bfc05d62b4a8c31e		
+GoalTwoBlocks	<init>(int,int,int)	missing	1b8e87c	ea4211d233da68a3		
+GoalTwoBlocks	equals	missing	1b8e87c	bd1b9b8872de9728		
+GoalTwoBlocks	getGoalPos	missing	1b8e87c	d854dd4afa577a93		
+GoalTwoBlocks	hashCode	missing	1b8e87c	f32a45f5b0ad0a2a		
+GoalTwoBlocks	heuristic	missing	1b8e87c	378f97e4a823e5cb		
+GoalTwoBlocks	isInGoal	missing	1b8e87c	5f6e0a18457d135e		
+GoalTwoBlocks	toString	missing	1b8e87c	63e888450bcdb62e		
+GoalXZ	<init>(BetterBlockPos)	missing	1b8e87c	386277e203bf9284		
+GoalXZ	<init>(int,int)	missing	1b8e87c	8ed1bc91568678f9		
+GoalXZ	calculate	missing	1b8e87c	8c75c64e88a62632		
+GoalXZ	equals	missing	1b8e87c	751544f45205961f		
+GoalXZ	fromDirection	missing	1b8e87c	b3a1ecae8e9aac5c		
+GoalXZ	getX	missing	1b8e87c	4248f82302494111		
+GoalXZ	getZ	missing	1b8e87c	b99843e6d1a3c609		
+GoalXZ	hashCode	missing	1b8e87c	a1d796ffe8f9eed0		
+GoalXZ	heuristic	missing	1b8e87c	29f17be5512ae0f7		
+GoalXZ	isInGoal	missing	1b8e87c	112be7427a89072a		
+GoalXZ	toString	missing	1b8e87c	2c25a5f83d587918		
+GoalYLevel	<init>	missing	1b8e87c	699e26a1f6b669a0		
+GoalYLevel	calculate	missing	1b8e87c	2a531185adc0c173		
+GoalYLevel	equals	missing	1b8e87c	c36d16a47877260a		
+GoalYLevel	hashCode	missing	1b8e87c	6b1b23018d75fb80		
+GoalYLevel	heuristic	missing	1b8e87c	f46da47852d52114		
+GoalYLevel	isInGoal	missing	1b8e87c	8c4b30e28bde1666		
+GoalYLevel	toString	missing	1b8e87c	5d73102a49970fc0		
+IOpenSet	insert	missing	1b8e87c	b4deb9bf2f10037e		
+IOpenSet	isEmpty	missing	1b8e87c	69c4fc8c60b25dbd		
+IOpenSet	removeLowest	missing	1b8e87c	2a263e3e13d4483f		
+IOpenSet	update	missing	1b8e87c	88540755a638e6a5		
+InputOverrideHandler	<init>	missing	1b8e87c	83ac5d53c5456d6b		
+InputOverrideHandler	clearAllKeys	missing	1b8e87c	d0e2c41528c77b15		
+InputOverrideHandler	getBlockBreakHelper	missing	1b8e87c	abc272a91324687c		
+InputOverrideHandler	inControl	missing	1b8e87c	a4534235ac06f46c		
+InputOverrideHandler	isInputForcedDown	missing	1b8e87c	8251719ec0b517bf		
+InputOverrideHandler	onTick	missing	1b8e87c	b0e4908457c6b7df		
+InputOverrideHandler	setInputForceState	missing	1b8e87c	126fc0a3d8ffe822		
+LinkedListOpenSet	insert	missing	1b8e87c	e260b2a42a79b253		
+LinkedListOpenSet	isEmpty	missing	1b8e87c	8c346ecac3df27a6		
+LinkedListOpenSet	removeLowest	missing	1b8e87c	a6b78cce5a55d37b		
+LinkedListOpenSet	update	missing	1b8e87c	9a4a68372cb97d66		
+LookBehavior	<init>	missing	1b8e87c	dd0f6a2f5b59ea19		
+LookBehavior	getAimProcessor	missing	1b8e87c	4dd326b65fa404d2		
+LookBehavior	getEffectiveRotation	missing	1b8e87c	4f0681935f22aa95		
+LookBehavior	onPlayerRotationMove	missing	1b8e87c	21cba8780bde5cd6		
+LookBehavior	onPlayerUpdate	missing	1b8e87c	3e1f966eaa8a8833		
+LookBehavior	onSendPacket	missing	1b8e87c	cd165ee044ee3fc8		
+LookBehavior	onTick	missing	1b8e87c	26c5bd7446d04111		
+LookBehavior	onWorldEvent	missing	1b8e87c	b7241aa897b0d4c0		
+LookBehavior	pig	missing	1b8e87c	78a1a9c317663c9f		
+LookBehavior	updateTarget	missing	1b8e87c	ea4ae106d35df1d7		
+LookBehavior.AbstractAimProcessor	<init>(AbstractAimProcessor)	missing	1b8e87c	2eda6ab93a04c81f		
+LookBehavior.AbstractAimProcessor	<init>(IPlayerContext)	missing	1b8e87c	50fb9a2d93282586		
+LookBehavior.AbstractAimProcessor	advance	missing	1b8e87c	220c81f4a41b6eda		
+LookBehavior.AbstractAimProcessor	angleToMouse	missing	1b8e87c	a0e6685d33119b2f		
+LookBehavior.AbstractAimProcessor	calculateMouseMove	missing	1b8e87c	6e093e71af6560ee		
+LookBehavior.AbstractAimProcessor	fork	missing	1b8e87c	15ff3c141e29a1e7		
+LookBehavior.AbstractAimProcessor	getPrevRotation	missing	1b8e87c	ea117701eb25a4a6		
+LookBehavior.AbstractAimProcessor	mouseToAngle	missing	1b8e87c	b55e4243c318dd68		
+LookBehavior.AbstractAimProcessor	nextRotation	missing	1b8e87c	570b4ab4c54ce874		
+LookBehavior.AbstractAimProcessor	nudgeToLevel	missing	1b8e87c	c41d90b49915ec46		
+LookBehavior.AbstractAimProcessor	peekRotation	missing	1b8e87c	de1a69eaf1ab1da1		
+LookBehavior.AbstractAimProcessor	tick	missing	1b8e87c	6883d573c94e39b0		
+LookBehavior.AimProcessor	<init>	missing	1b8e87c	2d79797ea89f32b2		
+LookBehavior.AimProcessor	getPrevRotation	missing	1b8e87c	8ce25b03ace8e15c		
+LookBehavior.Target	<init>	missing	1b8e87c	5b012e9c6ff7c960		
+LookBehavior.Target.Mode	resolve	missing	1b8e87c	a2cfb7cfedc5b285		
+MineProcess	<init>	later	1b8e87c	bfae21d062cbb6cf		Process: next after the first release (mine, follow, explore, in that order).
+MineProcess	addNearby	later	1b8e87c	95a70841d1b7c495		Process: next after the first release (mine, follow, explore, in that order).
+MineProcess	coalesce	later	1b8e87c	06f301cb066ad1f6		Process: next after the first release (mine, follow, explore, in that order).
+MineProcess	displayName0	later	1b8e87c	513a8ecb596ff1db		Process: next after the first release (mine, follow, explore, in that order).
+MineProcess	droppedItemsScan	later	1b8e87c	059611453fbec80d		Process: next after the first release (mine, follow, explore, in that order).
+MineProcess	filterFilter	later	1b8e87c	4e39a42425a98cd4		Process: next after the first release (mine, follow, explore, in that order).
+MineProcess	internalMiningGoal	later	1b8e87c	02dc183052cd9682		Process: next after the first release (mine, follow, explore, in that order).
+MineProcess	isActive	later	1b8e87c	d72afc32eff6149a		Process: next after the first release (mine, follow, explore, in that order).
+MineProcess	isNextToAir	later	1b8e87c	2332dd5b2c06ae43		Process: next after the first release (mine, follow, explore, in that order).
+MineProcess	mine	later	1b8e87c	f32a044b158e5b9c		Process: next after the first release (mine, follow, explore, in that order).
+MineProcess	mineByName	later	1b8e87c	de219c34259bf5e5		Process: next after the first release (mine, follow, explore, in that order).
+MineProcess	onLostControl	later	1b8e87c	fc12d9f3b70b461e		Process: next after the first release (mine, follow, explore, in that order).
+MineProcess	onTick	later	1b8e87c	0d0ecbfe538be9c0		Process: next after the first release (mine, follow, explore, in that order).
+MineProcess	plausibleToBreak	later	1b8e87c	06fa4e8ad7df7348		Process: next after the first release (mine, follow, explore, in that order).
+MineProcess	prune	later	1b8e87c	de619a8735cd2833		Process: next after the first release (mine, follow, explore, in that order).
+MineProcess	rescan	later	1b8e87c	331d08932c23a091		Process: next after the first release (mine, follow, explore, in that order).
+MineProcess	searchWorld	later	1b8e87c	99dcb3bcc2205f55		Process: next after the first release (mine, follow, explore, in that order).
+MineProcess	updateGoal	later	1b8e87c	cbb8423378b658fd		Process: next after the first release (mine, follow, explore, in that order).
+MineProcess	updateLoucaSystem	later	1b8e87c	b8f5b17a012d301b		Process: next after the first release (mine, follow, explore, in that order).
+MineProcess.GoalThreeBlocks	<init>	later	1b8e87c	c043b903eea393fb		Process: next after the first release (mine, follow, explore, in that order).
+MineProcess.GoalThreeBlocks	equals	later	1b8e87c	a59b35b45d1185c0		Process: next after the first release (mine, follow, explore, in that order).
+MineProcess.GoalThreeBlocks	hashCode	later	1b8e87c	60fc2508440abd71		Process: next after the first release (mine, follow, explore, in that order).
+MineProcess.GoalThreeBlocks	heuristic	later	1b8e87c	0c0551a1ec975b75		Process: next after the first release (mine, follow, explore, in that order).
+MineProcess.GoalThreeBlocks	isInGoal	later	1b8e87c	a611ad8b8438e84b		Process: next after the first release (mine, follow, explore, in that order).
+MineProcess.GoalThreeBlocks	toString	later	1b8e87c	3669a6976d6b71e5		Process: next after the first release (mine, follow, explore, in that order).
+Movement	<init>(IBaritone,BetterBlockPos,BetterBlockPos,BetterBlockPos[])	missing	1b8e87c	2f48e88c7287f8a1		
+Movement	<init>(IBaritone,BetterBlockPos,BetterBlockPos,BetterBlockPos[],BetterBlockPos)	missing	1b8e87c	74088287641e4e86		
+Movement	calculateCost	missing	1b8e87c	c6cdc8d04918ae75		
+Movement	calculateValidPositions	missing	1b8e87c	2d58b95babd90d11		
+Movement	calculatedWhileLoaded	missing	1b8e87c	ad40ba650fbc1fce		
+Movement	checkLoadedChunk	missing	1b8e87c	b69102e6560d403a		
+Movement	getCost()	missing	1b8e87c	8ca681380229112d		
+Movement	getCost(CalculationContext)	missing	1b8e87c	2e59021b15c879dd		
+Movement	getDest	missing	1b8e87c	ef439a1590aa54c7		
+Movement	getDirection	missing	1b8e87c	211ff52e1c6ec8e3		
+Movement	getSrc	missing	1b8e87c	6be22d8df7288701		
+Movement	getValidPositions	missing	1b8e87c	637bda20ef2fdb84		
+Movement	holdWaterline	missing	1b8e87c	d2fe23f667fc7b26		
+Movement	lookForSwimVelocity	missing	1b8e87c	ffc8c2b099e06844		
+Movement	override	missing	1b8e87c	2f38c18661421e09		
+Movement	pitchForSwimVelocity	missing	1b8e87c	a715f1f1804de095		
+Movement	playerInValidPosition	missing	1b8e87c	070d9969b2bd0bc2		
+Movement	preTurnIntoTheBend	missing	1b8e87c	578c25c1d8d69b73		
+Movement	prepared	missing	1b8e87c	eae3867ba73b8b38		
+Movement	recalculateCost	missing	1b8e87c	e7ec743f307f538d		
+Movement	reset	missing	1b8e87c	20247ab911639e9e		
+Movement	resetBlockCache	missing	1b8e87c	c7740c02ac6ef5b3		
+Movement	safeToCancel()	missing	1b8e87c	2fef8ae86af16f11		
+Movement	safeToCancel(MovementState)	missing	1b8e87c	dfd31fd5316ca91d		
+Movement	shouldSwim	missing	1b8e87c	0499657898822fe3		
+Movement	toBreak	missing	1b8e87c	3d1cc95adf1aa01d		
+Movement	toBreakAll	missing	1b8e87c	b9d13341c6f54c6d		
+Movement	toPlace	missing	1b8e87c	55e066d696ecc2ac		
+Movement	toWalkInto	missing	1b8e87c	b4ce8638adae76f0		
+Movement	update	missing	1b8e87c	3ddb04be9cc19623		
+Movement	updateState	missing	1b8e87c	88bc25824f1ae844		
+MovementAscend	<init>	missing	1b8e87c	f97db35233e1a72e		
+MovementAscend	calculateCost	missing	1b8e87c	57e33d60a46f1c69		
+MovementAscend	calculateValidPositions	missing	1b8e87c	870e4046e4679bdd		
+MovementAscend	cost	missing	1b8e87c	a1de32bdeb227a53		
+MovementAscend	headBonkClear	missing	1b8e87c	e630635a510b9e7c		
+MovementAscend	reset	missing	1b8e87c	23ce7033958c272b		
+MovementAscend	safeToCancel	missing	1b8e87c	9344a6eed892eca9		
+MovementAscend	updateState	missing	1b8e87c	2831fdcdc5c33ef1		
+MovementDescend	<init>	missing	1b8e87c	09599d7ac7244418		
+MovementDescend	calculateCost	missing	1b8e87c	37df4709e7715a6d		
+MovementDescend	calculateValidPositions	missing	1b8e87c	288833ad4ab1d4a2		
+MovementDescend	cost	port	1b8e87c	0279f30ee709b206	cost-compare	
+MovementDescend	dynamicFallCost	port	1b8e87c	e01387427bb0637a	cost-compare	allowFallIntoLava is false outside the elytra code.
+MovementDescend	forceSafeMode	missing	1b8e87c	c4ca6e92420007a1		
+MovementDescend	reset	missing	1b8e87c	5fe72d7ce18dddc9		
+MovementDescend	safeMode	missing	1b8e87c	7b1def7002d96a97		
+MovementDescend	skipToAscend	missing	1b8e87c	c0a2eb2f4548e8bb		
+MovementDescend	updateState	missing	1b8e87c	9156ee8590018c18		
+MovementDiagonal	<init>(IBaritone,BetterBlockPos,BetterBlockPos,BetterBlockPos,BetterBlockPos)	missing	1b8e87c	ccbdf63ed5cbb51a		
+MovementDiagonal	<init>(IBaritone,BetterBlockPos,BetterBlockPos,BetterBlockPos,Direction,int)	missing	1b8e87c	3eec2988bcb57519		
+MovementDiagonal	<init>(IBaritone,BetterBlockPos,Direction,Direction,int)	missing	1b8e87c	baefdf4fb6162e7b		
+MovementDiagonal	calculateCost	missing	1b8e87c	37df4709e7715a6d		
+MovementDiagonal	calculateValidPositions	missing	1b8e87c	c4c03e664af16e51		
+MovementDiagonal	cost	missing	1b8e87c	c422c1e311ef5484		
+MovementDiagonal	isBlockingDoor	missing	1b8e87c	db372b2640e5044e		
+MovementDiagonal	prepared	missing	1b8e87c	6180a6f1184bfb3e		
+MovementDiagonal	safeToCancel	missing	1b8e87c	59a6e5bef1c2dffe		
+MovementDiagonal	sprint	missing	1b8e87c	295bc12222939373		
+MovementDiagonal	toBreak	missing	1b8e87c	08dd54ec4c07d34d		
+MovementDiagonal	toWalkInto	missing	1b8e87c	699d613c4f4f838e		
+MovementDiagonal	updateState	missing	1b8e87c	785d042514ddb708		
+MovementDownward	<init>	missing	1b8e87c	3fee61e2f5b4d4ab		
+MovementDownward	calculateCost	missing	1b8e87c	b98f2f7234fd0837		
+MovementDownward	calculateValidPositions	missing	1b8e87c	383246429d6b166b		
+MovementDownward	cost	missing	1b8e87c	f895b0d4306457e0		
+MovementDownward	reset	missing	1b8e87c	b43e6509299e61f2		
+MovementDownward	updateState	missing	1b8e87c	53d0b489162e47c4		
+MovementFall	<init>	missing	1b8e87c	4bb102f992e7629f		
+MovementFall	avoid	missing	1b8e87c	f7ca9c2ac76f59e0		
+MovementFall	buildPositionsToBreak	missing	1b8e87c	df00a0bf8ca01b01		
+MovementFall	calculateCost	missing	1b8e87c	ac2b756bbcecb7be		
+MovementFall	calculateValidPositions	missing	1b8e87c	050b67d207870d0e		
+MovementFall	prepared	missing	1b8e87c	3d3b4ce15f7917c6		
+MovementFall	safeToCancel	missing	1b8e87c	f5a789f9c1ee179e		
+MovementFall	updateState	missing	1b8e87c	9093b11d6694c793		
+MovementFall	willPlaceBucket	missing	1b8e87c	e0506533818050c7		
+MovementHelper	attemptToPlaceABlock	missing	1b8e87c	4473a56a0d0bdd8a		
+MovementHelper	avoidAdjacentBreaking	port	1b8e87c	b94c152b1b81a19c	cost-compare	
+MovementHelper	avoidBreaking(BlockStateInterface,int,int,int,BlockState)	missing	1b8e87c	479795bcf839b293		
+MovementHelper	avoidBreaking(CalculationContext,int,int,int,BlockState)	port	1b8e87c	0ce5ceb6141fe423	cost-compare	
+MovementHelper	avoidWalkingInto	missing	1b8e87c	c354c0aaab9e69eb		
+MovementHelper	canPlaceAgainst(BlockStateInterface,BlockPos)	missing	1b8e87c	f2afc190e7704e93		
+MovementHelper	canPlaceAgainst(BlockStateInterface,int,int,int)	missing	1b8e87c	339ad97fb1a6a644		
+MovementHelper	canPlaceAgainst(BlockStateInterface,int,int,int,BlockState)	missing	1b8e87c	743d6d5271c09aec		
+MovementHelper	canPlaceAgainst(CalculationContext,int,int,int)	port	1b8e87c	79ac5ce2cc2a775c	cost-compare	
+MovementHelper	canPlaceAgainst(CalculationContext,int,int,int,BlockState)	missing	1b8e87c	c3c387cf81629fa9		
+MovementHelper	canPlaceAgainst(IPlayerContext,BlockPos)	missing	1b8e87c	db5b25392a2792b4		
+MovementHelper	canUseFrostWalker(CalculationContext,BlockState)	port	1b8e87c	73fe151347609958	cost-compare	
+MovementHelper	canUseFrostWalker(IPlayerContext,BlockPos)	missing	1b8e87c	66bdc4ff0fe33c97		
+MovementHelper	canWalkOn(BlockStateInterface,int,int,int)	missing	1b8e87c	0b18522bab903a7b		
+MovementHelper	canWalkOn(BlockStateInterface,int,int,int,BlockState)	missing	1b8e87c	fad245bb6ebc0361		
+MovementHelper	canWalkOn(CalculationContext,int,int,int)	port	1b8e87c	5b388d5a012b8c4b	cost-compare	
+MovementHelper	canWalkOn(CalculationContext,int,int,int,BlockState)	port	1b8e87c	948bbace0a702950	cost-compare	
+MovementHelper	canWalkOn(IPlayerContext,BetterBlockPos)	missing	1b8e87c	ed6f5b15ab463855		
+MovementHelper	canWalkOn(IPlayerContext,BetterBlockPos,BlockState)	missing	1b8e87c	b692192952744e84		
+MovementHelper	canWalkOn(IPlayerContext,BlockPos)	missing	1b8e87c	87035631e38d0fb9		
+MovementHelper	canWalkOnBlockState	port	1b8e87c	c4ee6e86b12806ba	cost-compare	assumeWalkOnLava branch not translated; the setting stays off.
+MovementHelper	canWalkOnPosition	port	1b8e87c	f84987c5d84a407a	cost-compare	assumeWalkOnLava branch not translated.
+MovementHelper	canWalkThrough(BlockStateInterface,int,int,int)	missing	1b8e87c	c626c3ef871a8c52		
+MovementHelper	canWalkThrough(BlockStateInterface,int,int,int,BlockState)	missing	1b8e87c	f95322f965a4729c		
+MovementHelper	canWalkThrough(CalculationContext,int,int,int)	missing	1b8e87c	2803ae9c6c04941f		
+MovementHelper	canWalkThrough(CalculationContext,int,int,int,BlockState)	port	1b8e87c	5ae051b633794f81	cost-compare	
+MovementHelper	canWalkThrough(IPlayerContext,BetterBlockPos)	missing	1b8e87c	eef0cc6757efe1a7		
+MovementHelper	canWalkThroughBlockState	port	1b8e87c	f0c29c7ba0fc3d75	cost-compare	isPathfindable is a fact from the glue; blocksToAvoid fixed to tripwire.
+MovementHelper	canWalkThroughPosition	port	1b8e87c	5ed5543749ae9e4c	cost-compare	worldContainsLoadedChunk always true.
+MovementHelper	fullyPassable(CalculationContext,int,int,int)	missing	1b8e87c	b7a45af9a083a95e		
+MovementHelper	fullyPassable(CalculationContext,int,int,int,BlockState)	missing	1b8e87c	0917adf01389b5fd		
+MovementHelper	fullyPassable(IPlayerContext,BlockPos)	missing	1b8e87c	6bb931f2722d3d26		
+MovementHelper	fullyPassableBlockState	missing	1b8e87c	c986d88da2f78d2b		
+MovementHelper	fullyPassablePosition	missing	1b8e87c	ebb4bc3eb55427dc		
+MovementHelper	getMiningDurationTicks(CalculationContext,int,int,int,BlockState,boolean)	missing	1b8e87c	1febf2e4ac62db90		
+MovementHelper	getMiningDurationTicks(CalculationContext,int,int,int,boolean)	missing	1b8e87c	f162bcbe23bc97fb		
+MovementHelper	getMiningDurationTicks0	port	1b8e87c	1c07f267f37ecdab	cost-compare	Tool strength is a fact (str_pick or str_hand), not ToolSet. Tool choice is untested.
+MovementHelper	isBlockNormalCube	missing	1b8e87c	8d6ad00a9ca34b1e		
+MovementHelper	isBottomSlab	port	1b8e87c	ec7057983b8e452f	cost-compare	
+MovementHelper	isClimbable	port	1b8e87c	a9b700a7d5a91755	cost-compare	
+MovementHelper	isDoorPassable	missing	1b8e87c	26e019ae3c4885c1		
+MovementHelper	isFlowing	port	1b8e87c	8ce4074c8c065142	cost-compare	
+MovementHelper	isGatePassable	missing	1b8e87c	106214f02b2479a9		
+MovementHelper	isLava	port	1b8e87c	5ccb5e71d01f631b	cost-compare	
+MovementHelper	isLiquid(BlockState)	missing	1b8e87c	44acec4c4ac4536d		
+MovementHelper	isLiquid(IPlayerContext,BlockPos)	missing	1b8e87c	c10afab3ccd9801d		
+MovementHelper	isReplaceable	port	1b8e87c	b047cf27c0901f44	cost-compare	worldContainsLoadedChunk always true.
+MovementHelper	isTransparent	missing	1b8e87c	595a24bf2d4de89c		
+MovementHelper	isWater(BlockState)	port	1b8e87c	6c4510c91c7c8d22	cost-compare	
+MovementHelper	isWater(IPlayerContext,BlockPos)	missing	1b8e87c	ff7e93ab9663aa37		
+MovementHelper	isWaterloggedSolidTop	missing	1b8e87c	15fad80f9e89a8e8		
+MovementHelper	moveTowards	missing	1b8e87c	f71bab2a745f74d7		
+MovementHelper	moveTowardsWithSlightRotation	missing	1b8e87c	1813bf5430988acc		
+MovementHelper	moveTowardsWithoutRotation(IPlayerContext,MovementState,BlockPos)	missing	1b8e87c	14e13264cd7131ba		
+MovementHelper	moveTowardsWithoutRotation(IPlayerContext,MovementState,float)	missing	1b8e87c	4683692d05d274b0		
+MovementHelper	mustBeSolidToWalkOn	port	1b8e87c	4158dd03d47cb9fd	cost-compare	
+MovementHelper	openDoors	missing	1b8e87c	22a8f6aedc2cd83e		
+MovementHelper	possiblyFlowing	port	1b8e87c	135e5ad22ff9a802	cost-compare	
+MovementHelper	steppingOnBlocks	missing	1b8e87c	2549cdcfe6accd89		
+MovementHelper	switchToBestToolFor(IPlayerContext,BlockState)	missing	1b8e87c	266b18edf4cca6d2		
+MovementHelper	switchToBestToolFor(IPlayerContext,BlockState,ToolSet,boolean)	missing	1b8e87c	2f3e6afe62ce4008		
+MovementParkour	<init>	missing	1b8e87c	2644f3c489c09eac		
+MovementParkour	calculateCost	missing	1b8e87c	a815eed498afb743		
+MovementParkour	calculateValidPositions	missing	1b8e87c	1c83db9b93285e8e		
+MovementParkour	checkOvershootSafety	missing	1b8e87c	3ae6a69df2ef75fb		
+MovementParkour	cost(CalculationContext,BetterBlockPos,Direction)	missing	1b8e87c	15bead88f4c78933		
+MovementParkour	cost(CalculationContext,int,int,int,Direction,MutableMoveResult)	missing	1b8e87c	4091af1ab98e61ec		
+MovementParkour	costFromJumpDistance	missing	1b8e87c	7e22736fb45b19fa		
+MovementParkour	safeToCancel	missing	1b8e87c	55e0812dcb1fa176		
+MovementParkour	updateState	missing	1b8e87c	bcd5f0021510c0ac		
+MovementPillar	<init>	missing	1b8e87c	6bb63703f7092286		
+MovementPillar	calculateCost	missing	1b8e87c	b98f2f7234fd0837		
+MovementPillar	calculateValidPositions	missing	1b8e87c	383246429d6b166b		
+MovementPillar	cost	missing	1b8e87c	a08876128e928e32		
+MovementPillar	prepared	missing	1b8e87c	d9a71a7a9bf934bf		
+MovementPillar	updateState	missing	1b8e87c	7b1bb2c43de52022		
+MovementTraverse	<init>	missing	1b8e87c	73be90078e8f594a		
+MovementTraverse	calculateCost	missing	1b8e87c	57e33d60a46f1c69		
+MovementTraverse	calculateValidPositions	missing	1b8e87c	383246429d6b166b		
+MovementTraverse	cost	port	1b8e87c	d3f6b3b49021d2c3	cost-compare	
+MovementTraverse	prepared	missing	1b8e87c	cca0bb7772344049		
+MovementTraverse	reset	missing	1b8e87c	e415f81bea730766		
+MovementTraverse	safeToCancel	missing	1b8e87c	3ed0a190a240e5f9		
+MovementTraverse	updateState	missing	1b8e87c	71cb6aeb8d77e9f1		
+Moves	<init>(int,int,int)	missing	1b8e87c	44231cfdfba4e7ef		
+Moves	<init>(int,int,int,boolean,boolean)	missing	1b8e87c	7cb2b27c96e607f1		
+Moves	apply	missing	1b8e87c	779e80c6d2db7615		
+Moves	apply0	missing	1b8e87c	b5940876ecff327f		
+Moves	cost	missing	1b8e87c	6507478cc7637f64		
+Moves.ASCEND_EAST	apply0	missing	1b8e87c	82befa80a322409b		
+Moves.ASCEND_EAST	cost	missing	1b8e87c	c09999f38037c521		
+Moves.ASCEND_NORTH	apply0	missing	1b8e87c	5840674a8bed750d		
+Moves.ASCEND_NORTH	cost	missing	1b8e87c	3c50ccfed4c74428		
+Moves.ASCEND_SOUTH	apply0	missing	1b8e87c	2c4b91e0dd562ebf		
+Moves.ASCEND_SOUTH	cost	missing	1b8e87c	6251f76353be464f		
+Moves.ASCEND_WEST	apply0	missing	1b8e87c	dcdbc38e248f1934		
+Moves.ASCEND_WEST	cost	missing	1b8e87c	1e2a86575a5041fa		
+Moves.DESCEND_EAST	apply	missing	1b8e87c	30c21f538d329e1a		
+Moves.DESCEND_EAST	apply0	missing	1b8e87c	73122da6f17abf68		
+Moves.DESCEND_NORTH	apply	missing	1b8e87c	10d65b3cc97b5576		
+Moves.DESCEND_NORTH	apply0	missing	1b8e87c	73122da6f17abf68		
+Moves.DESCEND_SOUTH	apply	missing	1b8e87c	7379c0c73316808c		
+Moves.DESCEND_SOUTH	apply0	missing	1b8e87c	73122da6f17abf68		
+Moves.DESCEND_WEST	apply	missing	1b8e87c	e9ecb37f117bf0da		
+Moves.DESCEND_WEST	apply0	missing	1b8e87c	73122da6f17abf68		
+Moves.DIAGONAL_NORTHEAST	apply	missing	1b8e87c	3f7d4ad55f9223e2		
+Moves.DIAGONAL_NORTHEAST	apply0	missing	1b8e87c	58f34f1252443313		
+Moves.DIAGONAL_NORTHWEST	apply	missing	1b8e87c	37f0875bd4e63c56		
+Moves.DIAGONAL_NORTHWEST	apply0	missing	1b8e87c	12d86debe03cbc27		
+Moves.DIAGONAL_SOUTHEAST	apply	missing	1b8e87c	f0d560e47c43791c		
+Moves.DIAGONAL_SOUTHEAST	apply0	missing	1b8e87c	936a7e1cc1c1f1e0		
+Moves.DIAGONAL_SOUTHWEST	apply	missing	1b8e87c	4a9c5ef07fd0aef2		
+Moves.DIAGONAL_SOUTHWEST	apply0	missing	1b8e87c	68366343b667f430		
+Moves.DOWNWARD	apply0	missing	1b8e87c	e049d60adcfa5347		
+Moves.DOWNWARD	cost	missing	1b8e87c	12710018011f58a2		
+Moves.PARKOUR_EAST	apply	missing	1b8e87c	ab49329c947898f7		
+Moves.PARKOUR_EAST	apply0	missing	1b8e87c	3b62684be1ddff36		
+Moves.PARKOUR_NORTH	apply	missing	1b8e87c	281f8906d1d6a1d4		
+Moves.PARKOUR_NORTH	apply0	missing	1b8e87c	4f83341973bcf773		
+Moves.PARKOUR_SOUTH	apply	missing	1b8e87c	7d5d8ed7ca012237		
+Moves.PARKOUR_SOUTH	apply0	missing	1b8e87c	9f16ef33434d5a7e		
+Moves.PARKOUR_WEST	apply	missing	1b8e87c	78e5d9d06e456149		
+Moves.PARKOUR_WEST	apply0	missing	1b8e87c	48ca9301f25ad7c6		
+Moves.PILLAR	apply0	missing	1b8e87c	381c8535ddb1abcf		
+Moves.PILLAR	cost	missing	1b8e87c	b0b834c4fa21c16d		
+Moves.TRAVERSE_EAST	apply0	missing	1b8e87c	3d55184a41c800c8		
+Moves.TRAVERSE_EAST	cost	missing	1b8e87c	d30a43bc94d7f531		
+Moves.TRAVERSE_NORTH	apply0	missing	1b8e87c	5bdec649b03659fd		
+Moves.TRAVERSE_NORTH	cost	missing	1b8e87c	9082a39ed40a85dc		
+Moves.TRAVERSE_SOUTH	apply0	missing	1b8e87c	49617f7a25536f1f		
+Moves.TRAVERSE_SOUTH	cost	missing	1b8e87c	e70bd54f58f4fb69		
+Moves.TRAVERSE_WEST	apply0	missing	1b8e87c	c248762a8195eaf4		
+Moves.TRAVERSE_WEST	cost	missing	1b8e87c	ba3d53757f3dca93		
+Path	<init>	missing	1b8e87c	f9432c6813b438f9		
+Path	assembleMovements	missing	1b8e87c	158889f2a78c3dd5		
+Path	getDest	missing	1b8e87c	db14168876712f37		
+Path	getGoal	missing	1b8e87c	50a9d398a5a822ff		
+Path	getNumNodesConsidered	missing	1b8e87c	4657048dd65c49a6		
+Path	getSrc	missing	1b8e87c	e30808ff5782ed0b		
+Path	movements	missing	1b8e87c	4147fb6cb7509795		
+Path	positions	missing	1b8e87c	b7e64f7afa055602		
+Path	postProcess	missing	1b8e87c	87e6d2ccd3eaa090		
+Path	runBackwards	missing	1b8e87c	7cb062a4fdbc2b78		
+PathExecutor	<init>	missing	1b8e87c	43cddb0e30389ece		
+PathExecutor	canSprintFromDescendInto	missing	1b8e87c	088ce295a464aeb9		
+PathExecutor	canStartHeadHitting	missing	1b8e87c	0209ef113fa91a49		
+PathExecutor	cancel	missing	1b8e87c	906fa9e4ec33d940		
+PathExecutor	clearKeys	missing	1b8e87c	862269ab3efa1718		
+PathExecutor	clearOfCeilingEntrance	missing	1b8e87c	9324ea126ad41e96		
+PathExecutor	clearOfLedgesAhead	missing	1b8e87c	c3c636d8eb01fbdd		
+PathExecutor	closestPathPos	missing	1b8e87c	fdd5d5bd22419904		
+PathExecutor	cutIfTooLong	missing	1b8e87c	c259199036ac6552		
+PathExecutor	failed	missing	1b8e87c	6463fe6981974487		
+PathExecutor	finished	missing	1b8e87c	6fda9371849c03eb		
+PathExecutor	fly	missing	1b8e87c	583beddb02276bfa		
+PathExecutor	getPath	missing	1b8e87c	47cea0cd4c6ecc5d		
+PathExecutor	getPosition	missing	1b8e87c	ab38a41ea0d9183a		
+PathExecutor	headHitJump	missing	1b8e87c	401748b65c9e3355		
+PathExecutor	isSprinting	missing	1b8e87c	e0e8561be1361ad4		
+PathExecutor	onChangeInPathPosition	missing	1b8e87c	f28db77fcbcda019		
+PathExecutor	onTick	missing	1b8e87c	4f7456e6d153803a		
+PathExecutor	overrideFall	missing	1b8e87c	505da65ac68d06e8		
+PathExecutor	possiblyOffPath	missing	1b8e87c	0b34fc479615eb3a		
+PathExecutor	shouldPause	missing	1b8e87c	39ea94d307a856a1		
+PathExecutor	shouldSprintNextTick	missing	1b8e87c	e9b6db101478c281		
+PathExecutor	skipNow	missing	1b8e87c	82e36a71ec2c9c10		
+PathExecutor	snipsnapifpossible	missing	1b8e87c	0e35c836bde01525		
+PathExecutor	sprintableAscend	missing	1b8e87c	ebc7e5a06b2abf46		
+PathExecutor	steer	missing	1b8e87c	73249dba1b5701c6		
+PathExecutor	toBreak	missing	1b8e87c	05e789d9fdf38d94		
+PathExecutor	toPlace	missing	1b8e87c	9b115e1e5d46965f		
+PathExecutor	toWalkInto	missing	1b8e87c	bad5159cf3f9cef4		
+PathExecutor	trySplice	missing	1b8e87c	264377a9939fc4af		
+PathExecutor	underHeadBonkCeiling	missing	1b8e87c	cf0f03be5b1c11e1		
+PathNode	<init>	missing	1b8e87c	0e6c746b24f48c2e		
+PathNode	equals	missing	1b8e87c	0197f1fb3aabbc65		
+PathNode	hashCode	missing	1b8e87c	eb3322274863152b		
+PathNode	isOpen	missing	1b8e87c	edb273355743efed		
+PathingBehavior	<init>	missing	1b8e87c	b31dd33664f809a5		
+PathingBehavior	calcFailedLastTick	missing	1b8e87c	d53de6b7e97026b6		
+PathingBehavior	cancelEverything	missing	1b8e87c	30be79508cd2554b		
+PathingBehavior	cancelSegmentIfSafe	missing	1b8e87c	406515e90009f269		
+PathingBehavior	createPathfinder	missing	1b8e87c	56d442b09a94dd16		
+PathingBehavior	dispatchEvents	missing	1b8e87c	e6e30bc7e7421d57		
+PathingBehavior	estimatedTicksToGoal	missing	1b8e87c	cbece6ffa3889b35		
+PathingBehavior	findPathInNewThread	missing	1b8e87c	404bd8c609c300fc		
+PathingBehavior	forceCancel	missing	1b8e87c	b852772908eaa216		
+PathingBehavior	getCurrent	missing	1b8e87c	4da2c572ebdccf5d		
+PathingBehavior	getGoal	missing	1b8e87c	50a9d398a5a822ff		
+PathingBehavior	getInProgress	missing	1b8e87c	319d3ad00cdcea0d		
+PathingBehavior	getNext	missing	1b8e87c	0a096887eb7d9de6		
+PathingBehavior	isPathing	missing	1b8e87c	4f4904e30a87cf34		
+PathingBehavior	isSafeToCancel	missing	1b8e87c	bd0e5741b131b100		
+PathingBehavior	onPlayerSprintState	missing	1b8e87c	605953ed5583589c		
+PathingBehavior	onPlayerUpdate	missing	1b8e87c	47864f56ba63543a		
+PathingBehavior	onRenderPass	missing	1b8e87c	e217451d56350922		
+PathingBehavior	onTick	missing	1b8e87c	02014521947fbafc		
+PathingBehavior	pathStart	missing	1b8e87c	18f2e9d89c937e5c		
+PathingBehavior	queuePathEvent	missing	1b8e87c	3bcff0b083617cfa		
+PathingBehavior	requestPause	missing	1b8e87c	d5b5cd982e3fcc52		
+PathingBehavior	resetEstimatedTicksToGoal()	missing	1b8e87c	c0461dbb844e4788		
+PathingBehavior	resetEstimatedTicksToGoal(BetterBlockPos)	missing	1b8e87c	74e22c5b48800ceb		
+PathingBehavior	resetEstimatedTicksToGoal(BlockPos)	missing	1b8e87c	a5176b40deab5f37		
+PathingBehavior	secretInternalGetCalculationContext	missing	1b8e87c	c76dd73c37d3fc1d		
+PathingBehavior	secretInternalSegmentCancel	missing	1b8e87c	a6de6ac3e70b389c		
+PathingBehavior	secretInternalSetGoal	missing	1b8e87c	f21f443a2e6be667		
+PathingBehavior	secretInternalSetGoalAndPath	missing	1b8e87c	cfa1fe74e97238e8		
+PathingBehavior	softCancelIfSafe	missing	1b8e87c	61d2e7415fd06568		
+PathingBehavior	tickPath	missing	1b8e87c	d02e75600b51bdb3		
+PathingControlManager	<init>	missing	1b8e87c	73e599ccae712dad		
+PathingControlManager	cancelEverything	missing	1b8e87c	652e6d2bf2039537		
+PathingControlManager	executeProcesses	missing	1b8e87c	c7754215340e7e74		
+PathingControlManager	forceRevalidate	missing	1b8e87c	2c9ab62413f438cc		
+PathingControlManager	mostRecentCommand	missing	1b8e87c	a4157261d9bcaa03		
+PathingControlManager	mostRecentInControl	missing	1b8e87c	31fdacf17c6282a5		
+PathingControlManager	postTick	missing	1b8e87c	b95b3eec7a6df6ff		
+PathingControlManager	preTick	missing	1b8e87c	99cc018339ae5835		
+PathingControlManager	registerProcess	missing	1b8e87c	5d413c6233069351		
+PathingControlManager	revalidateGoal	missing	1b8e87c	3e4f29716bb0ed8b		
+PrecomputedData	<init>	redesign	1b8e87c	f136104bdab4dce4		Ctx::new builds the flag table from one Config snapshot.
+PrecomputedData	canPlaceAgainst	port	1b8e87c	124200e6c62cc0a2	cost-compare	
+PrecomputedData	canWalkOn	port	1b8e87c	a0d571f09490fe12	cost-compare	
+PrecomputedData	canWalkThrough	port	1b8e87c	35a5a8f91e847cc7	cost-compare	
+PrecomputedData	fillData	port	1b8e87c	f4765b0d031068eb	cost-compare	fullyPassable flags not translated; traverse and descend do not use them. Built for all states at context creation.
+PrecomputedData	flags	redesign	1b8e87c	0103e12605dedee2		Flags are a plain table indexed by state id; no generation stamp, no state mixin.
+PrecomputedData	flagsFromRegistry	redesign	1b8e87c	768fcdd2aa7c2bd9		Flags are a plain table indexed by state id, filled at once.
+PrecomputedData	forCurrentSettings	redesign	1b8e87c	94ce2920cd06156c		No shared table: each context builds its own from its Config.
+PrecomputedData	fullyPassable	missing	1b8e87c	3c1295499672cdcc		
+PrecomputedData	matchesCurrentSettings	redesign	1b8e87c	3fb86567443521aa		No shared table, so no settings match test.
+PrecomputedData	neverBreak	port	1b8e87c	8114dc78249b7daf	cost-compare	blocksToDisallowBreaking stays empty.
+SplicedPath	<init>	missing	1b8e87c	55f3ac4536f20a1f		
+SplicedPath	getGoal	missing	1b8e87c	50a9d398a5a822ff		
+SplicedPath	getNumNodesConsidered	missing	1b8e87c	4657048dd65c49a6		
+SplicedPath	length	missing	1b8e87c	259760ce8f3aee18		
+SplicedPath	movements	missing	1b8e87c	9ff71a2ec2408a25		
+SplicedPath	positions	missing	1b8e87c	b7e64f7afa055602		
+SplicedPath	trySplice	missing	1b8e87c	415a7b16c26d970d		
+SprintJump	<init>	missing	1b8e87c	55ff403ea9e9abe2		
+SprintJump	across	missing	1b8e87c	dfe17ea0fa46c43c		
+SprintJump	along	missing	1b8e87c	29bf30e8723f9893		
+SprintJump	canHop	missing	1b8e87c	aeb6bad764323df8		
+SprintJump	chains	missing	1b8e87c	f3898b802344cfe3		
+SprintJump	choose	missing	1b8e87c	1ca2a0d5c6c42374		
+SprintJump	clear	missing	1b8e87c	8362e7b0efcd128c		
+SprintJump	fly	missing	1b8e87c	606d0f59f6716264		
+SprintJump	highest	missing	1b8e87c	f740fe5059a6b4ab		
+SprintJump	jump	missing	1b8e87c	ea03eeb7439aa328		
+SprintJump	plan(IPlayerContext,IPath,int)	missing	1b8e87c	70be1e290515f1f4		
+SprintJump	plan(double,double)	missing	1b8e87c	8130b3a5ebf6be5a		
+SprintJump	safe	missing	1b8e87c	5d2475879bef7087		
+SprintJump	side	missing	1b8e87c	fd10bed236924bf3		
+SprintJump	solidFloor	missing	1b8e87c	f0a33ddc8e05a639		
+SprintJump	steer	missing	1b8e87c	eb5045280cfd2dfb		
+SprintJump	stepUpAhead	missing	1b8e87c	cbb2e7473e476f41		
+SprintJump	throttle	missing	1b8e87c	4314dcbde7632256		
+SprintJump	works	missing	1b8e87c	7db1ad0aae16ce0b		
+ToolSet	<init>	missing	1b8e87c	1e4736c522ac87ed		
+ToolSet	avoidanceMultiplier	missing	1b8e87c	45f94a52c4da7c3e		
+ToolSet	calculateSpeedVsBlock	missing	1b8e87c	5921a4268a0e4b5a		
+ToolSet	getBestDestructionTime	missing	1b8e87c	0a79ab762202934a		
+ToolSet	getBestSlot(Block,boolean)	missing	1b8e87c	817bb086d5a79c01		
+ToolSet	getBestSlot(Block,boolean,boolean)	missing	1b8e87c	ad29b1d7bf9ee7d2		
+ToolSet	getMaterialCost	missing	1b8e87c	fea5f1eb4b931a6e		
+ToolSet	getStrVsBlock	missing	1b8e87c	df21270199437a50		
+ToolSet	hasSilkTouch	missing	1b8e87c	3385d7eca846d40a		
+ToolSet	potionAmplifier	missing	1b8e87c	ecb35bc4bfa60ce2		

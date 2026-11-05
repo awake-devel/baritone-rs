@@ -1,0 +1,38 @@
+{
+  "gate": {
+    "mutation_inputs": "97b6515b5d5bdc7030a5f678d522e700aa6965bc4054819b94d5ab27eca4ee32"
+  },
+  "grids": 40000,
+  "java": "openjdk version \"21.0.13\" 2026-10-20 LTS",
+  "minecraft_version": "1.21.4",
+  "results": {
+    "descend": {
+      "close": 0,
+      "distinct": 1846,
+      "evals": 960000,
+      "exact": 960000,
+      "finite": 222814,
+      "wrong": 0
+    },
+    "traverse": {
+      "close": 0,
+      "distinct": 1109,
+      "evals": 960000,
+      "exact": 960000,
+      "finite": 452095,
+      "wrong": 0
+    }
+  },
+  "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13) (Arch Linux rust 1:1.99.1-1)",
+  "sources": {
+    "Cargo.toml": "f1ae7f27248577a34b3184393f5bea9e0e01ba81d026af93d1e270ac963602c6",
+    "golden": "049439b7b97ef623d4c13bbbc57aed48188765b955f67368f92eed45d586eb9e",
+    "java/baritone/api/BaritoneAPI.java": "affc3cc06cd042b7bf8b4e8b018a031277da9f37329ebc82bb6e2f5efcacf728",
+    "java/baritone/pathing/movement/SpikeGoldenDump.java": "cb07c8c80af8df6f16bd29567f66467dfa52ece67b0b4084baa88452832f2105",
+    "src/lib.rs": "232dd4099029dd561c4acf3a7d83bbfb9d4a0bc2ecb6a58782ea0286c7f178dd",
+    "src/main.rs": "7849e46b7ea706f3ac295ca87fa6168f703df073f7d1bf89d18342dc80e49fac"
+  },
+  "tool": "cost-compare",
+  "upstream_branch": "1.21.4",
+  "upstream_commit": "1b8e87cac675d72d8094e2bea1ec7207cdbc971b"
+}

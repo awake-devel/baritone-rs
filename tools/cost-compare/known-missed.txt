@@ -1,0 +1,13 @@
+# Injected errors (see mutate.py) that the comparison does not catch, and why.
+# Format: <mutation name> | <class>: <reason>
+# class is "no effect" (the error cannot change any result) or "hole" (a real gap in the test; stays listed until closed).
+# The gate fails on a missed mutation that is not listed here, and on a mutation whose pattern no longer matches.
+# The "no effect" entries below are the lead's classification (believed, from reading the rules). They were not proven.
+through: skull passable | no effect: believed unreachable; not independently proven
+through: partial fluid maybe | no effect: believed unreachable; not independently proven
+walkon: honey ok | no effect: believed unreachable; not independently proven
+water pos: xor to or | no effect: believed unreachable; not independently proven
+frost: level ignored | no effect: believed unreachable; not independently proven
+replace: tall grass override | no effect: believed unreachable; not independently proven
+fall: void check | no effect: believed unreachable; not independently proven
+fall: flowing water | no effect: believed unreachable; not independently proven

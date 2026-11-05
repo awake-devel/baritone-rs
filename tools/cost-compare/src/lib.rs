@@ -37,10 +37,12 @@ pub const WALK_OFF_BLOCK_COST: f64 = WALK_ONE_BLOCK_COST * 0.8;
 pub const CENTER_AFTER_FALL_COST: f64 = WALK_ONE_BLOCK_COST - WALK_OFF_BLOCK_COST;
 pub const COST_INF: f64 = 1000000.0;
 
+/// `ActionCosts.velocity`: fall speed after the given number of ticks.
 fn velocity(ticks: i32) -> f64 {
     (0.98f64.powf(ticks as f64) - 1.0) * -3.92
 }
 
+/// `ActionCosts.distanceToTicks`: ticks needed to fall the given distance.
 pub fn distance_to_ticks(distance: f64) -> f64 {
     if distance == 0.0 {
         return 0.0;
@@ -57,6 +59,7 @@ pub fn distance_to_ticks(distance: f64) -> f64 {
     }
 }
 
+/// `ActionCosts.generateFallNBlocksCost`: the 4097-entry fall table (FALL_N_BLOCKS_COST), built once and cached.
 pub fn fall_n_blocks_cost() -> &'static [f64] {
     static T: OnceLock<Vec<f64>> = OnceLock::new();
     T.get_or_init(|| (0..4097).map(|i| distance_to_ticks(i as f64)).collect())
@@ -152,6 +155,7 @@ pub struct Border {
 }
 
 impl Border {
+    /// `BetterWorldBorder.canPlaceAt`: one block in from every edge, because a block cannot be placed against the border itself.
     fn can_place_at(&self, x: i32, z: i32) -> bool {
         (x as f64) > self.min_x && ((x + 1) as f64) < self.max_x && (z as f64) > self.min_z && ((z + 1) as f64) < self.max_z
     }
@@ -200,20 +204,25 @@ impl Default for MoveResult {
 }
 
 // ---------- MovementHelper, state half (PrecomputedData.fillData) ----------
+/// `MovementHelper.isWater(BlockState)`: water or flowing water.
 fn is_water(s: &State) -> bool {
     s.fluid == "water" || s.fluid == "flowing_water"
 }
+/// `MovementHelper.isLava`: lava or flowing lava.
 fn is_lava(s: &State) -> bool {
     s.fluid == "lava" || s.fluid == "flowing_lava"
 }
+/// `MovementHelper.isClimbable`: ladders and vines.
 fn is_climbable(b: &str) -> bool {
     matches!(b, "ladder" | "vine" | "weeping_vines" | "weeping_vines_plant" | "twisting_vines" | "twisting_vines_plant")
 }
 
+/// The `blocksToAvoid` setting at its default (tripwire only), read by `MovementHelper.canWalkThrough`. Not a method of upstream.
 fn blocks_to_avoid(b: &str) -> bool {
     b == "tripwire"
 }
 
+/// `MovementHelper.canWalkThroughBlockState`: the position independent half of canWalkThrough. `isPathfindable` is a fact; `blocksToAvoid` is fixed to tripwire.
 pub fn can_walk_through_state(s: &State) -> Ternary {
     let b = s.block.as_str();
     if s.air {
@@ -256,6 +265,7 @@ pub fn can_walk_through_state(s: &State) -> Ternary {
     }
 }
 
+/// `MovementHelper.canWalkOnBlockState`: the position independent half of canWalkOn. The `assumeWalkOnLava` branch is not translated (the setting stays off).
 pub fn can_walk_on_state(s: &State, c: &Config) -> Ternary {
     let b = s.block.as_str();
     if s.normal_cube && (b != "magma_block" || c.allow_walk_on_magma) && b != "bubble_column" && b != "honey_block" {
@@ -292,15 +302,19 @@ pub fn can_walk_on_state(s: &State, c: &Config) -> Ternary {
     No
 }
 
+/// `MovementHelper.isBottomSlab`: a slab in its bottom half.
 fn is_bottom_slab(s: &State) -> bool {
     s.slab && s.slab_type == "BOTTOM"
 }
 
+/// `MovementHelper.possiblyFlowing`: flowing fluid that is not a full source.
 fn possibly_flowing(s: &State) -> bool {
     s.fluid_flowing_kind && s.fluid_amount != 8
 }
 
 impl<'a> Ctx<'a> {
+    /// `PrecomputedData.fillData`: per-state flags, built for all states when the context is made. The fullyPassable flags are not translated: traverse and descend do not use them.
+    /// `CalculationContext.<init>(IBaritone,boolean,Level,WorldData,BlockStateInterface,ToolSet,boolean,boolean,boolean,int,float)`: only the `waterWalkSpeed` computation, with float arithmetic as in Java. The other fields come from `Config`.
     pub fn new(world: World<'a>, states: &'a [State], cfg: &'a Config, border: Border) -> Self {
         // `1 - waterSpeedMultiplier` is float arithmetic in Java, and only then widened
         let mult = cfg.water_mult;
@@ -337,10 +351,12 @@ impl<'a> Ctx<'a> {
         w.cells[((y * w.d + z) * w.w + x) as usize] as usize
     }
 
+    /// `CalculationContext.get(int,int,int)`: the state at a position. Outside the world it is air (a redesign of `BlockStateInterface.get0`).
     pub fn get(&self, x: i32, y: i32, z: i32) -> &'a State {
         &self.states[self.id(x, y, z)]
     }
 
+    /// `MovementHelper.isFlowing`: flowing, or next to a flowing source.
     fn is_flowing(&self, x: i32, y: i32, z: i32, s: &State) -> bool {
         if !s.fluid_flowing_kind {
             return false;
@@ -351,6 +367,7 @@ impl<'a> Ctx<'a> {
         possibly_flowing(self.get(x + 1, y, z)) || possibly_flowing(self.get(x - 1, y, z)) || possibly_flowing(self.get(x, y, z + 1)) || possibly_flowing(self.get(x, y, z - 1))
     }
 
+    /// `MovementHelper.canWalkThroughPosition`: the position dependent half of canWalkThrough. `worldContainsLoadedChunk` is always true here.
     fn can_walk_through_position(&self, x: i32, y: i32, z: i32, s: &State) -> bool {
         if s.carpet {
             return self.can_walk_on_at(x, y - 1, z);
@@ -378,6 +395,7 @@ impl<'a> Ctx<'a> {
         s.pathfindable
     }
 
+    /// `MovementHelper.canWalkOnPosition`: the position dependent half of canWalkOn. The `assumeWalkOnLava` branch is not translated.
     fn can_walk_on_position(&self, x: i32, y: i32, z: i32, s: &State) -> bool {
         if is_water(s) {
             let up = self.get(x, y + 1, z);
@@ -392,6 +410,8 @@ impl<'a> Ctx<'a> {
         false
     }
 
+    /// `MovementHelper.canWalkThrough(CalculationContext,int,int,int,BlockState)`: state flags first, then the position check if the state says maybe.
+    /// `PrecomputedData.canWalkThrough`: same lookup.
     pub fn can_walk_through(&self, x: i32, y: i32, z: i32, s: &State, id: usize) -> bool {
         match self.flags[id].walk_through {
             Some(v) => v,
@@ -399,6 +419,8 @@ impl<'a> Ctx<'a> {
         }
     }
 
+    /// `MovementHelper.canWalkOn(CalculationContext,int,int,int,BlockState)`: state flags first, then the position check if the state says maybe.
+    /// `PrecomputedData.canWalkOn`: same lookup.
     pub fn can_walk_on(&self, x: i32, y: i32, z: i32, s: &State, id: usize) -> bool {
         match self.flags[id].walk_on {
             Some(v) => v,
@@ -406,15 +428,19 @@ impl<'a> Ctx<'a> {
         }
     }
 
+    /// `MovementHelper.canWalkOn(CalculationContext,int,int,int)`: reads the state at the position, then asks canWalkOn.
     fn can_walk_on_at(&self, x: i32, y: i32, z: i32) -> bool {
         let id = self.id(x, y, z);
         self.can_walk_on(x, y, z, &self.states[id], id)
     }
 
+    /// `MovementHelper.canPlaceAgainst(CalculationContext,int,int,int)`: world border check, then the state flag.
+    /// `PrecomputedData.canPlaceAgainst`: the block half: normal cube, glass or stained glass.
     fn can_place_against(&self, x: i32, y: i32, z: i32) -> bool {
         self.border.can_place_at(x, z) && self.flags[self.id(x, y, z)].place_against
     }
 
+    /// `MovementHelper.avoidAdjacentBreaking`: do not break a block next to falling blocks or liquid.
     fn avoid_adjacent_breaking(&self, x: i32, y: i32, z: i32, directly_above: bool) -> bool {
         let s = self.get(x, y, z);
         if !directly_above && s.falling && self.cfg.avoid_updating_falling && self.get(x, y - 1, z).falling_free {
@@ -432,16 +458,13 @@ impl<'a> Ctx<'a> {
         !s.fluid_empty
     }
 
+    /// `MovementHelper.avoidBreaking(CalculationContext,int,int,int,BlockState)`: border, never-break flag, then the five neighbours.
+    /// `PrecomputedData.neverBreak`: the flag lookup. `blocksToDisallowBreaking` stays empty.
     fn avoid_breaking(&self, x: i32, y: i32, z: i32, id: usize) -> bool {
-        !self.border.can_place_at(x, z)
-            || self.flags[id].never_break
-            || self.avoid_adjacent_breaking(x, y + 1, z, true)
-            || self.avoid_adjacent_breaking(x + 1, y, z, false)
-            || self.avoid_adjacent_breaking(x - 1, y, z, false)
-            || self.avoid_adjacent_breaking(x, y, z + 1, false)
-            || self.avoid_adjacent_breaking(x, y, z - 1, false)
+        !self.border.can_place_at(x, z) || self.flags[id].never_break || self.avoid_adjacent_breaking(x, y + 1, z, true) || self.avoid_adjacent_breaking(x + 1, y, z, false) || self.avoid_adjacent_breaking(x - 1, y, z, false) || self.avoid_adjacent_breaking(x, y, z + 1, false) || self.avoid_adjacent_breaking(x, y, z - 1, false)
     }
 
+    /// `CalculationContext.breakCostMultiplierAt`: `allowBreakAnyway` stays empty; `isPossiblyProtected` is always false upstream.
     fn break_cost_multiplier(&self) -> f64 {
         // allowBreakAnyway stays empty in the spike
         if !self.cfg.allow_break {
@@ -450,6 +473,7 @@ impl<'a> Ctx<'a> {
         1.0
     }
 
+    /// `MovementHelper.getMiningDurationTicks0`: uncached mining time. Tool strength is a fact (`str_pick` or `str_hand`), not a ToolSet call; upstream's memo cache is not translated.
     pub fn mining_duration(&self, x: i32, y: i32, z: i32, include_falling: bool) -> f64 {
         let id = self.id(x, y, z);
         let s = &self.states[id];
@@ -482,10 +506,12 @@ impl<'a> Ctx<'a> {
         0.0
     }
 
+    /// `MovementHelper.canUseFrostWalker(CalculationContext,BlockState)`: frost walker level, a melting frosted ice state, source level 0.
     fn can_use_frost_walker(&self, s: &State) -> bool {
         self.cfg.frost_walker != 0 && s.frost_melt && s.level == 0
     }
 
+    /// `MovementHelper.mustBeSolidToWalkOn`: blocks that count as ground for frost walking.
     fn must_be_solid_to_walk_on(&self, x: i32, y: i32, z: i32, s: &State) -> bool {
         if is_climbable(&s.block) {
             return false;
@@ -506,9 +532,8 @@ impl<'a> Ctx<'a> {
                 if !s.trap_open && s.trap_half == "TOP" {
                     return true;
                 }
-            } else if s.block == "scaffolding" {
-                return true;
-            } else if s.leaves {
+            } else if s.block == "scaffolding" || s.leaves {
+                // upstream tests scaffolding and leaves in two branches with the same result
                 return true;
             }
             if self.cfg.assume_walk_on_water {
@@ -521,6 +546,7 @@ impl<'a> Ctx<'a> {
         true
     }
 
+    /// `MovementHelper.isReplaceable`: air, one layer of snow, large ferns and tall grass, else the replaceable flag. `worldContainsLoadedChunk` is always true here.
     fn is_replaceable(&self, s: &State) -> bool {
         if s.air {
             return true;
@@ -534,6 +560,7 @@ impl<'a> Ctx<'a> {
         s.replaceable
     }
 
+    /// `CalculationContext.costOfPlacingAt`: `isPossiblyProtected` is always false upstream.
     fn cost_of_placing_at(&self, x: i32, z: i32, current: &State) -> f64 {
         if !self.cfg.has_throwaway {
             return COST_INF;
@@ -551,6 +578,7 @@ impl<'a> Ctx<'a> {
     }
 
     // ---------- MovementTraverse.cost ----------
+    /// `MovementTraverse.cost`: cost of one step to a neighbouring block.
     pub fn traverse_cost(&self, x: i32, y: i32, z: i32, dest_x: i32, dest_z: i32) -> f64 {
         let pb0 = self.get(dest_x, y + 1, dest_z);
         let pb1 = self.get(dest_x, y, dest_z);
@@ -647,6 +675,7 @@ impl<'a> Ctx<'a> {
     }
 
     // ---------- MovementDescend.cost ----------
+    /// `MovementDescend.cost`: cost of stepping down, or the start of a longer fall.
     pub fn descend_cost(&self, x: i32, y: i32, z: i32, dest_x: i32, dest_z: i32, res: &mut MoveResult) {
         let mut total_cost = 0.0;
         let dest_down = self.get(dest_x, y - 1, dest_z);
@@ -689,6 +718,7 @@ impl<'a> Ctx<'a> {
         res.cost = total_cost;
     }
 
+    /// `MovementDescend.dynamicFallCost`: cost of a fall of more than one block. `allowFallIntoLava` is false outside the elytra code.
     #[allow(clippy::too_many_arguments)]
     fn dynamic_fall_cost(&self, y: i32, dest_x: i32, dest_z: i32, front_break: f64, below: &State, below_id: usize, res: &mut MoveResult) -> bool {
         if front_break != 0.0 && self.get(dest_x, y + 2, dest_z).falling {
@@ -768,7 +798,7 @@ impl<'a> Ctx<'a> {
     }
 }
 
-// Silences the unused warning: is_lava is part of the ported surface.
+/// Not from upstream: exposes `is_lava` to callers outside the crate and silences the unused warning.
 pub fn is_lava_state(s: &State) -> bool {
     is_lava(s)
 }

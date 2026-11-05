@@ -54,7 +54,8 @@ Rules come from upstream's `1.21.4` branch, which has the fixes. Horizon is Mine
 Comparisons therefore run against both when a rule depends on game data:
 
 - **`1.21.4` (JDK 21):** the source of the rules.
-- **`26.3` (JDK 25, not yet tried):** upstream on the same game as Horizon, and the reference for L1.
+- **`26.3` (JDK 25):** upstream on the same game as Horizon, and the reference for L1. It has run once, with its own copy
+  of the harness (`tools/cost-compare/java-26.3`). See [Deviations](deviations.md#where-upstreams-two-branches-disagree).
 
 Where the two disagree, the disagreement gets a deviation entry that says which one we follow.
 
@@ -82,7 +83,7 @@ This is also how the license's provenance requirement gets met: every file and f
 
 ## Deviations
 
-`docs/deviations.md` lists each intentional difference: the upstream behaviour, ours, why, and how the comparison is
+[`docs/deviations.md`](deviations.md) lists each intentional difference: the upstream behaviour, ours, why, and how the comparison is
 told to expect it. An exception must be as narrow as the behaviour. It names the function and the condition, never
 "ignore this function".
 
@@ -141,10 +142,23 @@ The exposure is small in the pathing, behavior and pathing API code: `Math.pow` 
 Injected errors that go uncaught must each be classified, as either a real hole in the test or an error with no possible
 effect. A hole stays listed until it is closed.
 
-Known holes today:
+Known holes today: none known. Two were closed in S0: tool choice (the harness now binds the vanilla block tags, so
+a pickaxe and an empty hand differ) and the open top trapdoor (added to the block list, also waterlogged, and to the
+fluid-heavy grids).
 
-- Tool choice, because a bare `Bootstrap` has no block tags, so a pickaxe and an empty hand give the same break speed.
-- An open top trapdoor, which the block list lacks.
+Eight injected errors are still missed on the two functions covered. Each was read and judged to have no effect in
+1.21.4 for `MovementTraverse` and `MovementDescend` (a judgement from reading, not a proof). They must be tried again
+when S1 adds the other movements:
+
+- `through: skull passable`: skulls are already not pathfindable, so the rule is redundant.
+- `through: partial fluid maybe`: a partial fluid is always flowing, which the position check refuses anyway.
+- `walkon: honey ok`: honey is not a normal cube, so it never reaches that rule.
+- `water pos: xor to or`: differs only with `assumeWalkOnWater` and water above, but then the cell above is not
+  walkable-through, so these two movements stop earlier. Other movements may reach it.
+- `frost: level ignored`: the melting state is water at level 0, so the level test never excludes anything.
+- `replace: tall grass override`: tall grass and large fern are already replaceable in 1.21.4.
+- `fall: void check`: the cell one below the world is air, so the extra step finds nothing.
+- `fall: flowing water`: already refused earlier by the walk-through check on the same cell.
 
 ## Reports
 
@@ -177,7 +191,7 @@ Each stage ends with a report to the owner, who decides whether to continue.
 |---|---|---|
 | **S0** | Ledger, deviations, gate and reports. Close the tool and trapdoor holes. Try the `26.3` comparison. | The gate runs on today's two functions |
 | **S1** | The other five movement costs, predicates and goals | L0 on all of them, on all block states of the corpus |
-| **S2** | Horizon's facts against Java's | L1 on all block states, with each difference explained |
+| **S2** | First move to the latest Horizon Nightly, then compare Horizon's facts against Java's | L1 on all block states, with each difference explained |
 | **S3** | A*, partial paths and segments | L2 on a corpus of generated worlds |
 | **S4** | World access, threads, executor and glue | Property tests, then L3 scenarios |
 | **S5** | Full server runs. Earlier stages can also test on servers. | L4 reports, per server |

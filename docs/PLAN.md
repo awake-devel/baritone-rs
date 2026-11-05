@@ -102,8 +102,10 @@ native_tick  read player and hotbar
 | Breaking, placing, slot | Not studied yet | Unknown |
 
 Private fields mean a rebase on each new Horizon revision, so the glue stays small and all in one place. Current main also
-has `native_movement_input`, which has no sprint or look parameter, so it wouldn't remove all of this. We develop on the
-pin and evaluate a move at S4.
+has `native_movement_input`, which has no sprint or look parameter, so it wouldn't remove all of this.
+
+**Horizon version.** `4aa6854` is already behind. Before S2, we move to the latest Nightly in a separate checkout, and redo
+this section's analysis on it. After that, we stay on one Nightly for the length of a stage and update between stages.
 
 ### Walking with the chat open
 

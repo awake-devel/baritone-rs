@@ -12,7 +12,15 @@ import baritone.utils.BlockStateInterface;
 import baritone.utils.ToolSet;
 import baritone.utils.pathing.BetterWorldBorder;
 import baritone.utils.pathing.MutableMoveResult;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import net.minecraft.SharedConstants;
+import net.minecraft.core.Holder;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.tags.TagKey;
+import net.minecraft.tags.TagLoader;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.Bootstrap;
 import net.minecraft.world.item.ItemStack;
@@ -29,8 +37,13 @@ import java.io.BufferedWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 
 public class SpikeGoldenDump {
     static final int W = 5, H = 16, D = 5;
@@ -156,6 +169,9 @@ public class SpikeGoldenDump {
         p.add(Blocks.SNOW.defaultBlockState().setValue(SnowLayerBlock.LAYERS, 3));
         p.add(Blocks.OAK_LEAVES.defaultBlockState().setValue(LeavesBlock.WATERLOGGED, true));
         p.add(Blocks.SCAFFOLDING.defaultBlockState().setValue(ScaffoldingBlock.WATERLOGGED, true));
+        // Added at the end so that earlier indexes do not move (the fluid list in grid() uses fixed indexes).
+        p.add(trap.setValue(TrapDoorBlock.HALF, Half.TOP));
+        p.add(trap.setValue(TrapDoorBlock.OPEN, true).setValue(TrapDoorBlock.HALF, Half.TOP).setValue(TrapDoorBlock.WATERLOGGED, true));
         return p;
     }
 
@@ -209,8 +225,8 @@ public class SpikeGoldenDump {
 
     static int[] grid(Random r, int n) {
         int[] c = new int[W * H * D];
-        int mode = r.nextInt(5);
-        int[] fluids = {65, 66, 67, 71, 72, 74, 75, 76, 76, 76, 77, 78, 83, 84};
+        int mode = r.nextInt(7);
+        int[] fluids = {65, 66, 67, 71, 72, 74, 75, 76, 76, 76, 77, 78, 83, 84, 85, 86};
         for (int x = 0; x < W; x++) {
             for (int z = 0; z < D; z++) {
                 int floor = 3 + r.nextInt(mode == 0 ? 2 : 6);
@@ -219,6 +235,12 @@ public class SpikeGoldenDump {
                     boolean noise = mode == 3 ? r.nextInt(100) < 70 : r.nextInt(100) < 12;
                     if (mode == 4 && r.nextInt(100) < 60) {
                         v = fluids[r.nextInt(fluids.length)];
+                    } else if (mode == 5) {
+                        // mostly water: sources above sources, and flowing water, for the walk-on-water rules
+                        v = r.nextInt(100) < 85 ? 76 + r.nextInt(3) : (y < 2 ? 2 : 0);
+                    } else if (mode == 6) {
+                        // mostly open air down to the bottom of the grid, for falls that reach the world's lowest layer
+                        v = r.nextInt(100) < 4 ? r.nextInt(n) : 0;
                     } else if (noise) {
                         v = r.nextInt(n);
                     } else if (y < floor) {
@@ -233,10 +255,58 @@ public class SpikeGoldenDump {
         return c;
     }
 
+    /**
+     * A bare Bootstrap binds no tags, so tools would see no mining rules. This reads the vanilla block tags from the
+     * game jar on the classpath and binds them on the block registry, resolving nested "#tag" entries.
+     */
+    static int bindBlockTags() throws Exception {
+        Path jar = Path.of(Bootstrap.class.getProtectionDomain().getCodeSource().getLocation().toURI());
+        Map<String, List<String>> raw = new LinkedHashMap<>();
+        String prefix = "data/minecraft/tags/block/";
+        try (ZipFile z = new ZipFile(jar.toFile())) {
+            for (java.util.Enumeration<? extends ZipEntry> e = z.entries(); e.hasMoreElements(); ) {
+                ZipEntry en = e.nextElement();
+                String n = en.getName();
+                if (!n.startsWith(prefix) || !n.endsWith(".json")) continue;
+                String id = n.substring(prefix.length(), n.length() - 5);
+                JsonObject o = JsonParser.parseReader(new java.io.InputStreamReader(z.getInputStream(en))).getAsJsonObject();
+                List<String> vals = new ArrayList<>();
+                for (JsonElement v : o.getAsJsonArray("values")) {
+                    vals.add(v.isJsonObject() ? v.getAsJsonObject().get("id").getAsString() : v.getAsString());
+                }
+                raw.put(id, vals);
+            }
+        }
+        if (raw.isEmpty()) throw new IllegalStateException("no block tags found in " + jar);
+        Map<TagKey<Block>, List<Holder<Block>>> bound = new HashMap<>();
+        for (String id : raw.keySet()) {
+            List<Holder<Block>> out = new ArrayList<>();
+            expand(id, raw, out, new java.util.HashSet<>());
+            bound.put(TagKey.create(Registries.BLOCK, ResourceLocation.withDefaultNamespace(id)), out);
+        }
+        var pending = BuiltInRegistries.BLOCK.prepareTagReload(new TagLoader.LoadResult<>(Registries.BLOCK, bound));
+        pending.apply();
+        return pending.size();
+    }
+
+    static void expand(String id, Map<String, List<String>> raw, List<Holder<Block>> out, java.util.Set<String> seen) {
+        if (!seen.add(id)) return;
+        for (String v : raw.getOrDefault(id, List.of())) {
+            if (v.startsWith("#")) {
+                expand(v.substring(1).replace("minecraft:", ""), raw, out, seen);
+            } else {
+                BuiltInRegistries.BLOCK.get(ResourceLocation.parse(v)).ifPresent(h -> {
+                    if (!out.contains(h)) out.add(h);
+                });
+            }
+        }
+    }
+
     @Test
     public void dump() throws Exception {
         SharedConstants.tryDetectVersion();
         Bootstrap.bootStrap();
+        System.out.println("bound block tags: " + bindBlockTags());
         Settings s = Baritone.settings();
         s.considerPotionEffects.value = false;
         air = Blocks.AIR.defaultBlockState();
@@ -269,7 +339,7 @@ public class SpikeGoldenDump {
                     line.append(' ').append(cells[i]);
                 }
                 w.write(line + "\n");
-                int y = 3 + r.nextInt(H - 5);
+                int y = 1 + r.nextInt(H - 3);
                 w.write("Y " + y + "\n");
                 for (int ci = 0; ci < CONFIGS.length; ci++) {
                     Cfg c = CONFIGS[ci];
