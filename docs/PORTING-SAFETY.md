@@ -142,23 +142,73 @@ The exposure is small in the pathing, behavior and pathing API code: `Math.pow` 
 Injected errors that go uncaught must each be classified, as either a real hole in the test or an error with no possible
 effect. A hole stays listed until it is closed.
 
-Known holes today: none known. Two were closed in S0: tool choice (the harness now binds the vanilla block tags, so
-a pickaxe and an empty hand differ) and the open top trapdoor (added to the block list, also waterlogged, and to the
-fluid-heavy grids).
+Known holes today: twelve mutations remain listed as holes in `tools/cost-compare/known-missed.txt`.
 
-Eight injected errors are still missed on the two functions covered. Each was read and judged to have no effect in
-1.21.4 for `MovementTraverse` and `MovementDescend` (a judgement from reading, not a proof). They must be tried again
-when S1 adds the other movements:
+- The six `normal cube: drop ...` exclusions and `exclusions ignored`: the golden facts read the collision shape with a
+  null level, where bamboo, moving pistons, scaffolding, shulker boxes, pointed dripstone and amethyst clusters throw and
+  count as not full. No state of those classes is ever "full", so the `instanceof` exclusion upstream cannot be seen.
+- `diagonal: a/b low mining with falling`: needs an instantly breakable block that is not walkable at a corner's feet, a
+  falling block over it, and `breakPenalty` 0 (config 10), all at once.
+- `goals: strict direction without step allowed` and `goals: run away from nothing allowed`: upstream throws in the
+  constructor, which a golden file cannot record. The unit tests in `goals.rs` cover them; `mutate.py` does not run unit tests.
+- `goals: inside strictly below outside`: needs an inside and an outside cell with bit-equal heuristics.
 
-- `through: skull passable`: skulls are already not pathfindable, so the rule is redundant.
-- `through: partial fluid maybe`: a partial fluid is always flowing, which the position check refuses anyway.
-- `walkon: honey ok`: honey is not a normal cube, so it never reaches that rule.
-- `water pos: xor to or`: differs only with `assumeWalkOnWater` and water above, but then the cell above is not
-  walkable-through, so these two movements stop earlier. Other movements may reach it.
-- `frost: level ignored`: the melting state is water at level 0, so the level test never excludes anything.
-- `replace: tall grass override`: tall grass and large fern are already replaceable in 1.21.4.
-- `fall: void check`: the cell one below the world is air, so the extra step finds nothing.
-- `fall: flowing water`: already refused earlier by the walk-through check on the same cell.
+Two were closed in S0: tool choice (the harness now binds the vanilla block tags, so a pickaxe and an empty hand differ)
+and the open top trapdoor (added to the block list, also waterlogged, and to the fluid-heavy grids).
+
+### Injected errors on the whole engine (S1)
+
+`mutate.py` now holds 836 injected errors, at least one per branch and early return of `ascend`, `pillar`, `downward`,
+`diagonal`, `parkour` and `moves` (wrong offset, swapped arguments, a direction swap), each goal's rules and arithmetic
+(wrapping, `java_max`, `java_min`), and the helper predicates (the terms of `fullyPassableBlockState`,
+`avoidWalkingInto` and `isBlockNormalCube`, the lava and loaded-chunk rules, the settings lists, `allowBreakAnyway`).
+Last full run, against the 10000-grid golden file: 773 caught, 63 missed, 0 not applied. A run of the comparison that
+aborts (a failed assertion on the move table) or runs over 300 seconds counts as caught.
+
+Strengthening the harness was tried first for every miss. It added: the offsets and dynamic flags of `Moves` in the `M`
+lines, a world border per grid (`W` lines, so placing meets the border), configurations 14 and 15 (frost walker 1 with
+sprint, with and without walking on water, magma, both diagonals), clean-diagonal, pond, door-above and falling-stack
+scenarios, waterlogged take-off blocks, and fractional `GoalRunAway` distances.
+
+The remaining 63 are listed with a reason in `known-missed.txt`: 51 "no effect" (each with the code or sweep fact that
+makes the error unobservable) and 12 holes (above).
+
+The eight errors that were missed on `MovementTraverse` and `MovementDescend` alone were tried again with the other
+movements and the stronger grids:
+
+- Still missed, still no effect (reasons now taken from the code and the registry sweep, see the file):
+  `through: skull passable`, `walkon: honey ok`, `frost: level ignored`, `replace: tall grass override`,
+  `fall: void check`, `fall: flowing water`.
+- Now caught: `through: partial fluid maybe` and `water pos: xor to or`.
+
+An independent check used a separate script, not `mutate.py`: 100 operator changes picked at random across the engine
+(seed 20261106). One did not build. Of the other 99, 95 were caught (2 of them by an abort and 1 by the time limit) and 4
+were missed. All 4 were read and have no effect: an unused return value in `descend`, the case already listed as
+`near inside boundary`, and two sign flips in `traverse` that only change the order of the same five directions. So this
+sample found no gap in the listed errors. It is a sample, not a proof.
+
+### S1 result
+
+The gate passed on the final engine at upstream `1.21.4` commit `1b8e87c`: 22,312,446 results in 21 families, all
+bit-identical, none close, none wrong, with 3 runs giving identical reports. The grids use 191 block states under 16
+configurations, and the registry sweep covers all 27,866 states under 2 configurations.
+
+Limits of this result:
+
+- It is L0. The block facts come from Java `1.21.4`, not from Horizon. S2 tests those.
+- The holes above stay open, and `normal cube` matters most for S2, because Horizon's shape fact may say "full" where
+  Java's null-level shape throws.
+- State flags come from the harness. The glue that will set them on Horizon doesn't exist yet.
+- `GoalThreeBlocks` is not ported (`later`), because it belongs to `MineProcess`.
+
+Measured effort for S1: about 9 hours of wall-clock time, of which about 6 h 50 min was a workflow of 9 agents using
+1.53 million tokens. It produced 2407 lines of engine, and the methods marked `port` in the ledger went from 35 to 114 of
+671. Most of the time went to the 836 injected errors (a full run takes about 104 minutes at low priority), not to the
+translation. No mismatch was found at any stage, and the one review finding (`f64::min` at the water speed cap, practically
+unreachable) was fixed.
+
+This doesn't give a calendar for the rest. S1 was direct translation with an exact oracle, and S3 to S5 are largely
+rewrites, with no such oracle from S4 on.
 
 ## Reports
 

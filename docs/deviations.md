@@ -3,12 +3,12 @@
 Each place where this port differs from upstream on purpose. The rules are in
 [PORTING-SAFETY.md](PORTING-SAFETY.md#deviations). Upstream lines are cited at the `1.21.4` commit `1b8e87c`.
 
-No deviation is active yet: there is no engine. Entries 1 to 4 are decided and wait for the code they apply to.
+Entries 1 to 4 are decided and wait for the code they apply to. Entry 5 is active and has no effect on any real search.
 
 ## How exceptions work today
 
 They don't. `tools/cost-compare` has no exception mechanism. Its comparison against `1.21.4` is exact and no deviation
-touches `MovementTraverse.cost` or `MovementDescend.cost`, so nothing needs to be excused.
+touches a compared result, so nothing needs to be excused.
 
 When a deviation does change a compared function, an exception has to name the function and the exact condition. It
 never says "ignore this function". A difference with no entry here must still fail the check.
@@ -65,6 +65,17 @@ Fields: upstream, ours, why, changes chosen paths, decided by, expectation in th
 - **Changes chosen paths:** no. It needs no decision.
 - **Decided by:** nobody needed. Fixes with no effect on paths are made and recorded.
 - **Comparison:** none. Ordinary tests for the cache layer.
+
+### D5. Goal search box that ends at the largest integer
+
+- **Status:** active, in `Goal::heuristic_inside`.
+- **Upstream:** `GoalNear.heuristic()` and `GoalRunAway.heuristic()` loop with `x++` on an `int`. If the box ends at
+  `Integer.MAX_VALUE`, the counter wraps and the loop never ends.
+- **Ours:** inclusive ranges, which stop at the end of the box.
+- **Why:** a hang helps nobody, and Rust's ranges do this without extra code.
+- **Changes chosen paths:** no. It needs coordinates about 70 times beyond the world border.
+- **Decided by:** nobody needed. Fixes with no effect on paths are made and recorded.
+- **Comparison:** none. The comparison does not call `heuristic()` on such goals, because upstream would not return.
 
 ## Where upstream's two branches disagree
 

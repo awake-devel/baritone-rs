@@ -199,7 +199,7 @@ public interface ActionCosts {
         self.repo = os.path.join(t, "repo")
         self.ledger = os.path.join(self.repo, "docs", "port-ledger.tsv")
         os.makedirs(os.path.join(self.up, os.path.dirname(self.PATH)))
-        os.makedirs(os.path.join(self.repo, "tools", "cost-compare", "src"))
+        os.makedirs(os.path.join(self.repo, "mod", "engine", "src"))
         sh("git", "init", "-q", cwd=self.up)
         sh("git", "config", "user.email", "test.invalid", cwd=self.up)
         sh("git", "config", "user.name", "t", cwd=self.up)
@@ -228,7 +228,7 @@ public interface ActionCosts {
         return code, buf.getvalue()
 
     def rust(self, text):
-        with open(os.path.join(self.repo, "tools", "cost-compare", "src", "lib.rs"), "w") as fh:
+        with open(os.path.join(self.repo, "mod", "engine", "src", "lib.rs"), "w") as fh:
             fh.write(text)
 
     def set_status(self, cls, method, status, note=""):

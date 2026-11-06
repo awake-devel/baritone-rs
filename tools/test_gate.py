@@ -13,17 +13,23 @@ import run_compare as rc  # noqa: E402
 
 # Private-looking strings are built from pieces so that this file passes its own check.
 HOME = "/" + "home/someone/x"
-SAMPLE = """traverse: 100 evals, 60 finite, 7 distinct, exact 98, within 1e-9 2, WRONG 0
-descend: 90 evals, 50 finite, 9 distinct, exact 90, within 1e-9 0, WRONG 0
-mismatches by config {}
-palette 85 states, 4 configs, 1.2s
-"""
+def sample_lines(**override):
+    """A comparison output with a line for every family; `override` replaces a family's line with the given text."""
+    out = []
+    for f in rc.FUNCS:
+        line = override.get(f, f"{f}: 100 evals, 60 finite, 7 distinct, exact 98, within 1e-9 2, WRONG 0")
+        out.append(line)
+    return "\n".join(out) + "\nmismatches in movements by config {}\npalette 85 states, 4 configs, 1.2s\n"
+
+
+SAMPLE = sample_lines(descend="descend: 90 evals, 50 finite, 9 distinct, exact 90, within 1e-9 0, WRONG 0")
 
 
 class ParseCompare(unittest.TestCase):
     def test_parse(self):
         r = rc.parse_output(SAMPLE)
         self.assertEqual(r["traverse"], {"evals": 100, "finite": 60, "distinct": 7, "exact": 98, "close": 2, "wrong": 0})
+        self.assertEqual(sorted(r), sorted(rc.FUNCS))
         self.assertEqual(r["descend"]["exact"], 90)
         rc.check_results(r)
 
@@ -35,6 +41,15 @@ class ParseCompare(unittest.TestCase):
     def test_missing_function(self):
         with self.assertRaises(rc.Fail):
             rc.parse_output(SAMPLE.split("\n")[0])
+        with self.assertRaises(rc.Fail):
+            rc.parse_output(SAMPLE.replace("goal_near:", "goal_nearly:"))
+
+    def test_movement_or_goal_without_a_finite_result_fails(self):
+        for fam in ("parkour", "goal_runaway"):
+            with self.assertRaises(rc.Fail, msg=fam):
+                rc.parse_output(sample_lines(**{fam: f"{fam}: 100 evals, 0 finite, 7 distinct, exact 100, within 1e-9 0, WRONG 0"}))
+        # families that are not movements or goals may have no finite result
+        rc.parse_output(sample_lines(states="states: 100 evals, 0 finite, 7 distinct, exact 100, within 1e-9 0, WRONG 0"))
 
     def test_zero_evals(self):
         with self.assertRaises(rc.Fail):
@@ -46,8 +61,11 @@ class ParseCompare(unittest.TestCase):
 
     def test_source_hashes_cover_inputs(self):
         h = rc.source_hashes()
-        self.assertIn("src/lib.rs", h)
+        for k in ("tools/cost-compare/src/main.rs", "mod/engine/src/movement/helper.rs", "mod/engine/src/goals.rs", "Cargo.toml", "Cargo.lock", "rustfmt.toml", "tools/cost-compare/Cargo.toml", "mod/engine/Cargo.toml"):
+            self.assertIn(k, h)
+        self.assertNotIn("tools/cost-compare/src/lib.rs", h)
         self.assertTrue(any(k.startswith("java/") for k in h))
+        self.assertFalse(any(k.startswith("java-26.3/") for k in h))
 
     def test_copy_and_remove(self):
         with tempfile.TemporaryDirectory() as up:
@@ -127,21 +145,21 @@ class Mutation(unittest.TestCase):
         with open(os.path.join(gate.CRATE, "mutate.py"), encoding="utf-8") as f:
             src = f.read()
         for name in known:
-            self.assertIn(f'("{name}"', src)
+            self.assertIn(f'"{name}"),', src)
         self.assertNotIn("break: wrong tool table", known)
         self.assertNotIn("solid: trapdoor", known)
 
 
 class CurrentReport(unittest.TestCase):
     def setUp(self):
-        self.src = {"src/lib.rs": "a", "src/main.rs": "b"}
+        self.src = {"mod/engine/src/lib.rs": "a", "tools/cost-compare/src/main.rs": "b"}
         self.rep = {"sources": dict(self.src, golden="g"), "upstream_commit": "c1", "grids": 5, "gate": {"mutation_inputs": "m1"}}
 
     def test_same(self):
         self.assertTrue(gate.comparison_current(self.rep, self.src, "c1", 5, "m1"))
 
     def test_changed_source(self):
-        self.assertFalse(gate.comparison_current(self.rep, dict(self.src, **{"src/lib.rs": "z"}), "c1", 5, "m1"))
+        self.assertFalse(gate.comparison_current(self.rep, dict(self.src, **{"mod/engine/src/lib.rs": "z"}), "c1", 5, "m1"))
 
     def test_changed_commit_or_grids(self):
         self.assertFalse(gate.comparison_current(self.rep, self.src, "c2", 5, "m1"))

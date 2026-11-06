@@ -2,12 +2,68 @@
 # Format: <mutation name> | <class>: <reason>
 # class is "no effect" (the error cannot change any result) or "hole" (a real gap in the test; stays listed until closed).
 # The gate fails on a missed mutation that is not listed here, and on a mutation whose pattern no longer matches.
-# The "no effect" entries below are the lead's classification (believed, from reading the rules). They were not proven.
-through: skull passable | no effect: believed unreachable; not independently proven
-through: partial fluid maybe | no effect: believed unreachable; not independently proven
-walkon: honey ok | no effect: believed unreachable; not independently proven
-water pos: xor to or | no effect: believed unreachable; not independently proven
-frost: level ignored | no effect: believed unreachable; not independently proven
-replace: tall grass override | no effect: believed unreachable; not independently proven
-fall: void check | no effect: believed unreachable; not independently proven
-fall: flowing water | no effect: believed unreachable; not independently proven
+# Every entry was tried against the 10000-grid golden file after the harness was strengthened for it; the reasons come from the engine and upstream source
+# and from the registry sweep (27866 states), not from belief. Order: the old entries first, then the new ones in the order of mutate.py.
+through: skull passable | no effect: no skull state is pathfindable in the registry sweep, so the last test of canWalkThroughBlockState already answers No
+walkon: honey ok | no effect: honey has no full collision shape (shape_full 0 in the sweep), so isBlockNormalCube is false and the first rule never holds for it
+frost: level ignored | no effect: frost_melt holds only for the default water state, a source of level 0, so the level test never excludes a state
+replace: tall grass override | no effect: tall grass and large fern have replaceable true, so the final s.replaceable answers true already
+fall: void check | no effect: a step at min_y - 1 reads air (Ctx::get), which is walkable through, so the loop goes on to min_y - 2 and returns false there, the same result
+fall: flowing water | no effect: canWalkThrough on a flowing fluid cell is false (the position check refuses flowing fluid), so the earlier test already returns false
+ascend: placing cost infinite | no effect: the total_cost >= COST_INF test right after the walk cost returns COST_INF for any total that holds an infinite placing cost
+ascend: first infinity check dropped | no effect: the next test (after the following addition) returns COST_INF for any total at or above COST_INF, and every added term is non-negative
+pillar: climbable head | no effect: a climbable cell at y+2 is a dry ladder or vine (walkable through, mining time 0) or a waterlogged ladder (mining_duration refuses fluid with COST_INF), so hardness is never finite and positive there (sweep: all 94 climbable states)
+diagonal: magma landing setting | no effect: the landing branch is reached with magma only after canWalkOn(magma), which holds only with allowWalkOnMagma
+diagonal: a low mining with falling | hole: differs only when an instantly breakable, not walkable block (strength infinite, time 0 at breakPenalty 0, config 10 only) is at the corner's feet with a falling block over it; the generated grids do not reach that
+diagonal: b low mining with falling | hole: differs only when an instantly breakable, not walkable block (strength infinite, time 0 at breakPenalty 0, config 10 only) is at the corner's feet with a falling block over it; the generated grids do not reach that
+diagonal: early return after the low cells | no effect: the same test is repeated after the next addition and option_a only grows, so the movement returns there as well
+diagonal: early return after a high | no effect: the final test repeats it after option_b is raised, and option_a stays non-zero
+diagonal: descend centre cost | no effect: fall_n_blocks_cost()[1] (about 5 ticks) is larger than CENTER_AFTER_FALL_COST (about 0.9), so max always returns the fall cost
+parkour: frost cap | no effect: i is at most 4, so min(16) never lowers frost + 2 below i
+parkour: place against x sign | no effect: all five directions are tried and only their order changes with the sign; the turn-around skip tests the fixed cell dest - diff, and the outcome is whether any cell works
+parkour: place against z sign | no effect: all five directions are tried and only their order changes with the sign; the turn-around skip tests the fixed cell dest - diff, and the outcome is whether any cell works
+goals: strict direction without step allowed | hole: upstream's constructors throw, which a golden file cannot record; only the unit tests strict_direction_needs_a_step and run_away_needs_a_point in goals.rs cover it, and mutate.py does not run unit tests
+goals: run away from nothing allowed | hole: upstream's constructors throw, which a golden file cannot record; only the unit tests strict_direction_needs_a_step and run_away_needs_a_point in goals.rs cover it, and mutate.py does not run unit tests
+goals: inside strictly below outside | hole: differs only when an inside cell and an outside cell have bit-equal heuristics at the border of the box; none of the generated goals has such a tie
+goals: inside max is the Rust max | no effect: differs only for NaN or for 0.0 beside -0.0; GoalNear's inside values are non-negative and GoalRunAway's non-positive, so the two zeros never meet
+goals: axis heuristic Rust min | no effect: its operands are absolute values and their products, never NaN or -0.0
+goals: near inside range floor | no effect: rangeSq is range * range, a perfect square, so sqrt is exact and ceil, floor and truncation agree; the wrapped products that are not squares only occur in the overflow goals, for which the harness does not call heuristic()
+goals: near inside range truncated | no effect: rangeSq is range * range, a perfect square, so sqrt is exact and ceil, floor and truncation agree; the wrapped products that are not squares only occur in the overflow goals, for which the harness does not call heuristic()
+goals: near inside heuristic x sign | no effect: the loop over dx covers -range..=range, so x - dx visits the same cells as x + dx
+goals: near inside boundary | no effect: a value equal to min_outside that is pushed by <= is dropped again by max_inside, which keeps only inside < min_outside
+goals: near inside minimum check dropped | no effect: an extra pushed value is at least the running minimum of the outside values, so at least the final one, and max_inside drops it; the minimum itself is updated the same way
+goals: near inside outside min is the Rust min | no effect: min_outside is only compared with <, where 0.0 and -0.0 are equal, and no heuristic is NaN
+goals: run away inside boundary | no effect: a value equal to min_outside that is pushed by <= is dropped again by max_inside, which keeps only inside < min_outside
+goals: run away inside minimum check dropped | no effect: an extra pushed value is at least the running minimum of the outside values, so at least the final one, and max_inside drops it; the minimum itself is updated the same way
+goals: run away inside outside min is the Rust min | no effect: min_outside is only compared with <, where 0.0 and -0.0 are equal, and no heuristic is NaN
+normal cube: drop s.bamboo_stalk | hole: the golden facts read the collision shape with a null level, where these blocks throw and count as not full, so shape_full is false for every state of the six classes (sweep: 0 of 226) and the exclusion cannot be seen
+normal cube: drop s.moving_piston | hole: the golden facts read the collision shape with a null level, where these blocks throw and count as not full, so shape_full is false for every state of the six classes (sweep: 0 of 226) and the exclusion cannot be seen
+normal cube: drop s.scaffolding | hole: the golden facts read the collision shape with a null level, where these blocks throw and count as not full, so shape_full is false for every state of the six classes (sweep: 0 of 226) and the exclusion cannot be seen
+normal cube: drop s.shulker | hole: the golden facts read the collision shape with a null level, where these blocks throw and count as not full, so shape_full is false for every state of the six classes (sweep: 0 of 226) and the exclusion cannot be seen
+normal cube: drop s.pointed_dripstone | hole: the golden facts read the collision shape with a null level, where these blocks throw and count as not full, so shape_full is false for every state of the six classes (sweep: 0 of 226) and the exclusion cannot be seen
+normal cube: drop s.amethyst_cluster | hole: the golden facts read the collision shape with a null level, where these blocks throw and count as not full, so shape_full is false for every state of the six classes (sweep: 0 of 226) and the exclusion cannot be seen
+normal cube: exclusions ignored | hole: the golden facts read the collision shape with a null level, where these blocks throw and count as not full, so shape_full is false for every state of the six classes (sweep: 0 of 226) and the exclusion cannot be seen
+avoid walking into: drop s.block == BubbleColumn | no effect: bubble column states carry a water fluid, so the first term !s.fluid_empty already holds
+fully passable: drop b == Cocoa | no effect: no state of that block is pathfindable in the registry sweep, so the final pathfindable test answers No without the term
+fully passable: drop s.azalea | no effect: no state of that block is pathfindable in the registry sweep, so the final pathfindable test answers No without the term
+fully passable: drop s.skull_floor | no effect: no state of that block is pathfindable in the registry sweep, so the final pathfindable test answers No without the term
+fully passable: drop s.shulker | no effect: no state of that block is pathfindable in the registry sweep, so the final pathfindable test answers No without the term
+fully passable: maybe branch | no effect: fullyPassableBlockState never returns Maybe, so the None arm of fully_passable is unreachable
+through blocked: drop b == Cocoa | no effect: no state of that block is pathfindable in the registry sweep, so the final pathfindable test answers No without the term
+through blocked: drop s.shulker | no effect: no state of that block is pathfindable in the registry sweep, so the final pathfindable test answers No without the term
+through blocked: drop b == EndRod | no effect: no state of that block is pathfindable in the registry sweep, so the final pathfindable test answers No without the term
+through blocked: drop s.azalea | no effect: no state of that block is pathfindable in the registry sweep, so the final pathfindable test answers No without the term
+through: cauldron blocked | no effect: no state of that block is pathfindable in the registry sweep, so the final pathfindable test answers No without the term
+walkon: bubble column ok | no effect: bubble column has no full collision shape (shape_full 0), so isBlockNormalCube is false and the first rule never holds
+walkon: glass | no effect: glass and every stained glass state have a full collision shape (shape_full 1 in the sweep), so isBlockNormalCube already holds
+walkon: stained glass | no effect: glass and every stained glass state have a full collision shape (shape_full 1 in the sweep), so isBlockNormalCube already holds
+place against: glass | no effect: glass and every stained glass state have a full collision shape (shape_full 1 in the sweep), so isBlockNormalCube already holds
+place against: stained glass | no effect: glass and every stained glass state have a full collision shape (shape_full 1 in the sweep), so isBlockNormalCube already holds
+mining: zero strength | no effect: ToolSet.calculateSpeedVsBlock is speed / hardness / 30 or / 100 with speed at least 1, or -1 for an unbreakable block, never 0; no palette state has strength 0
+mining: multiplier applied | no effect: breakCostMultiplierAt returns 1.0, or COST_INF which returns earlier, so the multiplication is by 1.0
+solid: fluid kind instead of emptiness | no effect: fluid is None exactly when fluid_empty in every state of the sweep (0 of 27866 disagree)
+through position: pathfindable fallthrough | no effect: the position check is reached only for carpet, snow and fluid states, and each returns before the last line
+water pos: flowing water above | no effect: when the cell above is flowing water, is_water(up) is true, so is_water(up) && !assume and is_water(up) ^ assume agree
+lava pos: setting | no effect: the position check runs only for states that canWalkOnBlockState answered Maybe, and a lava state gets Maybe only when assumeWalkOnLava is on
+lava pos: lava required | no effect: the only Maybe states are water (handled first) and lava
+replace: air | no effect: air has replaceable true (palette and sweep), so the last line answers true anyway

@@ -4,35 +4,68 @@ Test tools for the port. They are not part of the mod.
 
 ## cost-compare
 
-Checks a Rust translation of Baritone's movement costs against the Java original, bit for bit.
+Compares upstream's real Java classes with `mod/engine`, bit for bit. The Java side never holds a second implementation of
+a rule: it builds worlds and settings, calls upstream's own classes, and writes down what they answer.
 
-1. `java/` is a JUnit test to copy into a checkout of upstream's `src/test/java/`. It builds random block grids and
-   writes three things to a file: raw game facts per block state, the settings, and the costs that upstream's own
-   Java computes. Baritone's rules are never exported, so the Rust side has to derive them.
-2. `src/` holds the translation (`lib.rs`) and the comparison (`main.rs`).
-3. `mutate.py` puts one deliberate error at a time into the translation and reports whether the comparison notices.
-   Use it to check that the data is strong enough, because a clean comparison can also mean a weak test.
+1. `java/` is a JUnit test to copy into a checkout of upstream's `src/test/java/` (`run_compare.py` does it). It writes one
+   golden file:
+   - `S` lines: the palette (about 190 block states, oak doors over facing, hinge and open, copper and iron doors, gates,
+     trapdoors, stairs, slabs, snow, fluids of every level, bamboo, a moving piston, and more). Each carries the raw game facts
+     that `mod/engine/src/blocks.rs` `State` holds, and the mining strength with a pickaxe and with an empty hand (kept out of
+     `State`: the comparison builds the `tool_strength` slice from them). Baritone's rules are never exported as facts.
+   - `C` lines: 14 configurations. Each setting of `mod/engine/src/config.rs` takes two different values in at least one of
+     them, including the three block lists; `main.rs` checks that and fails if a setting is missing a value.
+     Settings are applied to `Baritone.settings()` before each context is built, and `PrecomputedData.forCurrentSettings`
+     rebuilds its table by itself when they changed.
+   - `G` lines: grids of 13 x 16 x 13 with the start at (6, y, 6), y from 1 to 15 (so that the build limit is reached),
+     and whether the column is loaded (about 10% are not). Modes 0 to 6 are random fills (noise, fluids, water, open air).
+     Modes 7 to 10 build a structure around the start in all four directions: parkour corridors (gaps of 1 to 4, flat,
+     ascending and placed landings, walls, bad take-off and landing blocks, hazards after the landing), staircases and
+     slabs, columns of ladders, vines, water, lava and falling blocks, and diagonals with doors, magma, lava and more at
+     both corners.
+   - `R` lines: for every grid, configuration and `Moves.values()` ordinal, `Moves.apply` after `reset()`: destination and
+     cost in hex. Tallied per family: downward, pillar, traverse, ascend, descend, diagonal, parkour.
+   - `P` lines: the rules that depend on a position (canWalkThrough, canWalkOn, fullyPassable, canPlaceAgainst,
+     mustBeSolidToWalkOn, isReplaceable, canUseFrostWalker, avoidBreaking, avoidWalkingInto, isFlowing, both mining times,
+     costOfPlacingAt) at 8 positions near the start. Tallied as `predicates`.
+   - `A` lines: every state of `Block.BLOCK_STATE_REGISTRY` (about 27,900), with the same facts and upstream's answers for
+     thirteen block-state rules under two configurations (the default, and one with magma, vines, lava walking, bottom slabs
+     flipped and another `blocksToAvoid`). Tallied as `states`.
+   - `F` line: all 4097 `FALL_N_BLOCKS_COST` entries and `JUMP_ONE_BLOCK_COST`. Tallied as `fall_table`.
+   - `Q` lines: instances of every goal class (random and extreme parameters, coordinates near +/-30,000,000 and near the
+     int limits, directions, RunAway with and without a fixed Y, nested Composite and Inverted), each at six positions, with
+     `isInGoal`, `heuristic(x,y,z)` and `heuristic()`; `heuristic()` is only asked of goals whose box scan is small. Tallied
+     per class: `goal_block`, `goal_xz`, `goal_ylevel`, `goal_twoblocks`, `goal_gettoblock`, `goal_near`, `goal_axis`,
+     `goal_strict`, `goal_runaway`, `goal_composite`, `goal_inverted`.
+   Generation is deterministic (fixed seeds): a second run writes an identical file.
+2. `src/main.rs` is the comparison. It reads the golden file, runs the engine (`Moves::ALL[ordinal].apply`, the rule
+   functions, the goals) and prints one line per family: evals, finite, distinct, exact, within 1e-9 and WRONG. A family
+   with no finite result tested nothing, so `run_compare.py` fails on it. `cost-compare` is a member of the root workspace
+   and depends on `mod/engine` by path; it has no `Cargo.lock` or profile of its own.
+3. `mutate.py` puts one deliberate error at a time into a copy of the engine and reports whether the comparison notices.
+   Use it to check that the data is strong enough, because a clean comparison can also mean a weak test. Each mutation is
+   `(file, pattern, replacement, name)`; `mutate.py REPO --where` shows where every pattern matches.
 
 ```sh
-# In a checkout of upstream's 1.21.4 branch, with JDK 21. The first run downloads Minecraft and takes several minutes.
-cp -r <this repository>/tools/cost-compare/java/* src/test/java/
-SPIKE_OUT=/some/path/golden.txt SPIKE_GRIDS=40000 ./gradlew test --tests 'baritone.pathing.movement.SpikeGoldenDump'
+# From the repository root; JDK 21, an upstream checkout at the pinned commit. The first run may download Minecraft.
+python3 tools/run_compare.py --upstream upstream/baritone-1.21.4 --jdk DIR --scratch DIR --grids 300
 
-# Here, in tools/cost-compare/
-cargo run --release -- /some/path/golden.txt
-python3 mutate.py . /some/path/golden.txt
+# By hand, with a golden file already written:
+cargo run --release -p cost-compare -- /some/path/golden.txt
+python3 tools/cost-compare/mutate.py . /some/path/golden.txt
 ```
 
-The golden file is about 80 MB and is generated, so it is not committed.
+The default is 10000 grids. The golden file is generated, not committed, and stays below about 500 MB at that size.
 
 `java/baritone/api/BaritoneAPI.java` replaces upstream's class on the test classpath only, because the real one needs
 a running Minecraft to read its settings file.
 
-### Against upstream's 26.3 branch (`java-26.3/`)
+### Against upstream's 26.3 branch (`java-26.3/`): out of date
 
-`java-26.3/` is a separate copy of the harness for upstream's `26.3` branch (the game version Horizon implements). It
-needs JDK 25 and the same Gradle command; Gradle 8.14 runs on JDK 25 and downloads Minecraft 26.3 on first use. The
-1.21.4 copy in `java/` does not work there, for these reasons:
+`java-26.3/` is the old copy of the harness for upstream's `26.3` branch (the game version Horizon implements). **It was
+not updated with the rebuild of `java/`.** It still writes the old golden format (5 x 5 grids, traverse and descend only,
+the old `State` facts, `normal_cube` and `waterlogged_solid_top` as facts), which the Rust parser no longer reads, so it
+cannot be used until stage S2 redoes it. S2 has to carry over what the 26.3 copy solved, which is described here:
 
 - 1.21.4 has constructors made for tests (`BlockStateInterface(border, minY, height)` and a protected
   `CalculationContext` constructor). 26.3 has none. The copy allocates both objects without running a constructor
@@ -46,19 +79,19 @@ needs JDK 25 and the same Gradle command; Gradle 8.14 runs on JDK 25 and downloa
   1.21.4 body and exports the same fact.
 - The `PrecomputedData` table is built from the settings of the moment, so each context gets a fresh one.
 
-The comparison on a 26.3 golden file is expected to show differences. They are rule differences between the branches
-(the translation follows 1.21.4), and game differences would show as differing `S` lines.
-
 Known limits:
 
-- It covers `MovementTraverse.cost` and `MovementDescend.cost` only, over 87 hand-picked block states.
 - The facts come from Minecraft 1.21.4, not from Horizon.
+- The grids are 13 x 16 x 13 with the start in the middle; movements are only asked from the start. Other starts and
+  world heights (a grid never sits at the real minimum or maximum Y of a dimension) are not covered.
 - The harness binds the vanilla block tags itself (it reads `data/minecraft/tags/block/` from the game jar and binds
   them on the block registry), so a diamond pickaxe and an empty hand now give different break speeds. Tool choice
-  is tested for the two configurations in the file (pickaxe, empty hand) and for no other tool.
-- Eight injected errors are still missed. Each one has been read and judged to have no effect on these two functions
-  in 1.21.4 (redundant with another rule, or only reachable from other movements). Those judgements come from
-  reading the code and the exported facts, not from a proof. They are listed in `docs/PORTING-SAFETY.md`.
+  is tested for those two tools and for no other tool.
+- `Moves.apply0`, the executors and everything after the cost functions are not compared here.
+- A full mutation run is long: 836 builds, about 103 minutes at low priority on the development laptop. Named mutations can be
+  run alone (`mutate.py REPO GOLDEN "name|name"`).
+- Injected errors that stay uncaught are listed with a reason in `cost-compare/known-missed.txt`; those judgements come
+  from reading the code and the exported facts, not from a proof.
 
 ## walk-test
 
@@ -100,7 +133,8 @@ nothing in the repository can check account names or other private strings. Set 
 The comparison report is written only after the repeat runs and mutation pass; a report on disk means all three passed.
 
 `run_compare.py` runs one comparison and writes the report (metadata and counts only). It refuses to start while a
-game or another Gradle client is running.
+game or another Gradle client is running. The gate runs `cargo fmt --check`, `clippy -D warnings` and `test` across the
+workspace from the repository root.
 
 ## ledger.py
 

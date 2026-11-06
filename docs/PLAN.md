@@ -1,7 +1,7 @@
 # Plan
 
 **Status: approved on 2026-11-05.** How [Porting safety](PORTING-SAFETY.md) checks this work is a separate
-document. Horizon facts below were read at revision `4aa6854`. None of this design has been built, except where a test
+document. Horizon facts below were read at revision `66f3981`. None of this design has been built, except where a test
 is named.
 
 ## The approach
@@ -80,9 +80,9 @@ native_tick  read player and hotbar
 - **World:** chunks are `Arc<Chunk>` holding `Arc<Section>` with copy on write, and the mesher already reads them from
   another thread. A search owns its clones, so it needs no locks. That the types are `Send` and `Sync` is inferred. The
   cost of copy on write under block updates is not measured.
-- **Blocks:** the engine sees `u32` state ids and a table indexed by them. The glue builds it from Horizon's `StateFacts`
-  on the game thread, and it's shared read-only. `isPathfindable` has no known source yet: Horizon has a trait declaration
-  for it, and S2 has to settle this.
+- **Blocks:** the engine sees state ids and a table indexed by them. The glue builds it from Horizon's `StateFacts`
+  on the game thread, and it's shared read-only. `isPathfindable` appears to come from `StateData.flags & LAND`, not from
+  `StateFacts`; S2 has to check that.
 - **Settings:** a search gets one immutable snapshot and reads nothing global.
 - **Worker:** one thread, with new jobs replacing waiting ones. Results carry a generation number, so a stale result is
   dropped. A search has a node cap as well as a time limit.
@@ -91,33 +91,39 @@ native_tick  read player and hotbar
 
 ## Hooks
 
+Read at Nightly 2026-11-05, revision `66f3981` (`NATIVE_HOOKS_API` 411). `tools/walk-test` compiles against this revision but has not been run on it; the rest has been read, not run.
+
 | Need | How | Stability |
 |---|---|---|
-| Tick, commands, mods list, settings page, HUD | `native_tick`, `native_command`, `native_commands`, `native_mods`, `native_settings`, `native_hud` | Stable |
-| Drawing the path | A native render hook, not chosen yet | Stable |
-| Reading the player and chunks | `game.player`, `game.world` | Private fields, pinned |
-| Moving and turning | `game.keys`, `game.yaw` | Private fields, pinned. Tested by `tools/walk-test` |
-| Sprinting | `PlayerMotion::set_sprinting`. The sprint key can't work: `heal_hold_latches` releases it while the keyboard reports Control up | Pinned. Tested by `tools/walk-test` |
-| Walking with the chat open | See below | Pinned. **Not tested** |
-| Breaking, placing, slot | Not studied yet | Unknown |
+| Tick, before the player moves | `native_tick`, called at the top of `tick_remote` | Stable |
+| Commands | `native_command`, `native_commands` | Stable. Slash commands only |
+| Mods list, settings page, HUD | `native_mods`, `native_settings`, `native_hud` | Stable |
+| Drawing the path | `native_world_primitives`: lines and boxes, optionally through walls | Stable |
+| Moving, with or without the chat open | `native_movement_input`: forward, strafe, jump, sneak. See below | Stable. **Not tested in game** |
+| Reading blocks | Chunk snapshots from `game.world`, for the worker. `native_level_block_state` and `native_block` exist, but are too slow to copy a window with | Pinned for snapshots |
+| Reading the player | `native_player` has position, yaw and pitch. Velocity, ground state and hotbar come from `game.player`, `game.inventory`, `game.selected` | Partly stable |
+| Turning | `game.yaw`, `game.pitch`, which the movement packet reads. No stable setter | Pinned. Yaw tested at `4aa6854` |
+| Sprinting | `PlayerMotion::set_sprinting`. `keys.sprint` comes from the keyboard and needs `Screen::Playing`, and `run_sprint_tick` may undo a direct set, so this needs checking again | Pinned. Tested by `tools/walk-test` at `4aa6854` only |
+| Breaking, placing, slot | Through `game.left` and `tick_mining`, `game.right` and `use_item_as_player`, `game.selected`. Not one stable hook | Pinned. Not tested |
+| Tool speed | `destroy_progress` and `block_break_speed`. Neither is public to a mod, so the glue needs its own access | Pinned. Not tested |
+| `isPathfindable` | `StateData.flags & LAND`, in `mobs/data.rs`. Not in `StateFacts`. S2 has to check it against Java | Pinned |
+| `#goto` in chat | No client hook sees plain chat, so this needs a pinned `HEAD` on `handle_chat_input` | Pinned. Later |
 
-Private fields mean a rebase on each new Horizon revision, so the glue stays small and all in one place. Current main also
-has `native_movement_input`, which has no sprint or look parameter, so it wouldn't remove all of this.
+A bundle that touches one private field has to pin `horizon_revision`, even if its other hooks are stable, so the mod stays pinned. Using the stable hooks where they exist still keeps the part that needs rebasing small.
 
-**Horizon version.** `4aa6854` is already behind. Before S2, we move to the latest Nightly in a separate checkout, and redo
-this section's analysis on it. After that, we stay on one Nightly for the length of a stage and update between stages.
+**Horizon version.** The port targets `66f3981`, in the git-ignored checkout `upstream/horizon-nightly`. `../horizon/` stays at `4aa6854` for Eris. We stay on one Nightly for the length of a stage and update between stages.
 
 ### Walking with the chat open
 
 This is a requirement: players use Baritone while they talk or type commands.
 
-`tick_remote` builds `Keys` with `playing && self.keys.contains(..)`, so an open screen clears all movement. It then
-computes the input packet from those keys, so patching only the later call to `controlled_simulation_tick_with_sprint_window`
-would make the player move while telling the server no keys are held.
+At `66f3981`, `tick_remote` still gives zero movement keys while a screen is open, because `playing` requires `Screen::Playing`. But it then calls `native_movement_input`, with no such condition, and rewrites the keys from what the hook returns before it builds the `PlayerInput` byte for the server. So from reading the code, a mod can walk with the chat open using a stable hook, and the server sees the same keys as the movement. This replaces the `MODIFY_VARIABLE` idea from `4aa6854`.
 
-So the hook has to replace `keys` right after it's built, with `MODIFY_VARIABLE` or `AFTER_ASSIGN`, while a path is running.
-What a real player's keys should do in that case still has to be decided, as does what happens with other screens, such as
-an inventory or a container. S4 starts with this test, because the executor depends on it.
+Three things are still open, and S4 starts with them, because the executor depends on them:
+
+- Whether it works in the game. Nothing has run it yet.
+- Whether sprinting holds with a screen open: the hook has no sprint parameter, and `keys.sprint` is cleared.
+- What a real player's keys should do meanwhile, and what happens with other screens, such as an inventory or a container.
 
 ## Testing
 
@@ -141,7 +147,7 @@ Building the mod takes 2 to 5 minutes on this laptop, so most work should need n
 | Snapshots cost too much under block updates | A copied window replaces them, in the world layer only | S4 |
 | Horizon's private fields change often | More rebasing work, kept to the glue | Each rebase |
 | The physics differ beyond flat walking and sprinting | Some cost constants need new measurements | S4 |
-| Effort is unknown | No calendar is given until S1 has been measured | S1 |
+| Effort is known only for direct translation | S1 is measured in [PORTING-SAFETY.md](PORTING-SAFETY.md#s1-result), but it doesn't predict the rewritten parts, so there is still no calendar | S3, S4 |
 
 ## Decisions
 

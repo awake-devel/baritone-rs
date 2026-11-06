@@ -44,7 +44,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
 DEFAULT_LEDGER = os.path.join(REPO, "docs", "port-ledger.tsv")
 DEFAULT_REV = "1b8e87c"
-RUST_ROOTS = ["tools/cost-compare/src", "mod/engine/src"]
+RUST_ROOTS = ["mod/engine/src"]
 COLUMNS = ["class", "method", "status", "commit", "hash", "covered_by", "note"]
 STATUSES = ("port", "redesign", "drop", "later", "missing")
 

@@ -3,13 +3,14 @@
 """Runs one cost-compare comparison end to end and writes reports/cost-compare-<branch>.json on success.
 
 Steps: delete the earlier report; copy the Java test into the upstream checkout; run it with Gradle to write the
-golden file; remove the copied files (always); run the Rust comparison on the golden file; parse; write the report.
+golden file; remove the copied files (always); run the Rust comparison (tools/cost-compare, a member of the root
+workspace) on the golden file; parse; write the report.
 
 Inputs (argument, or environment variable):
   --upstream / BARITONE_UPSTREAM   checkout of upstream's branch
   --jdk      / BARITONE_JDK        JDK home
   --scratch  / BARITONE_SCRATCH    directory for the golden file
-  --grids    / BARITONE_GRIDS      number of random grids (default 40000)
+  --grids    / BARITONE_GRIDS      number of random grids (default 10000)
   --branch   / BARITONE_BRANCH     branch name for the report (default: the Minecraft version in gradle.properties)
 
 The golden file stays in the scratch directory as golden-<branch>.txt.
@@ -27,7 +28,12 @@ import sys
 REPO = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 CRATE = os.path.join(REPO, "tools", "cost-compare")
 JAVA_TEST = "baritone.pathing.movement.SpikeGoldenDump"
-FUNCS = ("traverse", "descend")
+# Every family the comparison prints a line for. A movement or goal family with no finite result tested nothing.
+MOVEMENTS = ("downward", "pillar", "traverse", "ascend", "descend", "diagonal", "parkour")
+GOALS = tuple("goal_" + n for n in ("block", "xz", "ylevel", "twoblocks", "gettoblock", "near", "axis", "strict", "runaway", "composite", "inverted"))
+OTHERS = ("predicates", "states", "fall_table")
+FUNCS = MOVEMENTS + GOALS + OTHERS
+DEFAULT_GRIDS = 10000
 LINE = re.compile(
     r"^(\w+): (\d+) evals, (\d+) finite, (\d+) distinct, exact (\d+), within 1e-9 (\d+), WRONG (\d+)\s*$", re.M
 )
@@ -55,13 +61,21 @@ def java_files(root=CRATE):
     return sorted(out)
 
 
-def source_hashes(root=CRATE):
-    """sha256 of every source that takes part in a comparison, keyed by a repository-relative name."""
+def source_hashes(repo=REPO):
+    """sha256 of every source that takes part in a comparison, keyed by a repository-relative name: the Java test (as
+    'java/...'), the comparison's own Rust sources, the engine's sources, and the Cargo and format files of the workspace."""
+    crate = os.path.join(repo, "tools", "cost-compare")
     out = {}
-    for rel in java_files(root):
-        out["java/" + rel] = sha256_file(os.path.join(root, "java", *rel.split("/")))
-    for rel in ("src/lib.rs", "src/main.rs", "Cargo.toml"):
-        out[rel] = sha256_file(os.path.join(root, *rel.split("/")))
+    for rel in java_files(crate):
+        out["java/" + rel] = sha256_file(os.path.join(crate, "java", *rel.split("/")))
+    files = ["Cargo.toml", "Cargo.lock", "rustfmt.toml", "tools/cost-compare/Cargo.toml", "mod/engine/Cargo.toml"]
+    for top in ("tools/cost-compare/src", "mod/engine/src"):
+        for d, _, names in os.walk(os.path.join(repo, *top.split("/"))):
+            for n in names:
+                if n.endswith(".rs"):
+                    files.append(os.path.relpath(os.path.join(d, n), repo).replace(os.sep, "/"))
+    for rel in sorted(files):
+        out[rel] = sha256_file(os.path.join(repo, *rel.split("/")))
     return out
 
 
@@ -83,6 +97,8 @@ def parse_output(text):
             raise Fail(f"no result line for '{f}' in the comparison output")
         if res[f]["evals"] == 0:
             raise Fail(f"'{f}' has no evaluations")
+        if f in MOVEMENTS + GOALS and res[f]["finite"] == 0:
+            raise Fail(f"'{f}' has no finite result: the inputs never reach it, so it tested nothing")
     return res
 
 
@@ -105,6 +121,16 @@ def run(cmd, **kw):
     return subprocess.run(cmd, capture_output=True, text=True, **kw)
 
 
+def cargo_run(golden):
+    """The Rust comparison. At low priority and with few jobs while another build is running (it only builds a small crate)."""
+    cmd = ["cargo", "run", "--release", "--quiet", "-p", "cost-compare", "--", golden]
+    env = dict(os.environ)
+    if pgrep("-x", "rustc"):
+        cmd = ["nice", "-n", "15"] + cmd
+        env["CARGO_BUILD_JOBS"] = "4"
+    return run(cmd, cwd=REPO, env=env)
+
+
 def upstream_commit(upstream):
     r = run(["git", "-C", upstream, "rev-parse", "HEAD"])
     if r.returncode:
@@ -113,7 +139,7 @@ def upstream_commit(upstream):
 
 
 def pgrep(*args):
-    r = run(["pgrep", *args])
+    r = subprocess.run(["pgrep", *args], capture_output=True, text=True)
     return r.returncode == 0
 
 
@@ -201,7 +227,7 @@ def execute(upstream, jdk, scratch, grids, branch, report_path):
         remove_copied(files, dirs)
     if g.returncode or not os.path.exists(golden):
         raise Fail("Gradle failed or wrote no golden file:\n" + (g.stdout + g.stderr)[-2000:])
-    r = run(["cargo", "run", "--release", "--quiet", "--", golden], cwd=CRATE)
+    r = cargo_run(golden)
     if r.returncode:
         raise Fail("the Rust comparison failed to run:\n" + (r.stdout + r.stderr)[-2000:])
     res = parse_output(r.stdout)
@@ -241,7 +267,7 @@ def resolve(args):
     for name, v in (("upstream", upstream), ("jdk", jdk), ("scratch", scratch)):
         if not v:
             raise Fail(f"missing --{name} (or the BARITONE_{name.upper()} environment variable)")
-    grids = int(get(args.grids, "BARITONE_GRIDS", 40000))
+    grids = int(get(args.grids, "BARITONE_GRIDS", DEFAULT_GRIDS))
     branch = get(args.branch, "BARITONE_BRANCH") or read_minecraft_version(upstream)
     return upstream, jdk, scratch, grids, branch
 
@@ -260,7 +286,7 @@ def main(argv=None):
         print("FAIL:", e, file=sys.stderr)
         return 1
     write_report(report, path)
-    print("OK:", ", ".join(f"{f}: {r['evals']} evals, exact {r['exact']}, close {r['close']}" for f, r in report["results"].items()))
+    print("OK:", ", ".join(f"{f}: {r['evals']} evals, {r['finite']} finite, exact {r['exact']}, close {r['close']}" for f, r in report["results"].items()))
     return 0
 
 

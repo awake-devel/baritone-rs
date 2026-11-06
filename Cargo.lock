@@ -3,5 +3,12 @@
 version = 4
 
 [[package]]
-name = "baritone-spike"
+name = "baritone-engine"
 version = "0.0.0"
+
+[[package]]
+name = "cost-compare"
+version = "0.0.0"
+dependencies = [
+ "baritone-engine",
+]

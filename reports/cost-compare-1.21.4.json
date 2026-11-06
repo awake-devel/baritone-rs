@@ -1,36 +1,207 @@
 {
   "gate": {
-    "mutation_inputs": "97b6515b5d5bdc7030a5f678d522e700aa6965bc4054819b94d5ab27eca4ee32"
+    "mutation_inputs": "d11658df55c2c30d7ba33c2ecfb952c409e575eb1c4f677fc07d461236b1ba27"
   },
-  "grids": 40000,
+  "grids": 10000,
   "java": "openjdk version \"21.0.13\" 2026-10-20 LTS",
   "minecraft_version": "1.21.4",
   "results": {
+    "ascend": {
+      "close": 0,
+      "distinct": 1657,
+      "evals": 640000,
+      "exact": 640000,
+      "finite": 119871,
+      "wrong": 0
+    },
     "descend": {
       "close": 0,
-      "distinct": 1846,
-      "evals": 960000,
-      "exact": 960000,
-      "finite": 222814,
+      "distinct": 1035,
+      "evals": 640000,
+      "exact": 640000,
+      "finite": 85981,
+      "wrong": 0
+    },
+    "diagonal": {
+      "close": 0,
+      "distinct": 39,
+      "evals": 640000,
+      "exact": 640000,
+      "finite": 29245,
+      "wrong": 0
+    },
+    "downward": {
+      "close": 0,
+      "distinct": 53,
+      "evals": 160000,
+      "exact": 160000,
+      "finite": 20573,
+      "wrong": 0
+    },
+    "fall_table": {
+      "close": 0,
+      "distinct": 4098,
+      "evals": 4098,
+      "exact": 4098,
+      "finite": 4098,
+      "wrong": 0
+    },
+    "goal_axis": {
+      "close": 0,
+      "distinct": 18480,
+      "evals": 130000,
+      "exact": 130000,
+      "finite": 74095,
+      "wrong": 0
+    },
+    "goal_block": {
+      "close": 0,
+      "distinct": 30122,
+      "evals": 130000,
+      "exact": 130000,
+      "finite": 80057,
+      "wrong": 0
+    },
+    "goal_composite": {
+      "close": 0,
+      "distinct": 33653,
+      "evals": 128906,
+      "exact": 128906,
+      "finite": 74736,
+      "wrong": 0
+    },
+    "goal_gettoblock": {
+      "close": 0,
+      "distinct": 30104,
+      "evals": 130000,
+      "exact": 130000,
+      "finite": 93374,
+      "wrong": 0
+    },
+    "goal_inverted": {
+      "close": 0,
+      "distinct": 30365,
+      "evals": 129394,
+      "exact": 129394,
+      "finite": 59316,
+      "wrong": 0
+    },
+    "goal_near": {
+      "close": 0,
+      "distinct": 30124,
+      "evals": 127550,
+      "exact": 127550,
+      "finite": 96559,
+      "wrong": 0
+    },
+    "goal_runaway": {
+      "close": 0,
+      "distinct": 41456,
+      "evals": 127982,
+      "exact": 127982,
+      "finite": 75181,
+      "wrong": 0
+    },
+    "goal_strict": {
+      "close": 0,
+      "distinct": 25516,
+      "evals": 130000,
+      "exact": 130000,
+      "finite": 60000,
+      "wrong": 0
+    },
+    "goal_twoblocks": {
+      "close": 0,
+      "distinct": 30107,
+      "evals": 130000,
+      "exact": 130000,
+      "finite": 80101,
+      "wrong": 0
+    },
+    "goal_xz": {
+      "close": 0,
+      "distinct": 27921,
+      "evals": 130000,
+      "exact": 130000,
+      "finite": 80398,
+      "wrong": 0
+    },
+    "goal_ylevel": {
+      "close": 0,
+      "distinct": 10306,
+      "evals": 130000,
+      "exact": 130000,
+      "finite": 83144,
+      "wrong": 0
+    },
+    "parkour": {
+      "close": 0,
+      "distinct": 16,
+      "evals": 640000,
+      "exact": 640000,
+      "finite": 21185,
+      "wrong": 0
+    },
+    "pillar": {
+      "close": 0,
+      "distinct": 327,
+      "evals": 160000,
+      "exact": 160000,
+      "finite": 89320,
+      "wrong": 0
+    },
+    "predicates": {
+      "close": 0,
+      "distinct": 170,
+      "evals": 16640000,
+      "exact": 16640000,
+      "finite": 8148215,
+      "wrong": 0
+    },
+    "states": {
+      "close": 0,
+      "distinct": 3,
+      "evals": 724516,
+      "exact": 724516,
+      "finite": 133991,
       "wrong": 0
     },
     "traverse": {
       "close": 0,
-      "distinct": 1109,
-      "evals": 960000,
-      "exact": 960000,
-      "finite": 452095,
+      "distinct": 1565,
+      "evals": 640000,
+      "exact": 640000,
+      "finite": 303680,
       "wrong": 0
     }
   },
   "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13) (Arch Linux rust 1:1.99.1-1)",
   "sources": {
-    "Cargo.toml": "f1ae7f27248577a34b3184393f5bea9e0e01ba81d026af93d1e270ac963602c6",
-    "golden": "049439b7b97ef623d4c13bbbc57aed48188765b955f67368f92eed45d586eb9e",
+    "Cargo.lock": "f53596aedd4acb69d061e334e95f63e8850b430814e4eb61733c2c8bb8ef1f98",
+    "Cargo.toml": "71e521951d408540a9d08d1a31ce9ec365fb0bdbd9eb997dcb3e68d94309cafc",
+    "golden": "62d9a49c79207fd11d2a2134213e0c5af8ff8b2d5ab4bbf248326140a93d050c",
     "java/baritone/api/BaritoneAPI.java": "affc3cc06cd042b7bf8b4e8b018a031277da9f37329ebc82bb6e2f5efcacf728",
-    "java/baritone/pathing/movement/SpikeGoldenDump.java": "cb07c8c80af8df6f16bd29567f66467dfa52ece67b0b4084baa88452832f2105",
-    "src/lib.rs": "232dd4099029dd561c4acf3a7d83bbfb9d4a0bc2ecb6a58782ea0286c7f178dd",
-    "src/main.rs": "7849e46b7ea706f3ac295ca87fa6168f703df073f7d1bf89d18342dc80e49fac"
+    "java/baritone/pathing/movement/SpikeGoldenDump.java": "fdbb5800ede5b110afe31dfd109cc1dbf3cedb0d1b2e15d97cdcc34e7e524d67",
+    "mod/engine/Cargo.toml": "c29c04225e73370e6731b327bfae471b62adc9bdd6e94995eece84e4f16052c4",
+    "mod/engine/src/blocks.rs": "bdd0d28a43f28abbb77d1298cfa64f1c7bd3a632d6e31726857a81c1408eb774",
+    "mod/engine/src/config.rs": "6e7be65e7fe5f002e3357d1ee6ea9b05366cfe7b357ce37d07fd33267c134629",
+    "mod/engine/src/costs.rs": "682b5c7c9bc9a92cebc365e5caa60e2ed5fb734e908b9dcf8c5ca91ff23f1fc0",
+    "mod/engine/src/goals.rs": "02d656ce9b8f69b047e3d72db8f28bd49f889995de79361b069a485b031ef771",
+    "mod/engine/src/lib.rs": "fd59fe79869f1d4b5a615e965941387fb721fbbf671e6b2620677c9932069a3e",
+    "mod/engine/src/movement/ascend.rs": "f8312eab03ad720bd1bdf5456aebba64db5e9c4459756060c0afa90e96edb90d",
+    "mod/engine/src/movement/descend.rs": "7fc3564d719d650c94824eed8ccbadae16c18dee6d53e1d4eb1498e6ec6b0b16",
+    "mod/engine/src/movement/diagonal.rs": "6131aae5824f8e17dfe2b2f1e83a1d0b0b770eda35fb3feb92ead6f948eefd5c",
+    "mod/engine/src/movement/downward.rs": "7a7c1277456862f456b9e3fccd495435076d6624339c2a39dff1e3579dda1e6c",
+    "mod/engine/src/movement/helper.rs": "9114f0170e347eee45dedad10afb85f959df33712595d025e59395afba0d727f",
+    "mod/engine/src/movement/mod.rs": "036d79b6a626d65ff0cdf5c91ac14f0201160af9464672d4533c50c0288fa9c9",
+    "mod/engine/src/movement/moves.rs": "88e85c82d4b389e3f0668e95cab9c6cd5a7d30aa4734dced8cd0a501760b675d",
+    "mod/engine/src/movement/parkour.rs": "4876dfad79156469a3030c14567172c7e78ce5fc35f16c0d542eeb65fa187e3a",
+    "mod/engine/src/movement/pillar.rs": "4bdf43bae7d583298f4c788e157512937e232612b3972aa1b879b279ebf13ef7",
+    "mod/engine/src/movement/traverse.rs": "50938a5ab3b67a4d4eb05fa1efd6ebf85ea52e41a691d9dd94a978477badb8f3",
+    "mod/engine/src/world.rs": "96287504c726fbf6d874b4f8c7e914364224f789185ae2bb9e43998372158993",
+    "rustfmt.toml": "41950bc860c26e3534456bc5dd2150497ab1e45076e577bca6fbc96325c165c0",
+    "tools/cost-compare/Cargo.toml": "3b7c1435a9ce93b2735bfcaa1e0f99a65937901e0336cb498d582f9f6f65a087",
+    "tools/cost-compare/src/main.rs": "0fd2fe13d16181dfbccbc08ef1db0287f9a848bb09df748463aa1a63f6ee2e60"
   },
   "tool": "cost-compare",
   "upstream_branch": "1.21.4",

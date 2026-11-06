@@ -1,0 +1,9 @@
+[package]
+name = "baritone-engine"
+version = "0.0.0"
+edition = "2021"
+license = "LGPL-3.0-or-later"
+publish = false
+description = "Baritone's pathing rules in plain Rust, with no game and no dependencies"
+
+[dependencies]

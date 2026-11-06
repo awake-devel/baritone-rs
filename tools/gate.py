@@ -4,7 +4,7 @@
 
 Steps, in order:
   1 public tree        tools/check_public_tree.py
-  2 cargo              fmt --check, clippy -D warnings, tests, in tools/cost-compare
+  2 cargo              fmt --check, clippy -D warnings, tests, across the whole workspace, from the repository root
   3 python tests       unittest discover under tools/
   4 ledger             tools/ledger.py --upstream DIR check, if tools/ledger.py exists
   5 comparison         tools/run_compare.py, only when its inputs differ from the report. The report is written
@@ -157,11 +157,11 @@ class Gate:
         if low:
             env["CARGO_BUILD_JOBS"] = "4"
         for label, cmd in (
-            ("cargo fmt --check", ["cargo", "fmt", "--check", "--", "--color", "never"]),
-            ("cargo clippy", ["cargo", "clippy", "--all-targets", "--", "-D", "warnings"]),
-            ("cargo test", ["cargo", "test"]),
+            ("cargo fmt --check", ["cargo", "fmt", "--all", "--check", "--", "--color", "never"]),
+            ("cargo clippy", ["cargo", "clippy", "--workspace", "--all-targets", "--", "-D", "warnings"]),
+            ("cargo test", ["cargo", "test", "--workspace"]),
         ):
-            rcode, out = self.sh(cmd, CRATE, env, low)
+            rcode, out = self.sh(cmd, REPO, env, low)
             if rcode:
                 self.record(label, FAIL, "\n" + out[:3000])
                 return
@@ -242,7 +242,7 @@ class Gate:
             rc.write_report(first, path)
 
     def mutation(self, golden):
-        rcode, out = self.sh([sys.executable, os.path.join(CRATE, "mutate.py"), CRATE, golden], REPO, low=busy())
+        rcode, out = self.sh([sys.executable, os.path.join(CRATE, "mutate.py"), REPO, golden], REPO, low=busy())
         try:
             with open(KNOWN_MISSED, encoding="utf-8") as f:
                 known = parse_known_missed(f.read())

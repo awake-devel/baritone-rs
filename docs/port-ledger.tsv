@@ -18,7 +18,7 @@ ActionCosts	distanceToTicks	port	1b8e87c	66539f392ef9e3df	cost-compare
 ActionCosts	generateFallNBlocksCost	port	1b8e87c	0a9e50921b3c966b	cost-compare	Built once and cached in a OnceLock.
 ActionCosts	oldFormula	drop	1b8e87c	0dbc7f355b38467b		Unused in upstream main code; only a formula kept for reference.
 ActionCosts	velocity	port	1b8e87c	4c2faa435c01bdb3	cost-compare	
-BetterWorldBorder	<init>	missing	1b8e87c	c801738720d0b7d9		
+BetterWorldBorder	<init>	redesign	1b8e87c	c801738720d0b7d9	cost-compare	`Border` holds the limits.
 BetterWorldBorder	canPlaceAt	port	1b8e87c	40bebb2ed52c7b25	cost-compare	
 BetterWorldBorder	entirelyContains	missing	1b8e87c	020955157dc84691		
 BinaryHeapOpenSet	<init>()	missing	1b8e87c	529fe85f77c361b8		
@@ -42,7 +42,7 @@ BlockStateInterface	getFromChunk(LevelChunkSection[],int,int,int)	missing	1b8e87
 BlockStateInterface	getUncached	missing	1b8e87c	2077484bf5878c40		
 BlockStateInterface	isLoaded	missing	1b8e87c	cea78bc4c6b82cb7		
 BlockStateInterface	releaseCache	missing	1b8e87c	57e630960605fef8		
-BlockStateInterface	worldContainsLoadedChunk	missing	1b8e87c	9a51597ac6b0d5b9		
+BlockStateInterface	worldContainsLoadedChunk	redesign	1b8e87c	9a51597ac6b0d5b9	cost-compare	`WorldView::contains_loaded_chunk`; S4 connects it to the live world.
 CachedChunk	<init>	later	1b8e87c	eb24195f9a2d5dfa		Persistent cache: after the processes; the first release has no cache.
 CachedChunk	calculateHeightMap()	later	1b8e87c	6f7af279998a8511		Persistent cache: after the processes; the first release has no cache.
 CachedChunk	calculateHeightMap(BitSet,int,int[])	later	1b8e87c	066b69000bb06c68		Persistent cache: after the processes; the first release has no cache.
@@ -90,7 +90,7 @@ CachedWorld.PackerThread	run	later	1b8e87c	ce55a3cfc29553ad		Persistent cache: a
 CalculationContext	<init>(IBaritone)	missing	1b8e87c	f791e3815f131fcf		
 CalculationContext	<init>(IBaritone,boolean)	missing	1b8e87c	2871e2e611c1dbf6		
 CalculationContext	<init>(IBaritone,boolean,Level,WorldData,BlockStateInterface,ToolSet,boolean,boolean,boolean,int,float)	redesign	1b8e87c	40c99304f837bec9	cost-compare	Settings arrive as Config. Only the waterWalkSpeed computation is translated, in Ctx::new.
-CalculationContext	breakCostMultiplierAt	port	1b8e87c	f1276c9905702bf9	cost-compare	allowBreakAnyway stays empty; isPossiblyProtected is always false upstream.
+CalculationContext	breakCostMultiplierAt	port	1b8e87c	f1276c9905702bf9	cost-compare	isPossiblyProtected is always false upstream.
 CalculationContext	claimSearchCaches	missing	1b8e87c	72c1f047da5b064d		
 CalculationContext	costOfPlacingAt	port	1b8e87c	d784b144a3644243	cost-compare	isPossiblyProtected is always false upstream.
 CalculationContext	frostWalkerLevel	redesign	1b8e87c	ee744656c835b279	cost-compare	The enchantment lookup is not translated; the level arrives as Config.frost_walker.
@@ -99,9 +99,9 @@ CalculationContext	get(int,int,int)	port	1b8e87c	61c5a8a956d8d1d6	cost-compare	O
 CalculationContext	getBaritone	drop	1b8e87c	08de1327a8ac60af		Multi-instance Java API layer.
 CalculationContext	getBlock	missing	1b8e87c	ff9b056508b1e63b		
 CalculationContext	isLoaded	missing	1b8e87c	6116ae9c8a508ae9		
-CalculationContext	isPossiblyProtected	missing	1b8e87c	1948731765551e24		
+CalculationContext	isPossiblyProtected	drop	1b8e87c	1948731765551e24		Always false upstream.
 CalculationContext	newMiningKeys	missing	1b8e87c	4434c52d5c8de6b0		
-CalculationContext	placeBucketCost	missing	1b8e87c	16684b5f7de384fa		
+CalculationContext	placeBucketCost	redesign	1b8e87c	16684b5f7de384fa	cost-compare	Returns placeBlockCost upstream; Config.place_penalty serves both.
 CalculationContext	releaseSearchCaches	missing	1b8e87c	0075d1545b6ceace		
 CalculationContext	waterSpeedMultiplier	redesign	1b8e87c	0a6e6f423e18b25c	cost-compare	The enchantment lookup is not translated; the multiplier arrives as Config.water_mult.
 ChunkPacker	<init>	later	1b8e87c	a3f1fd36dead1050		Persistent cache: after the processes; the first release has no cache.
@@ -171,96 +171,96 @@ GetToBlockProcess	rightClickOnArrival	missing	1b8e87c	69867b5af01c3123
 GetToBlockProcess	walkIntoInsteadOfAdjacent	missing	1b8e87c	f06b54e55a3ee137		
 GetToBlockProcess.GetToBlockCalculationContext	<init>	missing	1b8e87c	81dc5357229f27c1		
 GetToBlockProcess.GetToBlockCalculationContext	breakCostMultiplierAt	missing	1b8e87c	bb01e1e18fde5c6e		
-Goal	heuristic()	missing	1b8e87c	76039b40b2f67ee5		
-Goal	heuristic(BlockPos)	missing	1b8e87c	d7a01e52903c5830		
-Goal	heuristic(int,int,int)	missing	1b8e87c	6b3a05c07414772a		
-Goal	isInGoal(BlockPos)	missing	1b8e87c	1f04448f7462f9b2		
-Goal	isInGoal(int,int,int)	missing	1b8e87c	905f9d1e967a0990		
-GoalAxis	equals	missing	1b8e87c	a9a555cf203dec67		
-GoalAxis	hashCode	missing	1b8e87c	d99503d1b195bf1c		
-GoalAxis	heuristic	missing	1b8e87c	5fbff4d938d35702		
-GoalAxis	isInGoal	missing	1b8e87c	578101519367883c		
-GoalAxis	toString	missing	1b8e87c	258022f92f9d4874		
-GoalBlock	<init>(BlockPos)	missing	1b8e87c	827b853b496c5b0f		
-GoalBlock	<init>(int,int,int)	missing	1b8e87c	60a156b0b312c657		
-GoalBlock	calculate	missing	1b8e87c	48d7886976ef1462		
-GoalBlock	equals	missing	1b8e87c	aef2d764da53896c		
-GoalBlock	getGoalPos	missing	1b8e87c	d854dd4afa577a93		
-GoalBlock	hashCode	missing	1b8e87c	571f31cf7db32b0d		
-GoalBlock	heuristic	missing	1b8e87c	c2e6f60c74e12d51		
-GoalBlock	isInGoal	missing	1b8e87c	0f155247a12f7e26		
-GoalBlock	toString	missing	1b8e87c	07c256d3e235a51a		
-GoalComposite	<init>	missing	1b8e87c	50a45b83aecc1de1		
-GoalComposite	equals	missing	1b8e87c	1a135b0cdcb0273e		
-GoalComposite	goals	missing	1b8e87c	a6b8d85a41657870		
-GoalComposite	hashCode	missing	1b8e87c	26b73da790b4e17c		
-GoalComposite	heuristic()	missing	1b8e87c	e4cc907a0bec54fd		
-GoalComposite	heuristic(int,int,int)	missing	1b8e87c	32e50dab6f7a3ff9		
-GoalComposite	isInGoal	missing	1b8e87c	80aaeefb9cbd27e0		
-GoalComposite	toString	missing	1b8e87c	0bca67444d7644cd		
-GoalGetToBlock	<init>	missing	1b8e87c	a5da83548d906c91		
-GoalGetToBlock	equals	missing	1b8e87c	750586549fc629bf		
-GoalGetToBlock	getGoalPos	missing	1b8e87c	d854dd4afa577a93		
-GoalGetToBlock	hashCode	missing	1b8e87c	bbf76c944cf75528		
-GoalGetToBlock	heuristic	missing	1b8e87c	378f97e4a823e5cb		
-GoalGetToBlock	isInGoal	missing	1b8e87c	4600ccf006ef1164		
-GoalGetToBlock	toString	missing	1b8e87c	80a19ab4bb662f02		
-GoalInverted	<init>	missing	1b8e87c	34592848df770fc3		
-GoalInverted	equals	missing	1b8e87c	103ffb735a807257		
-GoalInverted	hashCode	missing	1b8e87c	4c83c307c5eb021c		
-GoalInverted	heuristic()	missing	1b8e87c	e3c8f17953947965		
-GoalInverted	heuristic(int,int,int)	missing	1b8e87c	d1f7a13ef515d5a9		
-GoalInverted	isInGoal	missing	1b8e87c	8f8b1da1ffdb2ba8		
-GoalInverted	toString	missing	1b8e87c	67128c77adaa155d		
-GoalNear	<init>	missing	1b8e87c	4df47743f40832c1		
-GoalNear	equals	missing	1b8e87c	1276005d81cede62		
-GoalNear	getGoalPos	missing	1b8e87c	d854dd4afa577a93		
-GoalNear	hashCode	missing	1b8e87c	dec59103536b3c6a		
-GoalNear	heuristic()	missing	1b8e87c	e794a7c11c498842		
-GoalNear	heuristic(int,int,int)	missing	1b8e87c	f8131e1214f5c0e1		
-GoalNear	isInGoal	missing	1b8e87c	12fe03f31c4e6a3b		
-GoalNear	toString	missing	1b8e87c	7da6a6a37148e308		
-GoalRunAway	<init>(double,BlockPos...)	missing	1b8e87c	2e6d059aae7416b8		
-GoalRunAway	<init>(double,Integer,BlockPos...)	missing	1b8e87c	611c3b7c880894cd		
-GoalRunAway	equals	missing	1b8e87c	d17e7b3106d4d4a8		
-GoalRunAway	hashCode	missing	1b8e87c	a7160f8f5537cf42		
-GoalRunAway	heuristic()	missing	1b8e87c	3133c9b13f6a5d3f		
-GoalRunAway	heuristic(int,int,int)	missing	1b8e87c	218dd7be76aaf7f4		
-GoalRunAway	isInGoal	missing	1b8e87c	deb8336af4b6268c		
-GoalRunAway	toString	missing	1b8e87c	0da05bac6b7a45b7		
-GoalStrictDirection	<init>	missing	1b8e87c	40a48fb1939b6ac1		
-GoalStrictDirection	equals	missing	1b8e87c	f6432998b5e5f825		
-GoalStrictDirection	hashCode	missing	1b8e87c	d41a6c18cc70eac2		
-GoalStrictDirection	heuristic()	missing	1b8e87c	e3c8f17953947965		
-GoalStrictDirection	heuristic(int,int,int)	missing	1b8e87c	4cac1e11e1c9bd4f		
-GoalStrictDirection	isInGoal	missing	1b8e87c	8f8b1da1ffdb2ba8		
-GoalStrictDirection	toString	missing	1b8e87c	8d346fc6bc86ffab		
-GoalTwoBlocks	<init>(BlockPos)	missing	1b8e87c	bfc05d62b4a8c31e		
-GoalTwoBlocks	<init>(int,int,int)	missing	1b8e87c	ea4211d233da68a3		
-GoalTwoBlocks	equals	missing	1b8e87c	bd1b9b8872de9728		
-GoalTwoBlocks	getGoalPos	missing	1b8e87c	d854dd4afa577a93		
-GoalTwoBlocks	hashCode	missing	1b8e87c	f32a45f5b0ad0a2a		
-GoalTwoBlocks	heuristic	missing	1b8e87c	378f97e4a823e5cb		
-GoalTwoBlocks	isInGoal	missing	1b8e87c	5f6e0a18457d135e		
-GoalTwoBlocks	toString	missing	1b8e87c	63e888450bcdb62e		
-GoalXZ	<init>(BetterBlockPos)	missing	1b8e87c	386277e203bf9284		
-GoalXZ	<init>(int,int)	missing	1b8e87c	8ed1bc91568678f9		
-GoalXZ	calculate	missing	1b8e87c	8c75c64e88a62632		
-GoalXZ	equals	missing	1b8e87c	751544f45205961f		
-GoalXZ	fromDirection	missing	1b8e87c	b3a1ecae8e9aac5c		
-GoalXZ	getX	missing	1b8e87c	4248f82302494111		
-GoalXZ	getZ	missing	1b8e87c	b99843e6d1a3c609		
-GoalXZ	hashCode	missing	1b8e87c	a1d796ffe8f9eed0		
-GoalXZ	heuristic	missing	1b8e87c	29f17be5512ae0f7		
-GoalXZ	isInGoal	missing	1b8e87c	112be7427a89072a		
-GoalXZ	toString	missing	1b8e87c	2c25a5f83d587918		
-GoalYLevel	<init>	missing	1b8e87c	699e26a1f6b669a0		
-GoalYLevel	calculate	missing	1b8e87c	2a531185adc0c173		
-GoalYLevel	equals	missing	1b8e87c	c36d16a47877260a		
-GoalYLevel	hashCode	missing	1b8e87c	6b1b23018d75fb80		
-GoalYLevel	heuristic	missing	1b8e87c	f46da47852d52114		
-GoalYLevel	isInGoal	missing	1b8e87c	8c4b30e28bde1666		
-GoalYLevel	toString	missing	1b8e87c	5d73102a49970fc0		
+Goal	heuristic()	port	1b8e87c	76039b40b2f67ee5	cost-compare	
+Goal	heuristic(BlockPos)	drop	1b8e87c	d7a01e52903c5830		The engine has no BlockPos; callers pass coordinates.
+Goal	heuristic(int,int,int)	port	1b8e87c	6b3a05c07414772a	cost-compare	
+Goal	isInGoal(BlockPos)	drop	1b8e87c	1f04448f7462f9b2		The engine has no BlockPos; callers pass coordinates.
+Goal	isInGoal(int,int,int)	port	1b8e87c	905f9d1e967a0990	cost-compare	
+GoalAxis	equals	drop	1b8e87c	a9a555cf203dec67		`Goal` derives PartialEq.
+GoalAxis	hashCode	drop	1b8e87c	d99503d1b195bf1c		No goal is hashed.
+GoalAxis	heuristic	port	1b8e87c	5fbff4d938d35702	cost-compare	
+GoalAxis	isInGoal	port	1b8e87c	578101519367883c	cost-compare	
+GoalAxis	toString	drop	1b8e87c	258022f92f9d4874		Only for display; commands (S4) can format their own text.
+GoalBlock	<init>(BlockPos)	redesign	1b8e87c	827b853b496c5b0f	cost-compare	A variant of the `Goal` enum, with plain coordinates.
+GoalBlock	<init>(int,int,int)	redesign	1b8e87c	60a156b0b312c657	cost-compare	A variant of the `Goal` enum, with plain coordinates.
+GoalBlock	calculate	port	1b8e87c	48d7886976ef1462	cost-compare	
+GoalBlock	equals	drop	1b8e87c	aef2d764da53896c		`Goal` derives PartialEq.
+GoalBlock	getGoalPos	later	1b8e87c	d854dd4afa577a93		Goal drawing, with the glue: S4.
+GoalBlock	hashCode	drop	1b8e87c	571f31cf7db32b0d		No goal is hashed.
+GoalBlock	heuristic	port	1b8e87c	c2e6f60c74e12d51	cost-compare	
+GoalBlock	isInGoal	port	1b8e87c	0f155247a12f7e26	cost-compare	
+GoalBlock	toString	drop	1b8e87c	07c256d3e235a51a		Only for display; commands (S4) can format their own text.
+GoalComposite	<init>	redesign	1b8e87c	50a45b83aecc1de1	cost-compare	A variant of the `Goal` enum, with plain coordinates.
+GoalComposite	equals	drop	1b8e87c	1a135b0cdcb0273e		`Goal` derives PartialEq.
+GoalComposite	goals	redesign	1b8e87c	a6b8d85a41657870		The field of `Goal::Composite`.
+GoalComposite	hashCode	drop	1b8e87c	26b73da790b4e17c		No goal is hashed.
+GoalComposite	heuristic()	port	1b8e87c	e4cc907a0bec54fd	cost-compare	
+GoalComposite	heuristic(int,int,int)	port	1b8e87c	32e50dab6f7a3ff9	cost-compare	
+GoalComposite	isInGoal	port	1b8e87c	80aaeefb9cbd27e0	cost-compare	
+GoalComposite	toString	drop	1b8e87c	0bca67444d7644cd		Only for display; commands (S4) can format their own text.
+GoalGetToBlock	<init>	redesign	1b8e87c	a5da83548d906c91	cost-compare	A variant of the `Goal` enum, with plain coordinates.
+GoalGetToBlock	equals	drop	1b8e87c	750586549fc629bf		`Goal` derives PartialEq.
+GoalGetToBlock	getGoalPos	later	1b8e87c	d854dd4afa577a93		Goal drawing, with the glue: S4.
+GoalGetToBlock	hashCode	drop	1b8e87c	bbf76c944cf75528		No goal is hashed.
+GoalGetToBlock	heuristic	port	1b8e87c	378f97e4a823e5cb	cost-compare	
+GoalGetToBlock	isInGoal	port	1b8e87c	4600ccf006ef1164	cost-compare	
+GoalGetToBlock	toString	drop	1b8e87c	80a19ab4bb662f02		Only for display; commands (S4) can format their own text.
+GoalInverted	<init>	redesign	1b8e87c	34592848df770fc3	cost-compare	A variant of the `Goal` enum, with plain coordinates.
+GoalInverted	equals	drop	1b8e87c	103ffb735a807257		`Goal` derives PartialEq.
+GoalInverted	hashCode	drop	1b8e87c	4c83c307c5eb021c		No goal is hashed.
+GoalInverted	heuristic()	port	1b8e87c	e3c8f17953947965	cost-compare	
+GoalInverted	heuristic(int,int,int)	port	1b8e87c	d1f7a13ef515d5a9	cost-compare	
+GoalInverted	isInGoal	port	1b8e87c	8f8b1da1ffdb2ba8	cost-compare	
+GoalInverted	toString	drop	1b8e87c	67128c77adaa155d		Only for display; commands (S4) can format their own text.
+GoalNear	<init>	redesign	1b8e87c	4df47743f40832c1	cost-compare	`goal_near`.
+GoalNear	equals	drop	1b8e87c	1276005d81cede62		`Goal` derives PartialEq.
+GoalNear	getGoalPos	later	1b8e87c	d854dd4afa577a93		Goal drawing, with the glue: S4.
+GoalNear	hashCode	drop	1b8e87c	dec59103536b3c6a		No goal is hashed.
+GoalNear	heuristic()	port	1b8e87c	e794a7c11c498842	cost-compare	
+GoalNear	heuristic(int,int,int)	port	1b8e87c	f8131e1214f5c0e1	cost-compare	
+GoalNear	isInGoal	port	1b8e87c	12fe03f31c4e6a3b	cost-compare	
+GoalNear	toString	drop	1b8e87c	7da6a6a37148e308		Only for display; commands (S4) can format their own text.
+GoalRunAway	<init>(double,BlockPos...)	redesign	1b8e87c	2e6d059aae7416b8	cost-compare	`goal_run_away` with `None`.
+GoalRunAway	<init>(double,Integer,BlockPos...)	redesign	1b8e87c	611c3b7c880894cd	cost-compare	`goal_run_away`.
+GoalRunAway	equals	drop	1b8e87c	d17e7b3106d4d4a8		`Goal` derives PartialEq.
+GoalRunAway	hashCode	drop	1b8e87c	a7160f8f5537cf42		No goal is hashed.
+GoalRunAway	heuristic()	port	1b8e87c	3133c9b13f6a5d3f	cost-compare	
+GoalRunAway	heuristic(int,int,int)	port	1b8e87c	218dd7be76aaf7f4	cost-compare	
+GoalRunAway	isInGoal	port	1b8e87c	deb8336af4b6268c	cost-compare	
+GoalRunAway	toString	drop	1b8e87c	0da05bac6b7a45b7		Only for display; commands (S4) can format their own text.
+GoalStrictDirection	<init>	redesign	1b8e87c	40a48fb1939b6ac1	cost-compare	`goal_strict_direction`.
+GoalStrictDirection	equals	drop	1b8e87c	f6432998b5e5f825		`Goal` derives PartialEq.
+GoalStrictDirection	hashCode	drop	1b8e87c	d41a6c18cc70eac2		No goal is hashed.
+GoalStrictDirection	heuristic()	port	1b8e87c	e3c8f17953947965	cost-compare	
+GoalStrictDirection	heuristic(int,int,int)	port	1b8e87c	4cac1e11e1c9bd4f	cost-compare	
+GoalStrictDirection	isInGoal	port	1b8e87c	8f8b1da1ffdb2ba8	cost-compare	
+GoalStrictDirection	toString	drop	1b8e87c	8d346fc6bc86ffab		Only for display; commands (S4) can format their own text.
+GoalTwoBlocks	<init>(BlockPos)	redesign	1b8e87c	bfc05d62b4a8c31e	cost-compare	A variant of the `Goal` enum, with plain coordinates.
+GoalTwoBlocks	<init>(int,int,int)	redesign	1b8e87c	ea4211d233da68a3	cost-compare	A variant of the `Goal` enum, with plain coordinates.
+GoalTwoBlocks	equals	drop	1b8e87c	bd1b9b8872de9728		`Goal` derives PartialEq.
+GoalTwoBlocks	getGoalPos	later	1b8e87c	d854dd4afa577a93		Goal drawing, with the glue: S4.
+GoalTwoBlocks	hashCode	drop	1b8e87c	f32a45f5b0ad0a2a		No goal is hashed.
+GoalTwoBlocks	heuristic	port	1b8e87c	378f97e4a823e5cb	cost-compare	
+GoalTwoBlocks	isInGoal	port	1b8e87c	5f6e0a18457d135e	cost-compare	
+GoalTwoBlocks	toString	drop	1b8e87c	63e888450bcdb62e		Only for display; commands (S4) can format their own text.
+GoalXZ	<init>(BetterBlockPos)	redesign	1b8e87c	386277e203bf9284	cost-compare	A variant of the `Goal` enum, with plain coordinates.
+GoalXZ	<init>(int,int)	redesign	1b8e87c	8ed1bc91568678f9	cost-compare	A variant of the `Goal` enum, with plain coordinates.
+GoalXZ	calculate	port	1b8e87c	8c75c64e88a62632	cost-compare	
+GoalXZ	equals	drop	1b8e87c	751544f45205961f		`Goal` derives PartialEq.
+GoalXZ	fromDirection	later	1b8e87c	b3a1ecae8e9aac5c		For a direction command, not in the first release.
+GoalXZ	getX	redesign	1b8e87c	4248f82302494111		The field of `Goal::Xz`.
+GoalXZ	getZ	redesign	1b8e87c	b99843e6d1a3c609		The field of `Goal::Xz`.
+GoalXZ	hashCode	drop	1b8e87c	a1d796ffe8f9eed0		No goal is hashed.
+GoalXZ	heuristic	port	1b8e87c	29f17be5512ae0f7	cost-compare	
+GoalXZ	isInGoal	port	1b8e87c	112be7427a89072a	cost-compare	
+GoalXZ	toString	drop	1b8e87c	2c25a5f83d587918		Only for display; commands (S4) can format their own text.
+GoalYLevel	<init>	redesign	1b8e87c	699e26a1f6b669a0	cost-compare	A variant of the `Goal` enum, with plain coordinates.
+GoalYLevel	calculate	port	1b8e87c	2a531185adc0c173	cost-compare	
+GoalYLevel	equals	drop	1b8e87c	c36d16a47877260a		`Goal` derives PartialEq.
+GoalYLevel	hashCode	drop	1b8e87c	6b1b23018d75fb80		No goal is hashed.
+GoalYLevel	heuristic	port	1b8e87c	f46da47852d52114	cost-compare	
+GoalYLevel	isInGoal	port	1b8e87c	8c4b30e28bde1666	cost-compare	
+GoalYLevel	toString	drop	1b8e87c	5d73102a49970fc0		Only for display; commands (S4) can format their own text.
 IOpenSet	insert	missing	1b8e87c	b4deb9bf2f10037e		
 IOpenSet	isEmpty	missing	1b8e87c	69c4fc8c60b25dbd		
 IOpenSet	removeLowest	missing	1b8e87c	2a263e3e13d4483f		
@@ -361,7 +361,7 @@ Movement	updateState	missing	1b8e87c	88bc25824f1ae844
 MovementAscend	<init>	missing	1b8e87c	f97db35233e1a72e		
 MovementAscend	calculateCost	missing	1b8e87c	57e33d60a46f1c69		
 MovementAscend	calculateValidPositions	missing	1b8e87c	870e4046e4679bdd		
-MovementAscend	cost	missing	1b8e87c	a1de32bdeb227a53		
+MovementAscend	cost	port	1b8e87c	a1de32bdeb227a53	cost-compare	
 MovementAscend	headBonkClear	missing	1b8e87c	e630635a510b9e7c		
 MovementAscend	reset	missing	1b8e87c	23ce7033958c272b		
 MovementAscend	safeToCancel	missing	1b8e87c	9344a6eed892eca9		
@@ -381,8 +381,8 @@ MovementDiagonal	<init>(IBaritone,BetterBlockPos,BetterBlockPos,BetterBlockPos,D
 MovementDiagonal	<init>(IBaritone,BetterBlockPos,Direction,Direction,int)	missing	1b8e87c	baefdf4fb6162e7b		
 MovementDiagonal	calculateCost	missing	1b8e87c	37df4709e7715a6d		
 MovementDiagonal	calculateValidPositions	missing	1b8e87c	c4c03e664af16e51		
-MovementDiagonal	cost	missing	1b8e87c	c422c1e311ef5484		
-MovementDiagonal	isBlockingDoor	missing	1b8e87c	db372b2640e5044e		
+MovementDiagonal	cost	port	1b8e87c	c422c1e311ef5484	cost-compare	
+MovementDiagonal	isBlockingDoor	port	1b8e87c	db372b2640e5044e	cost-compare	
 MovementDiagonal	prepared	missing	1b8e87c	6180a6f1184bfb3e		
 MovementDiagonal	safeToCancel	missing	1b8e87c	59a6e5bef1c2dffe		
 MovementDiagonal	sprint	missing	1b8e87c	295bc12222939373		
@@ -392,7 +392,7 @@ MovementDiagonal	updateState	missing	1b8e87c	785d042514ddb708
 MovementDownward	<init>	missing	1b8e87c	3fee61e2f5b4d4ab		
 MovementDownward	calculateCost	missing	1b8e87c	b98f2f7234fd0837		
 MovementDownward	calculateValidPositions	missing	1b8e87c	383246429d6b166b		
-MovementDownward	cost	missing	1b8e87c	f895b0d4306457e0		
+MovementDownward	cost	port	1b8e87c	f895b0d4306457e0	cost-compare	
 MovementDownward	reset	missing	1b8e87c	b43e6509299e61f2		
 MovementDownward	updateState	missing	1b8e87c	53d0b489162e47c4		
 MovementFall	<init>	missing	1b8e87c	4bb102f992e7629f		
@@ -404,80 +404,80 @@ MovementFall	prepared	missing	1b8e87c	3d3b4ce15f7917c6
 MovementFall	safeToCancel	missing	1b8e87c	f5a789f9c1ee179e		
 MovementFall	updateState	missing	1b8e87c	9093b11d6694c793		
 MovementFall	willPlaceBucket	missing	1b8e87c	e0506533818050c7		
-MovementHelper	attemptToPlaceABlock	missing	1b8e87c	4473a56a0d0bdd8a		
+MovementHelper	attemptToPlaceABlock	later	1b8e87c	4473a56a0d0bdd8a		Executor side: S4.
 MovementHelper	avoidAdjacentBreaking	port	1b8e87c	b94c152b1b81a19c	cost-compare	
-MovementHelper	avoidBreaking(BlockStateInterface,int,int,int,BlockState)	missing	1b8e87c	479795bcf839b293		
+MovementHelper	avoidBreaking(BlockStateInterface,int,int,int,BlockState)	later	1b8e87c	479795bcf839b293		Executor side: S4.
 MovementHelper	avoidBreaking(CalculationContext,int,int,int,BlockState)	port	1b8e87c	0ce5ceb6141fe423	cost-compare	
-MovementHelper	avoidWalkingInto	missing	1b8e87c	c354c0aaab9e69eb		
-MovementHelper	canPlaceAgainst(BlockStateInterface,BlockPos)	missing	1b8e87c	f2afc190e7704e93		
-MovementHelper	canPlaceAgainst(BlockStateInterface,int,int,int)	missing	1b8e87c	339ad97fb1a6a644		
-MovementHelper	canPlaceAgainst(BlockStateInterface,int,int,int,BlockState)	missing	1b8e87c	743d6d5271c09aec		
+MovementHelper	avoidWalkingInto	port	1b8e87c	c354c0aaab9e69eb	cost-compare	
+MovementHelper	canPlaceAgainst(BlockStateInterface,BlockPos)	later	1b8e87c	f2afc190e7704e93		Executor side: S4.
+MovementHelper	canPlaceAgainst(BlockStateInterface,int,int,int)	later	1b8e87c	339ad97fb1a6a644		Executor side: S4.
+MovementHelper	canPlaceAgainst(BlockStateInterface,int,int,int,BlockState)	later	1b8e87c	743d6d5271c09aec		Executor side: S4.
 MovementHelper	canPlaceAgainst(CalculationContext,int,int,int)	port	1b8e87c	79ac5ce2cc2a775c	cost-compare	
-MovementHelper	canPlaceAgainst(CalculationContext,int,int,int,BlockState)	missing	1b8e87c	c3c387cf81629fa9		
-MovementHelper	canPlaceAgainst(IPlayerContext,BlockPos)	missing	1b8e87c	db5b25392a2792b4		
+MovementHelper	canPlaceAgainst(CalculationContext,int,int,int,BlockState)	port	1b8e87c	c3c387cf81629fa9	cost-compare	
+MovementHelper	canPlaceAgainst(IPlayerContext,BlockPos)	later	1b8e87c	db5b25392a2792b4		Executor side: S4.
 MovementHelper	canUseFrostWalker(CalculationContext,BlockState)	port	1b8e87c	73fe151347609958	cost-compare	
-MovementHelper	canUseFrostWalker(IPlayerContext,BlockPos)	missing	1b8e87c	66bdc4ff0fe33c97		
-MovementHelper	canWalkOn(BlockStateInterface,int,int,int)	missing	1b8e87c	0b18522bab903a7b		
-MovementHelper	canWalkOn(BlockStateInterface,int,int,int,BlockState)	missing	1b8e87c	fad245bb6ebc0361		
+MovementHelper	canUseFrostWalker(IPlayerContext,BlockPos)	later	1b8e87c	66bdc4ff0fe33c97		Executor side: S4.
+MovementHelper	canWalkOn(BlockStateInterface,int,int,int)	later	1b8e87c	0b18522bab903a7b		Executor side: S4.
+MovementHelper	canWalkOn(BlockStateInterface,int,int,int,BlockState)	later	1b8e87c	fad245bb6ebc0361		Executor side: S4.
 MovementHelper	canWalkOn(CalculationContext,int,int,int)	port	1b8e87c	5b388d5a012b8c4b	cost-compare	
 MovementHelper	canWalkOn(CalculationContext,int,int,int,BlockState)	port	1b8e87c	948bbace0a702950	cost-compare	
-MovementHelper	canWalkOn(IPlayerContext,BetterBlockPos)	missing	1b8e87c	ed6f5b15ab463855		
-MovementHelper	canWalkOn(IPlayerContext,BetterBlockPos,BlockState)	missing	1b8e87c	b692192952744e84		
-MovementHelper	canWalkOn(IPlayerContext,BlockPos)	missing	1b8e87c	87035631e38d0fb9		
-MovementHelper	canWalkOnBlockState	port	1b8e87c	c4ee6e86b12806ba	cost-compare	assumeWalkOnLava branch not translated; the setting stays off.
-MovementHelper	canWalkOnPosition	port	1b8e87c	f84987c5d84a407a	cost-compare	assumeWalkOnLava branch not translated.
-MovementHelper	canWalkThrough(BlockStateInterface,int,int,int)	missing	1b8e87c	c626c3ef871a8c52		
-MovementHelper	canWalkThrough(BlockStateInterface,int,int,int,BlockState)	missing	1b8e87c	f95322f965a4729c		
-MovementHelper	canWalkThrough(CalculationContext,int,int,int)	missing	1b8e87c	2803ae9c6c04941f		
+MovementHelper	canWalkOn(IPlayerContext,BetterBlockPos)	later	1b8e87c	ed6f5b15ab463855		Executor side: S4.
+MovementHelper	canWalkOn(IPlayerContext,BetterBlockPos,BlockState)	later	1b8e87c	b692192952744e84		Executor side: S4.
+MovementHelper	canWalkOn(IPlayerContext,BlockPos)	later	1b8e87c	87035631e38d0fb9		Executor side: S4.
+MovementHelper	canWalkOnBlockState	port	1b8e87c	c4ee6e86b12806ba	cost-compare	
+MovementHelper	canWalkOnPosition	port	1b8e87c	f84987c5d84a407a	cost-compare	
+MovementHelper	canWalkThrough(BlockStateInterface,int,int,int)	later	1b8e87c	c626c3ef871a8c52		Executor side: S4.
+MovementHelper	canWalkThrough(BlockStateInterface,int,int,int,BlockState)	later	1b8e87c	f95322f965a4729c		Executor side: S4.
+MovementHelper	canWalkThrough(CalculationContext,int,int,int)	port	1b8e87c	2803ae9c6c04941f	cost-compare	
 MovementHelper	canWalkThrough(CalculationContext,int,int,int,BlockState)	port	1b8e87c	5ae051b633794f81	cost-compare	
-MovementHelper	canWalkThrough(IPlayerContext,BetterBlockPos)	missing	1b8e87c	eef0cc6757efe1a7		
-MovementHelper	canWalkThroughBlockState	port	1b8e87c	f0c29c7ba0fc3d75	cost-compare	isPathfindable is a fact from the glue; blocksToAvoid fixed to tripwire.
-MovementHelper	canWalkThroughPosition	port	1b8e87c	5ed5543749ae9e4c	cost-compare	worldContainsLoadedChunk always true.
-MovementHelper	fullyPassable(CalculationContext,int,int,int)	missing	1b8e87c	b7a45af9a083a95e		
-MovementHelper	fullyPassable(CalculationContext,int,int,int,BlockState)	missing	1b8e87c	0917adf01389b5fd		
-MovementHelper	fullyPassable(IPlayerContext,BlockPos)	missing	1b8e87c	6bb931f2722d3d26		
-MovementHelper	fullyPassableBlockState	missing	1b8e87c	c986d88da2f78d2b		
-MovementHelper	fullyPassablePosition	missing	1b8e87c	ebb4bc3eb55427dc		
-MovementHelper	getMiningDurationTicks(CalculationContext,int,int,int,BlockState,boolean)	missing	1b8e87c	1febf2e4ac62db90		
-MovementHelper	getMiningDurationTicks(CalculationContext,int,int,int,boolean)	missing	1b8e87c	f162bcbe23bc97fb		
-MovementHelper	getMiningDurationTicks0	port	1b8e87c	1c07f267f37ecdab	cost-compare	Tool strength is a fact (str_pick or str_hand), not ToolSet. Tool choice is untested.
-MovementHelper	isBlockNormalCube	missing	1b8e87c	8d6ad00a9ca34b1e		
+MovementHelper	canWalkThrough(IPlayerContext,BetterBlockPos)	later	1b8e87c	eef0cc6757efe1a7		Executor side: S4.
+MovementHelper	canWalkThroughBlockState	port	1b8e87c	f0c29c7ba0fc3d75	cost-compare	isPathfindable is a fact from the glue.
+MovementHelper	canWalkThroughPosition	port	1b8e87c	5ed5543749ae9e4c	cost-compare	
+MovementHelper	fullyPassable(CalculationContext,int,int,int)	port	1b8e87c	b7a45af9a083a95e	cost-compare	
+MovementHelper	fullyPassable(CalculationContext,int,int,int,BlockState)	port	1b8e87c	0917adf01389b5fd	cost-compare	
+MovementHelper	fullyPassable(IPlayerContext,BlockPos)	later	1b8e87c	6bb931f2722d3d26		Executor side: S4.
+MovementHelper	fullyPassableBlockState	port	1b8e87c	c986d88da2f78d2b	cost-compare	
+MovementHelper	fullyPassablePosition	port	1b8e87c	ebb4bc3eb55427dc	cost-compare	
+MovementHelper	getMiningDurationTicks(CalculationContext,int,int,int,BlockState,boolean)	port	1b8e87c	1febf2e4ac62db90	cost-compare	
+MovementHelper	getMiningDurationTicks(CalculationContext,int,int,int,boolean)	port	1b8e87c	f162bcbe23bc97fb	cost-compare	
+MovementHelper	getMiningDurationTicks0	port	1b8e87c	1c07f267f37ecdab	cost-compare	Tool strength is a table per state from the caller; ToolSet itself comes with the glue (S4). The harness gives a pickaxe or an empty hand.
+MovementHelper	isBlockNormalCube	port	1b8e87c	8d6ad00a9ca34b1e	cost-compare	
 MovementHelper	isBottomSlab	port	1b8e87c	ec7057983b8e452f	cost-compare	
 MovementHelper	isClimbable	port	1b8e87c	a9b700a7d5a91755	cost-compare	
-MovementHelper	isDoorPassable	missing	1b8e87c	26e019ae3c4885c1		
+MovementHelper	isDoorPassable	later	1b8e87c	26e019ae3c4885c1		Executor side: S4.
 MovementHelper	isFlowing	port	1b8e87c	8ce4074c8c065142	cost-compare	
-MovementHelper	isGatePassable	missing	1b8e87c	106214f02b2479a9		
+MovementHelper	isGatePassable	later	1b8e87c	106214f02b2479a9		Executor side: S4.
 MovementHelper	isLava	port	1b8e87c	5ccb5e71d01f631b	cost-compare	
-MovementHelper	isLiquid(BlockState)	missing	1b8e87c	44acec4c4ac4536d		
-MovementHelper	isLiquid(IPlayerContext,BlockPos)	missing	1b8e87c	c10afab3ccd9801d		
-MovementHelper	isReplaceable	port	1b8e87c	b047cf27c0901f44	cost-compare	worldContainsLoadedChunk always true.
-MovementHelper	isTransparent	missing	1b8e87c	595a24bf2d4de89c		
+MovementHelper	isLiquid(BlockState)	port	1b8e87c	44acec4c4ac4536d	cost-compare	
+MovementHelper	isLiquid(IPlayerContext,BlockPos)	later	1b8e87c	c10afab3ccd9801d		Executor side: S4.
+MovementHelper	isReplaceable	port	1b8e87c	b047cf27c0901f44	cost-compare	
+MovementHelper	isTransparent	port	1b8e87c	595a24bf2d4de89c	cost-compare	
 MovementHelper	isWater(BlockState)	port	1b8e87c	6c4510c91c7c8d22	cost-compare	
-MovementHelper	isWater(IPlayerContext,BlockPos)	missing	1b8e87c	ff7e93ab9663aa37		
-MovementHelper	isWaterloggedSolidTop	missing	1b8e87c	15fad80f9e89a8e8		
-MovementHelper	moveTowards	missing	1b8e87c	f71bab2a745f74d7		
-MovementHelper	moveTowardsWithSlightRotation	missing	1b8e87c	1813bf5430988acc		
-MovementHelper	moveTowardsWithoutRotation(IPlayerContext,MovementState,BlockPos)	missing	1b8e87c	14e13264cd7131ba		
-MovementHelper	moveTowardsWithoutRotation(IPlayerContext,MovementState,float)	missing	1b8e87c	4683692d05d274b0		
+MovementHelper	isWater(IPlayerContext,BlockPos)	later	1b8e87c	ff7e93ab9663aa37		Executor side: S4.
+MovementHelper	isWaterloggedSolidTop	port	1b8e87c	15fad80f9e89a8e8	cost-compare	
+MovementHelper	moveTowards	later	1b8e87c	f71bab2a745f74d7		Executor side: S4.
+MovementHelper	moveTowardsWithSlightRotation	later	1b8e87c	1813bf5430988acc		Executor side: S4.
+MovementHelper	moveTowardsWithoutRotation(IPlayerContext,MovementState,BlockPos)	later	1b8e87c	14e13264cd7131ba		Executor side: S4.
+MovementHelper	moveTowardsWithoutRotation(IPlayerContext,MovementState,float)	later	1b8e87c	4683692d05d274b0		Executor side: S4.
 MovementHelper	mustBeSolidToWalkOn	port	1b8e87c	4158dd03d47cb9fd	cost-compare	
-MovementHelper	openDoors	missing	1b8e87c	22a8f6aedc2cd83e		
+MovementHelper	openDoors	later	1b8e87c	22a8f6aedc2cd83e		Executor side: S4.
 MovementHelper	possiblyFlowing	port	1b8e87c	135e5ad22ff9a802	cost-compare	
-MovementHelper	steppingOnBlocks	missing	1b8e87c	2549cdcfe6accd89		
-MovementHelper	switchToBestToolFor(IPlayerContext,BlockState)	missing	1b8e87c	266b18edf4cca6d2		
-MovementHelper	switchToBestToolFor(IPlayerContext,BlockState,ToolSet,boolean)	missing	1b8e87c	2f3e6afe62ce4008		
+MovementHelper	steppingOnBlocks	later	1b8e87c	2549cdcfe6accd89		Executor side: S4.
+MovementHelper	switchToBestToolFor(IPlayerContext,BlockState)	later	1b8e87c	266b18edf4cca6d2		Executor side: S4.
+MovementHelper	switchToBestToolFor(IPlayerContext,BlockState,ToolSet,boolean)	later	1b8e87c	2f3e6afe62ce4008		Executor side: S4.
 MovementParkour	<init>	missing	1b8e87c	2644f3c489c09eac		
 MovementParkour	calculateCost	missing	1b8e87c	a815eed498afb743		
 MovementParkour	calculateValidPositions	missing	1b8e87c	1c83db9b93285e8e		
-MovementParkour	checkOvershootSafety	missing	1b8e87c	3ae6a69df2ef75fb		
-MovementParkour	cost(CalculationContext,BetterBlockPos,Direction)	missing	1b8e87c	15bead88f4c78933		
-MovementParkour	cost(CalculationContext,int,int,int,Direction,MutableMoveResult)	missing	1b8e87c	4091af1ab98e61ec		
-MovementParkour	costFromJumpDistance	missing	1b8e87c	7e22736fb45b19fa		
+MovementParkour	checkOvershootSafety	port	1b8e87c	3ae6a69df2ef75fb	cost-compare	
+MovementParkour	cost(CalculationContext,BetterBlockPos,Direction)	later	1b8e87c	15bead88f4c78933		Used by the Movement object: S4.
+MovementParkour	cost(CalculationContext,int,int,int,Direction,MutableMoveResult)	port	1b8e87c	4091af1ab98e61ec	cost-compare	
+MovementParkour	costFromJumpDistance	port	1b8e87c	7e22736fb45b19fa	cost-compare	
 MovementParkour	safeToCancel	missing	1b8e87c	55e0812dcb1fa176		
 MovementParkour	updateState	missing	1b8e87c	bcd5f0021510c0ac		
 MovementPillar	<init>	missing	1b8e87c	6bb63703f7092286		
 MovementPillar	calculateCost	missing	1b8e87c	b98f2f7234fd0837		
 MovementPillar	calculateValidPositions	missing	1b8e87c	383246429d6b166b		
-MovementPillar	cost	missing	1b8e87c	a08876128e928e32		
+MovementPillar	cost	port	1b8e87c	a08876128e928e32	cost-compare	
 MovementPillar	prepared	missing	1b8e87c	d9a71a7a9bf934bf		
 MovementPillar	updateState	missing	1b8e87c	7b1bb2c43de52022		
 MovementTraverse	<init>	missing	1b8e87c	73be90078e8f594a		
@@ -488,55 +488,55 @@ MovementTraverse	prepared	missing	1b8e87c	cca0bb7772344049
 MovementTraverse	reset	missing	1b8e87c	e415f81bea730766		
 MovementTraverse	safeToCancel	missing	1b8e87c	3ed0a190a240e5f9		
 MovementTraverse	updateState	missing	1b8e87c	71cb6aeb8d77e9f1		
-Moves	<init>(int,int,int)	missing	1b8e87c	44231cfdfba4e7ef		
-Moves	<init>(int,int,int,boolean,boolean)	missing	1b8e87c	7cb2b27c96e607f1		
-Moves	apply	missing	1b8e87c	779e80c6d2db7615		
-Moves	apply0	missing	1b8e87c	b5940876ecff327f		
-Moves	cost	missing	1b8e87c	6507478cc7637f64		
-Moves.ASCEND_EAST	apply0	missing	1b8e87c	82befa80a322409b		
-Moves.ASCEND_EAST	cost	missing	1b8e87c	c09999f38037c521		
-Moves.ASCEND_NORTH	apply0	missing	1b8e87c	5840674a8bed750d		
-Moves.ASCEND_NORTH	cost	missing	1b8e87c	3c50ccfed4c74428		
-Moves.ASCEND_SOUTH	apply0	missing	1b8e87c	2c4b91e0dd562ebf		
-Moves.ASCEND_SOUTH	cost	missing	1b8e87c	6251f76353be464f		
-Moves.ASCEND_WEST	apply0	missing	1b8e87c	dcdbc38e248f1934		
-Moves.ASCEND_WEST	cost	missing	1b8e87c	1e2a86575a5041fa		
-Moves.DESCEND_EAST	apply	missing	1b8e87c	30c21f538d329e1a		
-Moves.DESCEND_EAST	apply0	missing	1b8e87c	73122da6f17abf68		
-Moves.DESCEND_NORTH	apply	missing	1b8e87c	10d65b3cc97b5576		
-Moves.DESCEND_NORTH	apply0	missing	1b8e87c	73122da6f17abf68		
-Moves.DESCEND_SOUTH	apply	missing	1b8e87c	7379c0c73316808c		
-Moves.DESCEND_SOUTH	apply0	missing	1b8e87c	73122da6f17abf68		
-Moves.DESCEND_WEST	apply	missing	1b8e87c	e9ecb37f117bf0da		
-Moves.DESCEND_WEST	apply0	missing	1b8e87c	73122da6f17abf68		
-Moves.DIAGONAL_NORTHEAST	apply	missing	1b8e87c	3f7d4ad55f9223e2		
-Moves.DIAGONAL_NORTHEAST	apply0	missing	1b8e87c	58f34f1252443313		
-Moves.DIAGONAL_NORTHWEST	apply	missing	1b8e87c	37f0875bd4e63c56		
-Moves.DIAGONAL_NORTHWEST	apply0	missing	1b8e87c	12d86debe03cbc27		
-Moves.DIAGONAL_SOUTHEAST	apply	missing	1b8e87c	f0d560e47c43791c		
-Moves.DIAGONAL_SOUTHEAST	apply0	missing	1b8e87c	936a7e1cc1c1f1e0		
-Moves.DIAGONAL_SOUTHWEST	apply	missing	1b8e87c	4a9c5ef07fd0aef2		
-Moves.DIAGONAL_SOUTHWEST	apply0	missing	1b8e87c	68366343b667f430		
-Moves.DOWNWARD	apply0	missing	1b8e87c	e049d60adcfa5347		
-Moves.DOWNWARD	cost	missing	1b8e87c	12710018011f58a2		
-Moves.PARKOUR_EAST	apply	missing	1b8e87c	ab49329c947898f7		
-Moves.PARKOUR_EAST	apply0	missing	1b8e87c	3b62684be1ddff36		
-Moves.PARKOUR_NORTH	apply	missing	1b8e87c	281f8906d1d6a1d4		
-Moves.PARKOUR_NORTH	apply0	missing	1b8e87c	4f83341973bcf773		
-Moves.PARKOUR_SOUTH	apply	missing	1b8e87c	7d5d8ed7ca012237		
-Moves.PARKOUR_SOUTH	apply0	missing	1b8e87c	9f16ef33434d5a7e		
-Moves.PARKOUR_WEST	apply	missing	1b8e87c	78e5d9d06e456149		
-Moves.PARKOUR_WEST	apply0	missing	1b8e87c	48ca9301f25ad7c6		
-Moves.PILLAR	apply0	missing	1b8e87c	381c8535ddb1abcf		
-Moves.PILLAR	cost	missing	1b8e87c	b0b834c4fa21c16d		
-Moves.TRAVERSE_EAST	apply0	missing	1b8e87c	3d55184a41c800c8		
-Moves.TRAVERSE_EAST	cost	missing	1b8e87c	d30a43bc94d7f531		
-Moves.TRAVERSE_NORTH	apply0	missing	1b8e87c	5bdec649b03659fd		
-Moves.TRAVERSE_NORTH	cost	missing	1b8e87c	9082a39ed40a85dc		
-Moves.TRAVERSE_SOUTH	apply0	missing	1b8e87c	49617f7a25536f1f		
-Moves.TRAVERSE_SOUTH	cost	missing	1b8e87c	e70bd54f58f4fb69		
-Moves.TRAVERSE_WEST	apply0	missing	1b8e87c	c248762a8195eaf4		
-Moves.TRAVERSE_WEST	cost	missing	1b8e87c	ba3d53757f3dca93		
+Moves	<init>(int,int,int)	redesign	1b8e87c	44231cfdfba4e7ef	cost-compare	The enum has offset and flag functions instead of fields.
+Moves	<init>(int,int,int,boolean,boolean)	redesign	1b8e87c	7cb2b27c96e607f1	cost-compare	The enum has offset and flag functions instead of fields.
+Moves	apply	port	1b8e87c	779e80c6d2db7615	cost-compare	
+Moves	apply0	later	1b8e87c	b5940876ecff327f		Builds the Movement object for the executor: S4.
+Moves	cost	port	1b8e87c	6507478cc7637f64	cost-compare	
+Moves.ASCEND_EAST	apply0	later	1b8e87c	82befa80a322409b		Builds the Movement object for the executor: S4.
+Moves.ASCEND_EAST	cost	port	1b8e87c	c09999f38037c521	cost-compare	
+Moves.ASCEND_NORTH	apply0	later	1b8e87c	5840674a8bed750d		Builds the Movement object for the executor: S4.
+Moves.ASCEND_NORTH	cost	port	1b8e87c	3c50ccfed4c74428	cost-compare	
+Moves.ASCEND_SOUTH	apply0	later	1b8e87c	2c4b91e0dd562ebf		Builds the Movement object for the executor: S4.
+Moves.ASCEND_SOUTH	cost	port	1b8e87c	6251f76353be464f	cost-compare	
+Moves.ASCEND_WEST	apply0	later	1b8e87c	dcdbc38e248f1934		Builds the Movement object for the executor: S4.
+Moves.ASCEND_WEST	cost	port	1b8e87c	1e2a86575a5041fa	cost-compare	
+Moves.DESCEND_EAST	apply	port	1b8e87c	30c21f538d329e1a	cost-compare	
+Moves.DESCEND_EAST	apply0	later	1b8e87c	73122da6f17abf68		Builds the Movement object for the executor: S4.
+Moves.DESCEND_NORTH	apply	port	1b8e87c	10d65b3cc97b5576	cost-compare	
+Moves.DESCEND_NORTH	apply0	later	1b8e87c	73122da6f17abf68		Builds the Movement object for the executor: S4.
+Moves.DESCEND_SOUTH	apply	port	1b8e87c	7379c0c73316808c	cost-compare	
+Moves.DESCEND_SOUTH	apply0	later	1b8e87c	73122da6f17abf68		Builds the Movement object for the executor: S4.
+Moves.DESCEND_WEST	apply	port	1b8e87c	e9ecb37f117bf0da	cost-compare	
+Moves.DESCEND_WEST	apply0	later	1b8e87c	73122da6f17abf68		Builds the Movement object for the executor: S4.
+Moves.DIAGONAL_NORTHEAST	apply	port	1b8e87c	3f7d4ad55f9223e2	cost-compare	
+Moves.DIAGONAL_NORTHEAST	apply0	later	1b8e87c	58f34f1252443313		Builds the Movement object for the executor: S4.
+Moves.DIAGONAL_NORTHWEST	apply	port	1b8e87c	37f0875bd4e63c56	cost-compare	
+Moves.DIAGONAL_NORTHWEST	apply0	later	1b8e87c	12d86debe03cbc27		Builds the Movement object for the executor: S4.
+Moves.DIAGONAL_SOUTHEAST	apply	port	1b8e87c	f0d560e47c43791c	cost-compare	
+Moves.DIAGONAL_SOUTHEAST	apply0	later	1b8e87c	936a7e1cc1c1f1e0		Builds the Movement object for the executor: S4.
+Moves.DIAGONAL_SOUTHWEST	apply	port	1b8e87c	4a9c5ef07fd0aef2	cost-compare	
+Moves.DIAGONAL_SOUTHWEST	apply0	later	1b8e87c	68366343b667f430		Builds the Movement object for the executor: S4.
+Moves.DOWNWARD	apply0	later	1b8e87c	e049d60adcfa5347		Builds the Movement object for the executor: S4.
+Moves.DOWNWARD	cost	port	1b8e87c	12710018011f58a2	cost-compare	
+Moves.PARKOUR_EAST	apply	port	1b8e87c	ab49329c947898f7	cost-compare	
+Moves.PARKOUR_EAST	apply0	later	1b8e87c	3b62684be1ddff36		Builds the Movement object for the executor: S4.
+Moves.PARKOUR_NORTH	apply	port	1b8e87c	281f8906d1d6a1d4	cost-compare	
+Moves.PARKOUR_NORTH	apply0	later	1b8e87c	4f83341973bcf773		Builds the Movement object for the executor: S4.
+Moves.PARKOUR_SOUTH	apply	port	1b8e87c	7d5d8ed7ca012237	cost-compare	
+Moves.PARKOUR_SOUTH	apply0	later	1b8e87c	9f16ef33434d5a7e		Builds the Movement object for the executor: S4.
+Moves.PARKOUR_WEST	apply	port	1b8e87c	78e5d9d06e456149	cost-compare	
+Moves.PARKOUR_WEST	apply0	later	1b8e87c	48ca9301f25ad7c6		Builds the Movement object for the executor: S4.
+Moves.PILLAR	apply0	later	1b8e87c	381c8535ddb1abcf		Builds the Movement object for the executor: S4.
+Moves.PILLAR	cost	port	1b8e87c	b0b834c4fa21c16d	cost-compare	
+Moves.TRAVERSE_EAST	apply0	later	1b8e87c	3d55184a41c800c8		Builds the Movement object for the executor: S4.
+Moves.TRAVERSE_EAST	cost	port	1b8e87c	d30a43bc94d7f531	cost-compare	
+Moves.TRAVERSE_NORTH	apply0	later	1b8e87c	5bdec649b03659fd		Builds the Movement object for the executor: S4.
+Moves.TRAVERSE_NORTH	cost	port	1b8e87c	9082a39ed40a85dc	cost-compare	
+Moves.TRAVERSE_SOUTH	apply0	later	1b8e87c	49617f7a25536f1f		Builds the Movement object for the executor: S4.
+Moves.TRAVERSE_SOUTH	cost	port	1b8e87c	e70bd54f58f4fb69	cost-compare	
+Moves.TRAVERSE_WEST	apply0	later	1b8e87c	c248762a8195eaf4		Builds the Movement object for the executor: S4.
+Moves.TRAVERSE_WEST	cost	port	1b8e87c	ba3d53757f3dca93	cost-compare	
 Path	<init>	missing	1b8e87c	f9432c6813b438f9		
 Path	assembleMovements	missing	1b8e87c	158889f2a78c3dd5		
 Path	getDest	missing	1b8e87c	db14168876712f37		
@@ -627,13 +627,13 @@ PrecomputedData	<init>	redesign	1b8e87c	f136104bdab4dce4		Ctx::new builds the fl
 PrecomputedData	canPlaceAgainst	port	1b8e87c	124200e6c62cc0a2	cost-compare	
 PrecomputedData	canWalkOn	port	1b8e87c	a0d571f09490fe12	cost-compare	
 PrecomputedData	canWalkThrough	port	1b8e87c	35a5a8f91e847cc7	cost-compare	
-PrecomputedData	fillData	port	1b8e87c	f4765b0d031068eb	cost-compare	fullyPassable flags not translated; traverse and descend do not use them. Built for all states at context creation.
+PrecomputedData	fillData	port	1b8e87c	f4765b0d031068eb	cost-compare	Built for all states at context creation.
 PrecomputedData	flags	redesign	1b8e87c	0103e12605dedee2		Flags are a plain table indexed by state id; no generation stamp, no state mixin.
 PrecomputedData	flagsFromRegistry	redesign	1b8e87c	768fcdd2aa7c2bd9		Flags are a plain table indexed by state id, filled at once.
 PrecomputedData	forCurrentSettings	redesign	1b8e87c	94ce2920cd06156c		No shared table: each context builds its own from its Config.
-PrecomputedData	fullyPassable	missing	1b8e87c	3c1295499672cdcc		
+PrecomputedData	fullyPassable	port	1b8e87c	3c1295499672cdcc	cost-compare	
 PrecomputedData	matchesCurrentSettings	redesign	1b8e87c	3fb86567443521aa		No shared table, so no settings match test.
-PrecomputedData	neverBreak	port	1b8e87c	8114dc78249b7daf	cost-compare	blocksToDisallowBreaking stays empty.
+PrecomputedData	neverBreak	port	1b8e87c	8114dc78249b7daf	cost-compare	
 SplicedPath	<init>	missing	1b8e87c	55f3ac4536f20a1f		
 SplicedPath	getGoal	missing	1b8e87c	50a9d398a5a822ff		
 SplicedPath	getNumNodesConsidered	missing	1b8e87c	4657048dd65c49a6		

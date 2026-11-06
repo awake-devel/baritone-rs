@@ -1,9 +1,10 @@
 [package]
-name = "baritone-spike"
+name = "cost-compare"
 version = "0.0.0"
 edition = "2021"
 license = "LGPL-3.0-or-later"
 publish = false
+description = "Compares upstream's real Java classes with baritone-engine, bit for bit"
 
-[profile.release]
-debug = false
+[dependencies]
+baritone-engine = { path = "../../mod/engine" }
