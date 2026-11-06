@@ -1,0 +1,2 @@
+# Differences between Java's facts and Horizon's facts that are explained: field, block (or *), reason, separated by tabs.
+# Every other difference fails, and so does an entry that matches nothing.

@@ -3,3 +3,4 @@
 /CLAUDE.md
 /gate-result.json
 __pycache__/
+/tools/facts-compare/target/

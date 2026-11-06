@@ -58,40 +58,93 @@ python3 tools/cost-compare/mutate.py . /some/path/golden.txt
 The default is 10000 grids. The golden file is generated, not committed, and stays below about 500 MB at that size.
 
 `java/baritone/api/BaritoneAPI.java` replaces upstream's class on the test classpath only, because the real one needs
-a running Minecraft to read its settings file.
+a running Minecraft to read its settings file. Both branches use the same file.
 
-### Against upstream's 26.3 branch (`java-26.3/`): out of date
+### Against upstream's 26.3 branch (`--port 26.3`)
 
-`java-26.3/` is the old copy of the harness for upstream's `26.3` branch (the game version Horizon implements). **It was
-not updated with the rebuild of `java/`.** It still writes the old golden format (5 x 5 grids, traverse and descend only,
-the old `State` facts, `normal_cube` and `waterlogged_solid_top` as facts), which the Rust parser no longer reads, so it
-cannot be used until stage S2 redoes it. S2 has to carry over what the 26.3 copy solved, which is described here:
+26.3 is the game version Horizon implements, so the whole engine is also compared there. There is still one Java source,
+`java/`. `port_26_3.py` turns it into the 26.3 variant on the way into the checkout: a table of text replacements (the
+renamed classes, the white glass, carpet, concrete powder and bed, the copper doors, the split chain, the missing
+`allowSwimming`, `canPlaceAgainst` and `avoidBreaking` overloads, and the new palette blocks `copper_chest`, `sulfur_spike`
+and `oak_shelf`) and two replaced regions. Every replacement must match exactly the number of times it says and every
+region once, or the script fails loudly, so a change of `java/` that the table does not follow cannot go unnoticed.
+`python3 tools/cost-compare/port_26_3.py DIR` writes the variant to look at it.
+
+What cannot be a replacement is in `port-26.3/baritone/pathing/movement/Compat263.java`, copied next to the test:
 
 - 1.21.4 has constructors made for tests (`BlockStateInterface(border, minY, height)` and a protected
-  `CalculationContext` constructor). 26.3 has none. The copy allocates both objects without running a constructor
-  and fills their fields by reflection, from the same settings the real constructor reads, and overrides `get0`.
-  The movement code under test is untouched. A fake `Level` answers only `getMinY` and `getHeight`.
-- 26.3 gives items their tool rules through `DataComponentInitializers`, which a bare `Bootstrap` never runs. The copy
-  runs them (`bindItemComponents`) after binding the block tags. Without it every `ItemStack` fails.
-- Renamed or removed: `ResourceLocation` is `Identifier`, `WaterlilyBlock` is `LilyPadBlock`, the white glass and carpet
-  are `Blocks.STAINED_GLASS.white()` and `Blocks.CARPET.white()`. `allowSwimming` does not exist, so the config line still
-  writes the flag but nothing applies it. `MovementHelper.isWaterloggedSolidTop` does not exist, so the copy holds its
-  1.21.4 body and exports the same fact.
-- The `PrecomputedData` table is built from the settings of the moment, so each context gets a fresh one.
+  `CalculationContext` constructor). 26.3 has none. `Compat263` allocates both objects without running a constructor and
+  fills their fields by reflection, from the same settings the real constructor reads, and overrides `get0`. The movement
+  code under test is untouched. A fake `Level` answers only `getMinY` and `getHeight`. Each context gets a fresh
+  `PrecomputedData`, because 26.3 builds that table from the settings of the moment and never rebuilds it.
+- 26.3 gives items their tool rules through `DataComponentInitializers`, which a bare `Bootstrap` never runs. `Compat263`
+  runs them after the block and fluid tags are bound. Without it every `ItemStack` fails.
+- `MovementHelper.isWaterloggedSolidTop` does not exist on 26.3. The registry sweep has a column for it, so `Compat263`
+  holds its 1.21.4 body. That column is therefore not an answer of 26.3's code, and no 26.3 rule calls it.
+
+```sh
+# JDK 25 and a checkout of upstream's 26.3 branch (commit 25111da). Writes reports/cost-compare-26.3.json.
+python3 tools/run_compare.py --upstream upstream/baritone --jdk DIR --scratch DIR --grids 10000 --port 26.3
+```
+
+The engine follows 1.21.4's rules, so with `--port 26.3` the differences between the two branches are expected. They are
+recorded in the report and are not a failure; every other check still applies (a family with no finite result still fails).
+The registry sweep covers all 35,723 block states of 26.3.
+
+`rules-26.3.patch` makes a scratch copy of `mod/engine` behave like 26.3's rules, one group of hunks per rule (each has a
+`# rule:` line). Never apply it to the real engine. To use it, copy `Cargo.toml`, `Cargo.lock`, `mod/engine` and
+`tools/cost-compare` (without `target` and `java`) to a scratch directory, run `patch -p1 -F0 < rules-26.3.patch` there, and
+run `cargo run --release -p cost-compare -- GOLDEN` in it with the golden file of the 26.3 run. At 10,000 grids the
+unpatched engine differs from 26.3 in 22,349 results; with the whole patch there are 0 wrong and 0 close in every family.
+To measure one rule, apply every hunk group but its own. The counts are in
+[Where upstream's two branches disagree](../docs/deviations.md#where-upstreams-two-branches-disagree).
 
 Known limits:
 
-- The facts come from Minecraft 1.21.4, not from Horizon.
+- The facts come from Minecraft 1.21.4 or 26.3 (whichever branch ran), not from Horizon.
 - The grids are 13 x 16 x 13 with the start in the middle; movements are only asked from the start. Other starts and
   world heights (a grid never sits at the real minimum or maximum Y of a dimension) are not covered.
-- The harness binds the vanilla block tags itself (it reads `data/minecraft/tags/block/` from the game jar and binds
-  them on the block registry), so a diamond pickaxe and an empty hand now give different break speeds. Tool choice
-  is tested for those two tools and for no other tool.
+- The harness binds the vanilla block and fluid tags itself (it reads `data/minecraft/tags/block/` and `fluid/` from the
+  game jar and binds them on the registries), so a diamond pickaxe and an empty hand give different break speeds, and
+  `LiquidBlock.isPathfindable` (which asks the fluid tags) no longer calls lava pathfindable. Tool choice is tested for
+  those two tools and for no other tool.
+- The 26.3 run is not part of the gate, is not repeated three times and has no mutation run. `rules-26.3.patch` was written
+  by reading the diff of the two branches, then checked by the comparison; a rule that the generated worlds never reach
+  would not show up in it, and the patch cannot tell a missing rule from a world that never exercises it.
 - `Moves.apply0`, the executors and everything after the cost functions are not compared here.
-- A full mutation run is long: 836 builds, about 103 minutes at low priority on the development laptop. Named mutations can be
+- A full mutation run is long: 836 builds, about 39 minutes on 6 workers on the development laptop (104 on one). Named mutations can be
   run alone (`mutate.py REPO GOLDEN "name|name"`).
 - Injected errors that stay uncaught are listed with a reason in `cost-compare/known-missed.txt`; those judgements come
   from reading the code and the exported facts, not from a proof.
+
+## facts-compare
+
+L1: does Horizon describe each block as Minecraft does? It is not in the root workspace, because it builds against Horizon's
+crates in the git-ignored `upstream/horizon-nightly`.
+
+- `java/baritone/FactsDump.java` writes what real Minecraft says about every block state, with the fields of the engine's
+  `State`. It binds the vanilla block and fluid tags first. A bare `Bootstrap` has neither, and without the fluid tags
+  Java says that lava is pathfindable.
+- `src/main.rs` compiles `mod/glue/state_facts.rs`, the mapping the mod will use, and compares field by field. A state's
+  identity (its id, name and properties) has to match too.
+- `expected-differences.txt` lists the explained differences. It is empty today. An unlisted difference fails, and so does
+  an entry that matches nothing. For each difference, the tool also says whether the engine's answers change.
+- `mutate.py` injects errors into the mapping. Errors with no possible effect are listed in it, with a reason.
+
+```sh
+# JDK 25, upstream's 26.3 branch, and a Horizon version's prepared .local/horizon-client/26.3 folder.
+python3 tools/run_facts.py --upstream upstream/baritone --jdk DIR --scratch DIR \
+    --horizon upstream/horizon-nightly --resources DIR
+# Add --versions-against upstream/baritone-1.21.4 --jdk-old DIR to list what changed between the game versions.
+```
+
+Known limits:
+
+- Horizon's facts are exported from Java when a version is prepared, so this mainly tests our mapping and Horizon's loaders.
+  It says nothing about Horizon's own behaviour in the game, such as its physics.
+- Facts are read over an empty level. A block whose shape depends on its neighbours or its block entity is only checked there.
+- Tool strength is checked for a diamond pickaxe and an empty hand, without enchantments. The other tools wait for the glue.
+- The tool reads `mob-data.json` directly. In the mod, the same value comes through `MobData`, which isn't compiled here.
 
 ## walk-test
 

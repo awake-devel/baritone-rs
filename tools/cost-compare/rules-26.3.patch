@@ -1,0 +1,125 @@
+# Makes a scratch copy of mod/engine behave like upstream's 26.3 rules (commit 25111da), one hunk group per rule.
+# Apply it to a COPY of the repository's mod/engine, never to the real one:  patch -p1 -F0 < rules-26.3.patch
+# It was made against the engine as committed at 2716003. See tools/README.md for how it is used and measured.
+
+# rule: door_walkthrough
+# canWalkThroughBlockState: 26.3 passes every door and gate except the iron door; 1.21.4 asks DoorBlock.isWoodenDoor for doors.
+--- a/mod/engine/src/movement/helper.rs
++++ b/mod/engine/src/movement/helper.rs
+@@ -114,7 +114,4 @@
+     }
+-    if s.door {
+-        return if s.wooden_door { Yes } else { No };
+-    }
+-    if s.gate {
+-        return Yes;
++    if s.door || s.gate {
++        return if s.name == "iron_door" { No } else { Yes };
+     }
+
+# rule: diag_blocking_door
+# MovementDiagonal.cost: 26.3 has no isBlockingDoor (three places: the early return, the A/B low-cell test, and the +1 on the mining time).
+--- a/mod/engine/src/movement/diagonal.rs
++++ b/mod/engine/src/movement/diagonal.rs
+@@ -41,6 +41,2 @@
+     let start_state = ctx.get(x, y, z);
+-    // upstream passes y as the last argument of the second call, where a z coordinate would be expected
+-    if is_blocking_door(&start_state, x, z, dest_x, dest_z) || is_blocking_door(if ascend { &dest_into_upper } else { &dest_into }, dest_x, dest_z, x, y) {
+-        return; // Easier to just traverse instead
+-    }
+     let mut multiplier = WALK_ONE_BLOCK_COST;
+@@ -94,4 +90,2 @@
+         let mut b_low = ctx.can_walk_through(dest_x, y, z, pb2);
+-        a_low &= !is_blocking_door(&pb0, x, dest_z, dest_x, z);
+-        b_low &= !is_blocking_door(&pb2, dest_x, z, x, dest_z);
+         if (!(a_top && a_mid && a_low) && !(b_top && b_mid && b_low)) || avoid_walking_into(&pb0, ctx.cfg) || avoid_walking_into(&pb2, ctx.cfg) || (a_top && a_mid && ctx.can_walk_on(x, y, dest_z, pb0)) || (b_top && b_mid && ctx.can_walk_on(dest_x, y, z, pb2)) || (!a_top && a_mid && a_low) || (!b_top && b_mid && b_low) {
+@@ -107,4 +101,2 @@
+     let mut option_b = ctx.mining_duration(dest_x, y, z, pb2, false);
+-    option_a += if is_blocking_door(&pb0, x, dest_z, dest_x, z) { 1.0 } else { 0.0 };
+-    option_b += if is_blocking_door(&pb2, dest_x, z, x, dest_z) { 1.0 } else { 0.0 };
+     if option_a != 0.0 && option_b != 0.0 {
+
+# rule: diag_magma_corner
+# MovementDiagonal.cost: 26.3 tests cuttingOver1 for magma twice; the second corner (cuttingOver2) is only tested for lava.
+--- a/mod/engine/src/movement/diagonal.rs
++++ b/mod/engine/src/movement/diagonal.rs
+@@ -71,3 +71,3 @@
+     let cutting_over2 = ctx.get(dest_x, y - 1, z);
+-    if (!ctx.cfg.allow_walk_on_magma && cutting_over2.block == Block::MagmaBlock) || is_lava(&cutting_over2) {
++    if (!ctx.cfg.allow_walk_on_magma && cutting_over1.block == Block::MagmaBlock) || is_lava(&cutting_over2) {
+         return;
+
+# rule: diag_ascend_jump_penalty
+# MovementDiagonal.cost: 26.3 does not add jumpPenalty to a diagonal ascend.
+--- a/mod/engine/src/movement/diagonal.rs
++++ b/mod/engine/src/movement/diagonal.rs
+@@ -99,3 +99,3 @@
+         }
+-        res.cost = multiplier * SQRT_2 + jump_one_block_cost() + ctx.cfg.jump_penalty;
++        res.cost = multiplier * SQRT_2 + jump_one_block_cost();
+         res.x = dest_x;
+
+# rule: wl_walk_on
+# canWalkOnBlockState: 26.3 has no isWaterloggedSolidTop; any water state is MAYBE.
+--- a/mod/engine/src/movement/helper.rs
++++ b/mod/engine/src/movement/helper.rs
+@@ -179,3 +179,3 @@
+     }
+-    if is_water(s) && !is_waterlogged_solid_top(s) {
++    if is_water(s) {
+         return Maybe;
+
+# rule: wl_descend
+# MovementDescend.cost: 26.3 does not exempt a waterlogged solid top from the water landing branch.
+--- a/mod/engine/src/movement/descend.rs
++++ b/mod/engine/src/movement/descend.rs
+@@ -73,3 +73,3 @@
+         let tentative = WALK_OFF_BLOCK_COST + fall[unprotected as usize] + front_break + cost_so_far;
+-        if reached_minimum && is_water(&onto) && !is_waterlogged_solid_top(&onto) {
++        if reached_minimum && is_water(&onto) {
+             if !ctx.can_walk_through(dest_x, new_y, dest_z, onto) {
+
+# rule: wl_parkour
+# MovementParkour.cost: 26.3 does not exempt a waterlogged solid top from the assumeWalkOnWater take-off test.
+--- a/mod/engine/src/movement/parkour.rs
++++ b/mod/engine/src/movement/parkour.rs
+@@ -50,3 +50,3 @@
+     // we can't jump from (frozen) water with assumeWalkOnWater because we can't be sure it will be frozen
+-    if ctx.cfg.assume_walk_on_water && !standing_on.fluid_empty && !is_waterlogged_solid_top(&standing_on) {
++    if ctx.cfg.assume_walk_on_water && !standing_on.fluid_empty {
+         return;
+
+# rule: wl_pillar
+# MovementPillar.cost: 26.3 does not exempt a waterlogged solid top below from the assumeWalkOnWater test.
+--- a/mod/engine/src/movement/pillar.rs
++++ b/mod/engine/src/movement/pillar.rs
+@@ -42,3 +42,3 @@
+     }
+-    if (is_liquid(&from_state) && !ctx.can_place_against(x, y - 1, z)) || (is_liquid(&from_down) && !is_waterlogged_solid_top(&from_down) && ctx.cfg.assume_walk_on_water) {
++    if (is_liquid(&from_state) && !ctx.can_place_against(x, y - 1, z)) || (is_liquid(&from_down) && ctx.cfg.assume_walk_on_water) {
+         return COST_INF;
+
+# rule: swimming
+# CalculationContext constructor: 26.3 has no allowSwimming and no SWIM_ONE_BLOCK_COST cap on the water walk speed.
+--- a/mod/engine/src/movement/helper.rs
++++ b/mod/engine/src/movement/helper.rs
+@@ -265,3 +265,3 @@
+         let mut water_speed = WALK_ONE_IN_WATER_COST * ((1.0f32 - mult) as f64) + WALK_ONE_BLOCK_COST * (mult as f64);
+-        if cfg.allow_swimming && cfg.can_sprint {
++        if false && cfg.allow_swimming && cfg.can_sprint {
+             water_speed = java_min(water_speed, SWIM_ONE_BLOCK_COST);
+
+# rule: runaway_max
+# GoalRunAway.heuristic(): 26.3 has maxX = Math.max(minX, ...) (and the same for Y and Z), so its scan box can be too small.
+--- a/mod/engine/src/goals.rs
++++ b/mod/engine/src/goals.rs
+@@ -322,5 +322,5 @@
+                     min_z = min_z.min(p.2.wrapping_sub(distance));
+-                    max_x = max_x.max(p.0.wrapping_add(distance));
+-                    max_y = max_y.max(p.1.wrapping_add(distance));
+-                    max_z = max_z.max(p.2.wrapping_add(distance));
++                    max_x = min_x.max(p.0.wrapping_add(distance));
++                    max_y = min_y.max(p.1.wrapping_add(distance));
++                    max_z = min_z.max(p.2.wrapping_add(distance));
+                 }
+

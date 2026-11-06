@@ -12,6 +12,10 @@ Inputs (argument, or environment variable):
   --scratch  / BARITONE_SCRATCH    directory for the golden file
   --grids    / BARITONE_GRIDS      number of random grids (default 10000)
   --branch   / BARITONE_BRANCH     branch name for the report (default: the Minecraft version in gradle.properties)
+  --port 26.3                      run the harness on upstream's 26.3 branch: tools/cost-compare/port_26_3.py turns the Java
+                                   source into the 26.3 variant on the way in. The engine follows 1.21.4's rules, so the two
+                                   branches' own differences are expected: they are recorded in the report, not a failure. The
+                                   same golden file must then show none with rules-26.3.patch applied to a scratch copy.
 
 The golden file stays in the scratch directory as golden-<branch>.txt.
 The report holds metadata only: commits, versions, hashes and counts. No paths, no game data.
@@ -25,8 +29,12 @@ import shutil
 import subprocess
 import sys
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "cost-compare"))
+import port_26_3  # noqa: E402
+
 REPO = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 CRATE = os.path.join(REPO, "tools", "cost-compare")
+PATCH_26_3 = os.path.join(CRATE, "rules-26.3.patch")
 JAVA_TEST = "baritone.pathing.movement.SpikeGoldenDump"
 # Every family the comparison prints a line for. A movement or goal family with no finite result tested nothing.
 MOVEMENTS = ("downward", "pillar", "traverse", "ascend", "descend", "diagonal", "parkour")
@@ -61,11 +69,15 @@ def java_files(root=CRATE):
     return sorted(out)
 
 
-def source_hashes(repo=REPO):
+def source_hashes(repo=REPO, port=None):
     """sha256 of every source that takes part in a comparison, keyed by a repository-relative name: the Java test (as
-    'java/...'), the comparison's own Rust sources, the engine's sources, and the Cargo and format files of the workspace."""
+    'java/...'), the comparison's own Rust sources, the engine's sources, and the Cargo and format files of the workspace.
+    With a port, also the files that make the Java test into that variant."""
     crate = os.path.join(repo, "tools", "cost-compare")
     out = {}
+    if port:
+        for rel in port_26_3.source_files() + ["rules-26.3.patch"]:
+            out["port/" + rel] = sha256_file(os.path.join(crate, *rel.split("/")))
     for rel in java_files(crate):
         out["java/" + rel] = sha256_file(os.path.join(crate, "java", *rel.split("/")))
     files = ["Cargo.toml", "Cargo.lock", "rustfmt.toml", "tools/cost-compare/Cargo.toml", "mod/engine/Cargo.toml"]
@@ -108,6 +120,29 @@ def check_results(res):
         raise Fail("wrong results: " + ", ".join(f"{f}={n}" for f, n in sorted(bad.items())))
 
 
+def rules_explain_every_difference(golden, scratch):
+    """Applies rules-26.3.patch to a scratch copy of the engine and compares again. Anything left is a difference between the
+    branches that nobody has listed, or a difference in the game, so it fails. So does a patch that no longer applies."""
+    copy = os.path.join(scratch, "engine-with-26.3-rules")
+    shutil.rmtree(copy, ignore_errors=True)
+    os.makedirs(os.path.join(copy, "tools"))
+    for name in ("Cargo.toml", "Cargo.lock", "rustfmt.toml"):
+        shutil.copy(os.path.join(REPO, name), copy)
+    shutil.copytree(os.path.join(REPO, "mod", "engine"), os.path.join(copy, "mod", "engine"), ignore=shutil.ignore_patterns("target"))
+    shutil.copytree(CRATE, os.path.join(copy, "tools", "cost-compare"), ignore=shutil.ignore_patterns("target", "__pycache__", "java", "port-26.3"))
+    with open(PATCH_26_3, encoding="utf-8") as f:
+        p = run(["patch", "-p1", "-F0"], cwd=copy, input=f.read())
+    if p.returncode:
+        raise Fail("rules-26.3.patch no longer applies:\n" + (p.stdout + p.stderr)[-2000:])
+    r = cargo_run(golden, cwd=copy)
+    if r.returncode:
+        raise Fail("the comparison with the 26.3 rules failed to run:\n" + (r.stdout + r.stderr)[-2000:])
+    res = parse_output(r.stdout)
+    left = {f: n["wrong"] + n["close"] for f, n in res.items() if n["wrong"] or n["close"]}
+    if left:
+        raise Fail("differences from 26.3 that no listed rule explains: " + ", ".join(f"{f}={n}" for f, n in sorted(left.items())))
+
+
 def read_minecraft_version(upstream):
     with open(os.path.join(upstream, "gradle.properties"), encoding="utf-8") as f:
         for ln in f:
@@ -121,14 +156,14 @@ def run(cmd, **kw):
     return subprocess.run(cmd, capture_output=True, text=True, **kw)
 
 
-def cargo_run(golden):
+def cargo_run(golden, cwd=REPO):
     """The Rust comparison. At low priority and with few jobs while another build is running (it only builds a small crate)."""
     cmd = ["cargo", "run", "--release", "--quiet", "-p", "cost-compare", "--", golden]
     env = dict(os.environ)
     if pgrep("-x", "rustc"):
         cmd = ["nice", "-n", "15"] + cmd
         env["CARGO_BUILD_JOBS"] = "4"
-    return run(cmd, cwd=REPO, env=env)
+    return run(cmd, cwd=cwd, env=env)
 
 
 def upstream_commit(upstream):
@@ -162,12 +197,22 @@ def gradle_client_running():
     return False
 
 
-def copy_java(upstream):
+def java_texts(port):
+    """{path under src/test/java: text} of the test to copy in: the source as it is, or its variant for another branch."""
+    if port == "26.3":
+        try:
+            return port_26_3.ported_files()
+        except port_26_3.PortError as e:
+            raise Fail("cannot port the harness to 26.3: " + str(e))
+    return {rel: open(os.path.join(CRATE, "java", *rel.split("/")), encoding="utf-8").read() for rel in java_files()}
+
+
+def copy_java(upstream, port=None):
     """Copies the Java test in. Returns the files created and directories created, to remove afterwards."""
-    base = os.path.join(CRATE, "java")
+    texts = java_texts(port)
     dest_root = os.path.join(upstream, "src", "test", "java")
     files, dirs = [], []
-    for rel in java_files():
+    for rel in sorted(texts):
         dest = os.path.join(dest_root, *rel.split("/"))
         if os.path.exists(dest):
             raise Fail("refusing to overwrite an existing upstream file: " + rel)
@@ -178,7 +223,8 @@ def copy_java(upstream):
             d = os.path.dirname(d)
         os.makedirs(os.path.dirname(dest), exist_ok=True)
         dirs += reversed(missing)
-        shutil.copyfile(os.path.join(base, *rel.split("/")), dest)
+        with open(dest, "w", encoding="utf-8") as f:
+            f.write(texts[rel])
         files.append(dest)
     return files, dirs
 
@@ -196,7 +242,7 @@ def remove_copied(files, dirs):
             pass
 
 
-def execute(upstream, jdk, scratch, grids, branch, report_path):
+def execute(upstream, jdk, scratch, grids, branch, report_path, port=None):
     """Runs one comparison. Returns the report dict. Raises Fail."""
     upstream, jdk, scratch = map(os.path.abspath, (upstream, jdk, scratch))
     if os.path.exists(report_path):
@@ -213,7 +259,7 @@ def execute(upstream, jdk, scratch, grids, branch, report_path):
     mc = read_minecraft_version(upstream)
     files, dirs = [], []
     try:
-        files, dirs = copy_java(upstream)
+        files, dirs = copy_java(upstream, port)
         env = dict(os.environ, JAVA_HOME=jdk, SPIKE_OUT=golden, SPIKE_GRIDS=str(grids))
         # cleanTest first: Gradle would otherwise skip an up-to-date test and write no golden file.
         g = run(
@@ -231,7 +277,10 @@ def execute(upstream, jdk, scratch, grids, branch, report_path):
     if r.returncode:
         raise Fail("the Rust comparison failed to run:\n" + (r.stdout + r.stderr)[-2000:])
     res = parse_output(r.stdout)
-    check_results(res)
+    if not port:
+        check_results(res)
+    else:
+        rules_explain_every_difference(golden, scratch)
     jv = run([os.path.join(jdk, "bin", "java"), "-version"])
     report = {
         "tool": "cost-compare",
@@ -241,9 +290,12 @@ def execute(upstream, jdk, scratch, grids, branch, report_path):
         "java": (jv.stderr or jv.stdout).splitlines()[0].strip() if (jv.stderr or jv.stdout) else "unknown",
         "rustc": run(["rustc", "--version"]).stdout.strip(),
         "grids": int(grids),
-        "sources": dict(source_hashes(), golden=sha256_file(golden)),
+        "sources": dict(source_hashes(port=port), golden=sha256_file(golden)),
         "results": {f: {k: v for k, v in res[f].items()} for f in FUNCS},
     }
+    if port:
+        report["port"] = port
+        report["note"] = "engine follows 1.21.4's rules; WRONG counts are the two branches' own differences, see docs/deviations.md"
     return report
 
 
@@ -276,12 +328,13 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     for n in ("upstream", "jdk", "scratch", "grids", "branch"):
         ap.add_argument("--" + n)
+    ap.add_argument("--port", choices=["26.3"], help="run on upstream's 26.3 branch (see the top of this file)")
     ap.add_argument("--report", help="write the report here instead of reports/cost-compare-<branch>.json")
     a = ap.parse_args(argv)
     try:
         upstream, jdk, scratch, grids, branch = resolve(a)
         path = a.report or report_path_for(branch)
-        report = execute(upstream, jdk, scratch, grids, branch, path)
+        report = execute(upstream, jdk, scratch, grids, branch, path, a.port)
     except Fail as e:
         print("FAIL:", e, file=sys.stderr)
         return 1

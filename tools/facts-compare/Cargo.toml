@@ -1,0 +1,18 @@
+[package]
+name = "facts-compare"
+version = "0.0.0"
+edition = "2021"
+license = "LGPL-3.0-or-later"
+publish = false
+description = "Compares what Horizon says about every block state with what Java Minecraft says"
+
+# On its own, not in the root workspace: it needs Horizon's crates from the git-ignored checkout, and the rest of the
+# project must build without them.
+[workspace]
+
+[dependencies]
+baritone-engine = { path = "../../mod/engine" }
+horizon-core = { path = "../../upstream/horizon-nightly/crates/horizon-core" }
+horizon-items = { path = "../../upstream/horizon-nightly/crates/horizon-items" }
+horizon-world = { path = "../../upstream/horizon-nightly/crates/horizon-world" }
+serde_json = "1"

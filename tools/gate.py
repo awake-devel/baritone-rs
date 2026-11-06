@@ -7,6 +7,10 @@ Steps, in order:
   2 cargo              fmt --check, clippy -D warnings, tests, across the whole workspace, from the repository root
   3 python tests       unittest discover under tools/
   4 ledger             tools/ledger.py --upstream DIR check, if tools/ledger.py exists
+  4b facts             tools/run_facts.py: Horizon's block facts against Java's, with its own injected errors, only when
+                       its inputs differ from its report. Needs --facts-upstream, --facts-jdk, --horizon and --resources
+  4c rules on 26.3     tools/run_compare.py --port 26.3: the whole engine on the game Horizon implements. Every difference must
+                       be explained by rules-26.3.patch. Needs --facts-upstream and --facts-jdk
   5 comparison         tools/run_compare.py, only when its inputs differ from the report. The report is written
                        only after steps 5 to 7 all pass, so a report on disk means all three passed.
   6 repeat             two more runs that must give identical results
@@ -34,6 +38,7 @@ import tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import run_compare as rc  # noqa: E402
+import run_facts as rf  # noqa: E402
 
 REPO = rc.REPO
 CRATE = rc.CRATE
@@ -184,6 +189,81 @@ class Gate:
         rcode, out = self.sh([sys.executable, path, "--upstream", upstream, "check"], REPO)
         self.record("ledger check", PASS if rcode == 0 else FAIL, "" if rcode == 0 else "\n" + out[-3000:])
 
+    def facts(self):
+        a = self.a
+        if a.quick:
+            self.record("facts", SKIPPED, "--quick")
+            return
+        get = lambda v, name: v or os.environ.get(name)
+        upstream, jdk, horizon, resources = (
+            get(a.facts_upstream, "BARITONE_FACTS_UPSTREAM"),
+            get(a.facts_jdk, "BARITONE_FACTS_JDK"),
+            get(a.horizon, "BARITONE_HORIZON"),
+            get(a.resources, "BARITONE_RESOURCES"),
+        )
+        scratch = a.scratch or os.environ.get("BARITONE_SCRATCH")
+        if not (upstream and jdk and horizon and resources and scratch):
+            self.record("facts", SKIPPED, "needs --facts-upstream, --facts-jdk, --horizon, --resources, --scratch")
+            return
+        manifest = os.path.join(HERE, "facts-compare", "Cargo.toml")
+        env = dict(os.environ, CARGO_TERM_COLOR="never")
+        for label, cmd in (
+            ("facts-compare fmt", ["cargo", "fmt", "--manifest-path", manifest, "--check"]),
+            ("facts-compare clippy", ["cargo", "clippy", "--manifest-path", manifest, "--all-targets", "--", "-D", "warnings"]),
+            ("facts-compare test", ["cargo", "test", "--manifest-path", manifest]),
+        ):
+            rcode, out = self.sh(cmd, REPO, env, busy())
+            if rcode:
+                self.record(label, FAIL, "\n" + out[:3000])
+                return
+            self.record(label, PASS)
+        report = load_report(rf.REPORT)
+        try:
+            if not a.force and report and report.get("inputs") == rf.inputs_hash(upstream, horizon, resources):
+                self.record("facts", CURRENT, "the report matches the inputs; not re-run")
+                return
+        except (rf.Fail, OSError) as e:
+            self.record("facts", SKIPPED, str(e))
+            return
+        rcode, out = self.sh(
+            [sys.executable, os.path.join(HERE, "run_facts.py"), "--upstream", upstream, "--jdk", jdk, "--scratch", scratch,
+             "--horizon", horizon, "--resources", resources], REPO, env, busy(),
+        )
+        done = load_report(rf.REPORT) or {}
+        if rcode == 0:
+            r = done["results"]
+            self.record("facts", PASS, f"{r['states']} states, {r['facts_compared']} facts, {r['different']} different ({r['unexplained']} unexplained); {done['injected_errors']}")
+        elif rcode == 1:
+            self.record("facts", FAIL, "\n" + out[-3000:])
+        else:
+            self.record("facts", SKIPPED, out[-1000:])
+
+    def rules_26_3(self):
+        a = self.a
+        if a.quick:
+            self.record("rules on 26.3", SKIPPED, "--quick")
+            return
+        upstream = a.facts_upstream or os.environ.get("BARITONE_FACTS_UPSTREAM")
+        jdk = a.facts_jdk or os.environ.get("BARITONE_FACTS_JDK")
+        scratch = a.scratch or os.environ.get("BARITONE_SCRATCH")
+        if not (upstream and jdk and scratch):
+            self.record("rules on 26.3", SKIPPED, "needs --facts-upstream, --facts-jdk, --scratch")
+            return
+        grids = int(a.grids or os.environ.get("BARITONE_GRIDS") or rc.DEFAULT_GRIDS)
+        path = rc.report_path_for("26.3")
+        try:
+            report = load_report(path)
+            if not a.force and report and comparison_current({**report, "gate": {"mutation_inputs": ""}}, rc.source_hashes(port="26.3"), rc.upstream_commit(upstream), grids, ""):
+                self.record("rules on 26.3", CURRENT, "the report matches the inputs; not re-run")
+                return
+            done = rc.execute(upstream, jdk, scratch, grids, "26.3", path, "26.3")
+        except rc.Fail as e:
+            self.record("rules on 26.3", FAIL, "\n" + str(e))
+            return
+        rc.write_report(done, path)
+        n = sum(r["wrong"] + r["close"] for r in done["results"].values())
+        self.record("rules on 26.3", PASS, f"{n} results differ from 26.3, and rules-26.3.patch explains all of them")
+
     def comparison(self):
         names = ("comparison", "repeat runs", "mutation")
         a = self.a
@@ -258,7 +338,7 @@ class Gate:
     # -- driver --------------------------------------------------------------------------------
 
     def run(self):
-        for step in (self.public_tree, self.cargo, self.python_tests, self.ledger, self.comparison):
+        for step in (self.public_tree, self.cargo, self.python_tests, self.ledger, self.facts, self.rules_26_3, self.comparison):
             step()
             if self.failed:
                 break
@@ -295,7 +375,7 @@ def main(argv=None):
     ap.add_argument("--quick", action="store_true", help="skip the comparison, repeat runs and mutation")
     ap.add_argument("--no-mutation", action="store_true")
     ap.add_argument("--force", action="store_true", help="run the comparison even if the report is current")
-    for n in ("upstream", "jdk", "scratch", "grids", "branch"):
+    for n in ("upstream", "jdk", "scratch", "grids", "branch", "facts-upstream", "facts-jdk", "horizon", "resources"):
         ap.add_argument("--" + n)
     return Gate(ap.parse_args(argv)).run()
 

@@ -1,6 +1,6 @@
 {
   "gate": {
-    "mutation_inputs": "d11658df55c2c30d7ba33c2ecfb952c409e575eb1c4f677fc07d461236b1ba27"
+    "mutation_inputs": "d2ab0ea0fa61ae8e5c0c8678958bbff43cc1d3bd2a4914072e765db72c748b74"
   },
   "grids": 10000,
   "java": "openjdk version \"21.0.13\" 2026-10-20 LTS",
@@ -178,10 +178,10 @@
   "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13) (Arch Linux rust 1:1.99.1-1)",
   "sources": {
     "Cargo.lock": "f53596aedd4acb69d061e334e95f63e8850b430814e4eb61733c2c8bb8ef1f98",
-    "Cargo.toml": "71e521951d408540a9d08d1a31ce9ec365fb0bdbd9eb997dcb3e68d94309cafc",
-    "golden": "62d9a49c79207fd11d2a2134213e0c5af8ff8b2d5ab4bbf248326140a93d050c",
+    "Cargo.toml": "2089495ab01f831e46509867b67e9085cfd90543881ca0a2ac8a93a94b2befc4",
+    "golden": "46c6585c755f9c5a47407c67b3e7ca54deb5279200b2d5c63b36a6e84101db92",
     "java/baritone/api/BaritoneAPI.java": "affc3cc06cd042b7bf8b4e8b018a031277da9f37329ebc82bb6e2f5efcacf728",
-    "java/baritone/pathing/movement/SpikeGoldenDump.java": "fdbb5800ede5b110afe31dfd109cc1dbf3cedb0d1b2e15d97cdcc34e7e524d67",
+    "java/baritone/pathing/movement/SpikeGoldenDump.java": "22f634daf1745b0e34266ab1f4c82c9b376b468480c4d946e7abcc340643fe12",
     "mod/engine/Cargo.toml": "c29c04225e73370e6731b327bfae471b62adc9bdd6e94995eece84e4f16052c4",
     "mod/engine/src/blocks.rs": "bdd0d28a43f28abbb77d1298cfa64f1c7bd3a632d6e31726857a81c1408eb774",
     "mod/engine/src/config.rs": "6e7be65e7fe5f002e3357d1ee6ea9b05366cfe7b357ce37d07fd33267c134629",

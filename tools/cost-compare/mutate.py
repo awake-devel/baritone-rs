@@ -5,7 +5,8 @@ Usage: mutate.py REPO GOLDEN_FILE ["name|name|..."]    run the mutations (all, o
        mutate.py REPO --where                          list where each pattern matches, without building anything
 
 The workspace parts the comparison needs (root Cargo.toml and Cargo.lock, rustfmt.toml, mod/engine, tools/cost-compare)
-are copied into a temporary directory; the repository is never touched. A mutation is CAUGHT when any family's
+are copied into a temporary directory, once per worker; the repository is never touched. BARITONE_MUTATE_JOBS sets the number
+of workers (default: half of the threads, or 2 while a game or another build is running). A mutation is CAUGHT when any family's
 WRONG or close count differs from the unmutated run, or when the comparison aborts or runs over RUN_TIMEOUT seconds
 (the unmutated one exits 0 in under a minute), MISSED otherwise, and 'not applied' when its pattern is not in the file or
 the mutant does not build. Patterns must occur exactly once in their file (--where marks the ones that do not). gate.py reads the CAUGHT, MISSED and 'not applied' lines.
@@ -14,11 +15,14 @@ Each mutation is (file, pattern, replacement, name): the first occurrence of the
 repository) is replaced. Patterns match source text exactly, which is why rustfmt.toml sets a very wide max_width.
 """
 import os
+import queue
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 
 E = "mod/engine/src/"
 HELPER = E + "movement/helper.rs"
@@ -907,6 +911,69 @@ def low_priority():
     return any(subprocess.run(["pgrep", "-x", p], capture_output=True).returncode == 0 for p in ("horizon-client", "rustc"))
 
 
+def default_jobs():
+    """Half of the threads: the comparison reads a large file, and the laptop stays usable."""
+    return max(1, (os.cpu_count() or 2) // 2)
+
+
+def baseline_failed(why):
+    print("baseline run failed:", why)
+    print("\n0 caught, 0 missed, 1 not applied")
+    print("missed: []")
+    print("not applied:", ["baseline (" + why + ")"])
+    return 1
+
+
+class Worker:
+    """One copy of the workspace with its own target folder, so that workers never see each other's errors."""
+
+    def __init__(self, repo, gold, root, low):
+        self.gold = gold
+        self.ws = os.path.join(root, "ws")
+        for rel in COPIED:
+            src, dst = os.path.join(repo, rel), os.path.join(self.ws, rel)
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            if os.path.isdir(src):
+                shutil.copytree(src, dst, ignore=shutil.ignore_patterns("target"))
+            else:
+                shutil.copyfile(src, dst)
+        self.env = dict(os.environ, CARGO_TARGET_DIR=os.path.join(root, "target"), CARGO_BUILD_JOBS="2")
+        self.prefix = ["nice", "-n", "15"] if low else []
+        self.exe = os.path.join(root, "target", "release", "cost-compare")
+
+    def build_and_run(self):
+        c = subprocess.run(self.prefix + ["cargo", "build", "--release", "--quiet", "-p", "cost-compare"], cwd=self.ws, env=self.env, capture_output=True, text=True)
+        if c.returncode:
+            return None, "no build: " + c.stderr[:200]
+        try:
+            r = subprocess.run(self.prefix + [self.exe, self.gold, "quiet"], capture_output=True, text=True, timeout=RUN_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            # an error that makes the engine loop (a goal's search box turned huge) is noticed too
+            return ABORTED, "comparison timed out"
+        if r.returncode == -signal.SIGKILL:
+            # The machine killed it, most likely for memory. That says nothing about the error, so it must not count as caught.
+            return None, "killed from outside"
+        if r.returncode:
+            # the unmutated run exits 0, so an abort (a failed assertion on the move table, a parse error) is the comparison noticing the error
+            return ABORTED, "comparison aborted: " + (r.stdout + r.stderr)[-200:]
+        return counts(r.stdout), ""
+
+    def try_mutation(self, mutation):
+        file, a, b, _ = mutation
+        path = os.path.join(self.ws, file)
+        with open(path, encoding="utf-8") as f:
+            orig = f.read()
+        if orig.count(a) < 1:
+            return None, ""
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(orig.replace(a, b, 1))
+        try:
+            return self.build_and_run()
+        finally:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(orig)
+
+
 def main():
     repo = os.path.abspath(sys.argv[1])
     if len(sys.argv) > 2 and sys.argv[2] == "--where":
@@ -917,73 +984,48 @@ def main():
     if len(sys.argv) > 3:
         keep = set(sys.argv[3].split("|"))
         mutations = [m for m in M if m[3] in keep]
+    low = low_priority()
+    jobs = int(os.environ.get("BARITONE_MUTATE_JOBS") or (2 if low else default_jobs()))
     root = tempfile.mkdtemp(prefix="cost-compare-")
-    ws = os.path.join(root, "ws")
-    for rel in COPIED:
-        src, dst = os.path.join(repo, rel), os.path.join(ws, rel)
-        os.makedirs(os.path.dirname(dst), exist_ok=True)
-        if os.path.isdir(src):
-            shutil.copytree(src, dst, ignore=shutil.ignore_patterns("target"))
-        else:
-            shutil.copyfile(src, dst)
-    env = dict(os.environ, CARGO_TARGET_DIR=os.path.join(root, "target"))
-    prefix = []
-    if low_priority():
-        prefix = ["nice", "-n", "15"]
-        env["CARGO_BUILD_JOBS"] = "4"
-    exe = os.path.join(root, "target", "release", "cost-compare")
+    try:
+        with ThreadPoolExecutor(jobs) as pool:
+            workers = list(pool.map(lambda i: Worker(repo, gold, os.path.join(root, str(i)), low), range(jobs)))
+            baselines = list(pool.map(lambda w: w.build_and_run(), workers))
+            for base, why in baselines:
+                if base is None or base is ABORTED:
+                    return baseline_failed(why)
+            if any(b[0] != baselines[0][0] for b in baselines):
+                return baseline_failed("the workers disagree on the unmutated run")
+            base = baselines[0][0]
+            print(f"baseline: wrong={sum(w for _, w in base.values())} close={sum(c for c, _ in base.values())} ({len(base)} families), {jobs} workers", flush=True)
+            free = queue.SimpleQueue()
+            for w in workers:
+                free.put(w)
 
-    def build_and_run():
-        c = subprocess.run(prefix + ["cargo", "build", "--release", "--quiet", "-p", "cost-compare"], cwd=ws, env=env, capture_output=True, text=True)
-        if c.returncode:
-            return None, "no build: " + c.stderr[:200]
-        try:
-            r = subprocess.run(prefix + [exe, gold, "quiet"], capture_output=True, text=True, timeout=RUN_TIMEOUT)
-        except subprocess.TimeoutExpired:
-            # an error that makes the engine loop (a goal's search box turned huge) is noticed too
-            return ABORTED, "comparison timed out"
-        if r.returncode:
-            # the unmutated run exits 0, so an abort (a failed assertion on the move table, a parse error) is the comparison noticing the error
-            return ABORTED, "comparison aborted: " + (r.stdout + r.stderr)[-200:]
-        return counts(r.stdout), ""
+            def one(mutation):
+                w = free.get()
+                try:
+                    return w.try_mutation(mutation)
+                finally:
+                    free.put(w)
 
-    base, why = build_and_run()
-    if base is None:
-        print("baseline run failed:", why)
-        print("\n0 caught, 0 missed, 1 not applied")
-        print("missed: []")
-        print("not applied:", ["baseline (" + why + ")"])
+            caught, missed, bad = [], [], []
+            # map() gives the results in the list's order, so the output does not depend on the number of workers.
+            for (file, a, b, name), (got, why) in zip(mutations, pool.map(one, mutations)):
+                if got is None:
+                    bad.append(name + (" (" + why + ")" if why else ""))
+                    continue
+                if got is ABORTED:
+                    print(f"CAUGHT  wrong={0:6d} close={0:6d} {name}", flush=True)
+                    caught.append(name)
+                    continue
+                differs = got != base
+                wrong = sum(w for _, w in got.values())
+                close = sum(c for c, _ in got.values())
+                print(f"{'CAUGHT ' if differs else 'MISSED '} wrong={wrong:6d} close={close:6d} {name}", flush=True)
+                (caught if differs else missed).append(name)
+    finally:
         shutil.rmtree(root, ignore_errors=True)
-        return 1
-    print(f"baseline: wrong={sum(w for _, w in base.values())} close={sum(c for c, _ in base.values())} ({len(base)} families)", flush=True)
-    caught, missed, bad = [], [], []
-    for file, a, b, name in mutations:
-        path = os.path.join(ws, file)
-        with open(path, encoding="utf-8") as f:
-            orig = f.read()
-        if orig.count(a) < 1:
-            bad.append(name)
-            continue
-        with open(path, "w", encoding="utf-8") as f:
-            f.write(orig.replace(a, b, 1))
-        try:
-            got, why = build_and_run()
-        finally:
-            with open(path, "w", encoding="utf-8") as f:
-                f.write(orig)
-        if got is None:
-            bad.append(name + " (" + why + ")")
-            continue
-        if got is ABORTED:
-            print(f"CAUGHT  wrong={0:6d} close={0:6d} {name}", flush=True)
-            caught.append(name)
-            continue
-        differs = got != base
-        wrong = sum(w for _, w in got.values())
-        close = sum(c for c, _ in got.values())
-        print(f"{'CAUGHT ' if differs else 'MISSED '} wrong={wrong:6d} close={close:6d} {name}", flush=True)
-        (caught if differs else missed).append(name)
-    shutil.rmtree(root, ignore_errors=True)
     print(f"\n{len(caught)} caught, {len(missed)} missed, {len(bad)} not applied")
     print("missed:", missed)
     print("not applied:", bad)

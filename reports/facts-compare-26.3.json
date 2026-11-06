@@ -1,0 +1,26 @@
+{
+ "exports": {
+  "block-behaviours.json": "254d3ad616782a145ae7fe73040e51a476c7c48f98b88d1e0451ad99c466cd39",
+  "block-tags.json": "5e1301e5a9abf7e4de93af5dae3a157e852dbdb4ea345c2eb626305a605d4f98",
+  "facts.json": "1d24883ee807b0b71473f0bbf8ed548ddaf712148caeb3fcc7aa13ab973a97b0",
+  "gameplay-facts.json": "dc5b038007a46acbed8d93dbb8578a67d67a9bad56376af997d5d315076285cd",
+  "mob-data.json": "23fe8263fa109b4080effaecb44a518d0a539f1416955ed00f2b7c23e48c3724"
+ },
+ "horizon_commit": "66f3981f522b24c250b21523a70080965b940424",
+ "injected_errors": "103 errors: 97 caught, 6 missed (0 unlisted), 0 did not build",
+ "inputs": "f55a713367cfca2ef290e570ad4a9065b21ce90e08f68bb9fa84ce8ca39937ad",
+ "minecraft_version": "26.3",
+ "results": {
+  "different": 0,
+  "explained": 0,
+  "explained_changing_an_answer": 0,
+  "facts_compared": 1786150,
+  "facts_equal": 1786150,
+  "identity_problems": 0,
+  "states": 35723,
+  "unexplained": 0
+ },
+ "tool": "facts-compare",
+ "upstream_commit": "25111daedf1d59e6a8dfb5a3e61885cdb8d953df",
+ "version_changes": null
+}

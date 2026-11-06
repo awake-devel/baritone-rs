@@ -1123,13 +1123,14 @@ public class SpikeGoldenDump {
     static final int MODES_GOALS = 11;
 
     // ------------------------------------------------------------------------------------------------------------
-    // Block tags: a bare Bootstrap binds none, so tools would see no mining rules.
+    // Tags: a bare Bootstrap binds none, so tools would see no mining rules and LiquidBlock.isPathfindable (which asks
+    // the fluid tags) would call lava pathfindable.
     // ------------------------------------------------------------------------------------------------------------
 
-    static int bindBlockTags() throws Exception {
+    static <T> int bindTags(net.minecraft.core.Registry<T> registry, net.minecraft.resources.ResourceKey<? extends net.minecraft.core.Registry<T>> key, String folder) throws Exception {
         Path jar = Path.of(Bootstrap.class.getProtectionDomain().getCodeSource().getLocation().toURI());
         Map<String, List<String>> raw = new LinkedHashMap<>();
-        String prefix = "data/minecraft/tags/block/";
+        String prefix = "data/minecraft/tags/" + folder + "/";
         try (ZipFile z = new ZipFile(jar.toFile())) {
             for (java.util.Enumeration<? extends ZipEntry> e = z.entries(); e.hasMoreElements(); ) {
                 ZipEntry en = e.nextElement();
@@ -1144,25 +1145,25 @@ public class SpikeGoldenDump {
                 raw.put(id, vals);
             }
         }
-        if (raw.isEmpty()) throw new IllegalStateException("no block tags found in " + jar);
-        Map<TagKey<Block>, List<Holder<Block>>> bound = new HashMap<>();
+        if (raw.isEmpty()) throw new IllegalStateException("no " + folder + " tags found in " + jar);
+        Map<TagKey<T>, List<Holder<T>>> bound = new HashMap<>();
         for (String id : raw.keySet()) {
-            List<Holder<Block>> out = new ArrayList<>();
-            expand(id, raw, out, new java.util.HashSet<>());
-            bound.put(TagKey.create(Registries.BLOCK, ResourceLocation.withDefaultNamespace(id)), out);
+            List<Holder<T>> out = new ArrayList<>();
+            expand(registry, id, raw, out, new java.util.HashSet<>());
+            bound.put(TagKey.create(key, ResourceLocation.withDefaultNamespace(id)), out);
         }
-        var pending = BuiltInRegistries.BLOCK.prepareTagReload(new TagLoader.LoadResult<>(Registries.BLOCK, bound));
+        var pending = registry.prepareTagReload(new TagLoader.LoadResult<>(key, bound));
         pending.apply();
         return pending.size();
     }
 
-    static void expand(String id, Map<String, List<String>> raw, List<Holder<Block>> out, java.util.Set<String> seen) {
+    static <T> void expand(net.minecraft.core.Registry<T> registry, String id, Map<String, List<String>> raw, List<Holder<T>> out, java.util.Set<String> seen) {
         if (!seen.add(id)) return;
         for (String v : raw.getOrDefault(id, List.of())) {
             if (v.startsWith("#")) {
-                expand(v.substring(1).replace("minecraft:", ""), raw, out, seen);
+                expand(registry, v.substring(1).replace("minecraft:", ""), raw, out, seen);
             } else {
-                BuiltInRegistries.BLOCK.get(ResourceLocation.parse(v)).ifPresent(h -> {
+                registry.get(ResourceLocation.parse(v)).ifPresent(h -> {
                     if (!out.contains(h)) out.add(h);
                 });
             }
@@ -1194,7 +1195,8 @@ public class SpikeGoldenDump {
 
     @Test
     public void dump() throws Exception {
-        System.out.println("bound block tags: " + bindBlockTags());
+        System.out.println("bound block tags: " + bindTags(BuiltInRegistries.BLOCK, Registries.BLOCK, "block"));
+        System.out.println("bound fluid tags: " + bindTags(BuiltInRegistries.FLUID, Registries.FLUID, "fluid"));
         Settings s = Baritone.settings();
         s.considerPotionEffects.value = false;
         air = Blocks.AIR.defaultBlockState();

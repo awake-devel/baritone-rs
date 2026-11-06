@@ -80,9 +80,9 @@ native_tick  read player and hotbar
 - **World:** chunks are `Arc<Chunk>` holding `Arc<Section>` with copy on write, and the mesher already reads them from
   another thread. A search owns its clones, so it needs no locks. That the types are `Send` and `Sync` is inferred. The
   cost of copy on write under block updates is not measured.
-- **Blocks:** the engine sees state ids and a table indexed by them. The glue builds it from Horizon's `StateFacts`
-  on the game thread, and it's shared read-only. `isPathfindable` appears to come from `StateData.flags & LAND`, not from
-  `StateFacts`; S2 has to check that.
+- **Blocks:** the engine sees state ids and a table indexed by them. `mod/glue/state_facts.rs` builds it from Horizon's block
+  data on the game thread, and it's shared read-only. `tools/facts-compare` compiles the same file and checks every field
+  for every state. `isPathfindable` comes from `mob-data.json`, which Horizon exports from Java: `StateData.flags & LAND`.
 - **Settings:** a search gets one immutable snapshot and reads nothing global.
 - **Worker:** one thread, with new jobs replacing waiting ones. Results carry a generation number, so a stale result is
   dropped. A search has a node cap as well as a time limit.
@@ -106,7 +106,7 @@ Read at Nightly 2026-11-05, revision `66f3981` (`NATIVE_HOOKS_API` 411). `tools/
 | Sprinting | `PlayerMotion::set_sprinting`. `keys.sprint` comes from the keyboard and needs `Screen::Playing`, and `run_sprint_tick` may undo a direct set, so this needs checking again | Pinned. Tested by `tools/walk-test` at `4aa6854` only |
 | Breaking, placing, slot | Through `game.left` and `tick_mining`, `game.right` and `use_item_as_player`, `game.selected`. Not one stable hook | Pinned. Not tested |
 | Tool speed | `destroy_progress` and `block_break_speed`. Neither is public to a mod, so the glue needs its own access | Pinned. Not tested |
-| `isPathfindable` | `StateData.flags & LAND`, in `mobs/data.rs`. Not in `StateFacts`. S2 has to check it against Java | Pinned |
+| `isPathfindable` | `StateData.flags & LAND`, in `mobs/data.rs`. Matches Java on every state. If `mob-data.json` is missing, Horizon falls back to guesses, so the mod has to refuse to path then | Pinned |
 | `#goto` in chat | No client hook sees plain chat, so this needs a pinned `HEAD` on `handle_chat_input` | Pinned. Later |
 
 A bundle that touches one private field has to pin `horizon_revision`, even if its other hooks are stable, so the mod stays pinned. Using the stable hooks where they exist still keeps the part that needs rebasing small.
@@ -142,7 +142,6 @@ Building the mod takes 2 to 5 minutes on this laptop, so most work should need n
 
 | Risk | Consequence | Found out at |
 |---|---|---|
-| `StateFacts` doesn't cover what the rules need | The predicate layer costs much more | S2 |
 | The input hook fails, or servers reject the input pattern | The executor and glue change, the engine doesn't | S4, S5 |
 | Snapshots cost too much under block updates | A copied window replaces them, in the world layer only | S4 |
 | Horizon's private fields change often | More rebasing work, kept to the glue | Each rebase |

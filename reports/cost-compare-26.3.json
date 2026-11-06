@@ -1,0 +1,211 @@
+{
+  "grids": 10000,
+  "java": "openjdk version \"25.0.5\" 2026-10-20 LTS",
+  "minecraft_version": "26.3",
+  "note": "engine follows 1.21.4's rules; WRONG counts are the two branches' own differences, see docs/deviations.md",
+  "port": "26.3",
+  "results": {
+    "ascend": {
+      "close": 0,
+      "distinct": 1544,
+      "evals": 640000,
+      "exact": 638866,
+      "finite": 117653,
+      "wrong": 1134
+    },
+    "descend": {
+      "close": 0,
+      "distinct": 1079,
+      "evals": 640000,
+      "exact": 638772,
+      "finite": 84523,
+      "wrong": 1228
+    },
+    "diagonal": {
+      "close": 0,
+      "distinct": 37,
+      "evals": 640000,
+      "exact": 635599,
+      "finite": 29765,
+      "wrong": 4401
+    },
+    "downward": {
+      "close": 0,
+      "distinct": 53,
+      "evals": 160000,
+      "exact": 158863,
+      "finite": 20348,
+      "wrong": 1137
+    },
+    "fall_table": {
+      "close": 0,
+      "distinct": 4098,
+      "evals": 4098,
+      "exact": 4098,
+      "finite": 4098,
+      "wrong": 0
+    },
+    "goal_axis": {
+      "close": 0,
+      "distinct": 18480,
+      "evals": 130000,
+      "exact": 130000,
+      "finite": 74095,
+      "wrong": 0
+    },
+    "goal_block": {
+      "close": 0,
+      "distinct": 30122,
+      "evals": 130000,
+      "exact": 130000,
+      "finite": 80057,
+      "wrong": 0
+    },
+    "goal_composite": {
+      "close": 1,
+      "distinct": 33653,
+      "evals": 128906,
+      "exact": 128904,
+      "finite": 74735,
+      "wrong": 1
+    },
+    "goal_gettoblock": {
+      "close": 0,
+      "distinct": 30104,
+      "evals": 130000,
+      "exact": 130000,
+      "finite": 93374,
+      "wrong": 0
+    },
+    "goal_inverted": {
+      "close": 0,
+      "distinct": 30365,
+      "evals": 129394,
+      "exact": 129394,
+      "finite": 59316,
+      "wrong": 0
+    },
+    "goal_near": {
+      "close": 0,
+      "distinct": 30124,
+      "evals": 127550,
+      "exact": 127550,
+      "finite": 96559,
+      "wrong": 0
+    },
+    "goal_runaway": {
+      "close": 20,
+      "distinct": 41453,
+      "evals": 127982,
+      "exact": 127948,
+      "finite": 75161,
+      "wrong": 14
+    },
+    "goal_strict": {
+      "close": 0,
+      "distinct": 25516,
+      "evals": 130000,
+      "exact": 130000,
+      "finite": 60000,
+      "wrong": 0
+    },
+    "goal_twoblocks": {
+      "close": 0,
+      "distinct": 30107,
+      "evals": 130000,
+      "exact": 130000,
+      "finite": 80101,
+      "wrong": 0
+    },
+    "goal_xz": {
+      "close": 0,
+      "distinct": 27921,
+      "evals": 130000,
+      "exact": 130000,
+      "finite": 80398,
+      "wrong": 0
+    },
+    "goal_ylevel": {
+      "close": 0,
+      "distinct": 10306,
+      "evals": 130000,
+      "exact": 130000,
+      "finite": 83144,
+      "wrong": 0
+    },
+    "parkour": {
+      "close": 0,
+      "distinct": 16,
+      "evals": 640000,
+      "exact": 639677,
+      "finite": 20924,
+      "wrong": 323
+    },
+    "pillar": {
+      "close": 0,
+      "distinct": 314,
+      "evals": 160000,
+      "exact": 159601,
+      "finite": 88880,
+      "wrong": 399
+    },
+    "predicates": {
+      "close": 0,
+      "distinct": 188,
+      "evals": 16640000,
+      "exact": 16629819,
+      "finite": 8142916,
+      "wrong": 10181
+    },
+    "states": {
+      "close": 0,
+      "distinct": 3,
+      "evals": 928798,
+      "exact": 928212,
+      "finite": 178438,
+      "wrong": 586
+    },
+    "traverse": {
+      "close": 0,
+      "distinct": 1608,
+      "evals": 640000,
+      "exact": 637076,
+      "finite": 304633,
+      "wrong": 2924
+    }
+  },
+  "rustc": "rustc 1.99.1 (58cf8f9c3 2026-10-13) (Arch Linux rust 1:1.99.1-1)",
+  "sources": {
+    "Cargo.lock": "f53596aedd4acb69d061e334e95f63e8850b430814e4eb61733c2c8bb8ef1f98",
+    "Cargo.toml": "2089495ab01f831e46509867b67e9085cfd90543881ca0a2ac8a93a94b2befc4",
+    "golden": "4182a1077b50e942b10aaa1b490407079aa901760e0cb9da9876b3570612366f",
+    "java/baritone/api/BaritoneAPI.java": "affc3cc06cd042b7bf8b4e8b018a031277da9f37329ebc82bb6e2f5efcacf728",
+    "java/baritone/pathing/movement/SpikeGoldenDump.java": "22f634daf1745b0e34266ab1f4c82c9b376b468480c4d946e7abcc340643fe12",
+    "mod/engine/Cargo.toml": "c29c04225e73370e6731b327bfae471b62adc9bdd6e94995eece84e4f16052c4",
+    "mod/engine/src/blocks.rs": "bdd0d28a43f28abbb77d1298cfa64f1c7bd3a632d6e31726857a81c1408eb774",
+    "mod/engine/src/config.rs": "6e7be65e7fe5f002e3357d1ee6ea9b05366cfe7b357ce37d07fd33267c134629",
+    "mod/engine/src/costs.rs": "682b5c7c9bc9a92cebc365e5caa60e2ed5fb734e908b9dcf8c5ca91ff23f1fc0",
+    "mod/engine/src/goals.rs": "02d656ce9b8f69b047e3d72db8f28bd49f889995de79361b069a485b031ef771",
+    "mod/engine/src/lib.rs": "fd59fe79869f1d4b5a615e965941387fb721fbbf671e6b2620677c9932069a3e",
+    "mod/engine/src/movement/ascend.rs": "f8312eab03ad720bd1bdf5456aebba64db5e9c4459756060c0afa90e96edb90d",
+    "mod/engine/src/movement/descend.rs": "7fc3564d719d650c94824eed8ccbadae16c18dee6d53e1d4eb1498e6ec6b0b16",
+    "mod/engine/src/movement/diagonal.rs": "6131aae5824f8e17dfe2b2f1e83a1d0b0b770eda35fb3feb92ead6f948eefd5c",
+    "mod/engine/src/movement/downward.rs": "7a7c1277456862f456b9e3fccd495435076d6624339c2a39dff1e3579dda1e6c",
+    "mod/engine/src/movement/helper.rs": "9114f0170e347eee45dedad10afb85f959df33712595d025e59395afba0d727f",
+    "mod/engine/src/movement/mod.rs": "036d79b6a626d65ff0cdf5c91ac14f0201160af9464672d4533c50c0288fa9c9",
+    "mod/engine/src/movement/moves.rs": "88e85c82d4b389e3f0668e95cab9c6cd5a7d30aa4734dced8cd0a501760b675d",
+    "mod/engine/src/movement/parkour.rs": "4876dfad79156469a3030c14567172c7e78ce5fc35f16c0d542eeb65fa187e3a",
+    "mod/engine/src/movement/pillar.rs": "4bdf43bae7d583298f4c788e157512937e232612b3972aa1b879b279ebf13ef7",
+    "mod/engine/src/movement/traverse.rs": "50938a5ab3b67a4d4eb05fa1efd6ebf85ea52e41a691d9dd94a978477badb8f3",
+    "mod/engine/src/world.rs": "96287504c726fbf6d874b4f8c7e914364224f789185ae2bb9e43998372158993",
+    "port/port-26.3/baritone/pathing/movement/Compat263.java": "b8d11feb74dc39936769f4703f107199bf35cf9eb6b3567f0de62ade59d4d839",
+    "port/port_26_3.py": "c344a4fca14d81314ff431538099acc415cfba23bcb32c368ae551cabfa68bdb",
+    "port/rules-26.3.patch": "291a2d54ed6bd90baeadbe9d3e27b7ae3f9bcda8c66660b90c3241b1af2c9e1f",
+    "rustfmt.toml": "41950bc860c26e3534456bc5dd2150497ab1e45076e577bca6fbc96325c165c0",
+    "tools/cost-compare/Cargo.toml": "3b7c1435a9ce93b2735bfcaa1e0f99a65937901e0336cb498d582f9f6f65a087",
+    "tools/cost-compare/src/main.rs": "0fd2fe13d16181dfbccbc08ef1db0287f9a848bb09df748463aa1a63f6ee2e60"
+  },
+  "tool": "cost-compare",
+  "upstream_branch": "26.3",
+  "upstream_commit": "25111daedf1d59e6a8dfb5a3e61885cdb8d953df"
+}

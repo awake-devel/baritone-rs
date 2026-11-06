@@ -32,9 +32,9 @@ Each level answers a different question. Passing one says nothing about the next
 | **L3 Scenarios** | Does the player actually get there in Horizon? | Fixed worlds played in the client, with pass criteria | Yes |
 | **L4 Servers** | Does it hold on a real server? | Allowed servers only, reported per server | Yes |
 
-- **L0** exists for two functions: [`tools/cost-compare`](../tools/README.md).
-- **L1** does not exist. Today's tool gets its facts from Java, so nothing yet shows that Horizon's data gives the same
-  answers. This is the largest gap between what has been tested and what will run.
+- **L0** covers the seven movement costs, the predicates and the goals: [`tools/cost-compare`](../tools/README.md).
+- **L1** covers every block state of `26.3`: [`tools/facts-compare`](../tools/README.md). It compares the table the mod would
+  build from Horizon's data with what Java says.
 - **L2** needs a node cap in place of upstream's time limits, which would otherwise make runs differ.
 - **L3** exists as a first step: [`tools/walk-test`](../tools/README.md) drives a fixed course. A scenario checks arrival,
   time and blocks changed. It does not claim tick-for-tick equality with Java Minecraft, because nothing compares them
@@ -54,8 +54,8 @@ Rules come from upstream's `1.21.4` branch, which has the fixes. Horizon is Mine
 Comparisons therefore run against both when a rule depends on game data:
 
 - **`1.21.4` (JDK 21):** the source of the rules.
-- **`26.3` (JDK 25):** upstream on the same game as Horizon, and the reference for L1. It has run once, with its own copy
-  of the harness (`tools/cost-compare/java-26.3`). See [Deviations](deviations.md#where-upstreams-two-branches-disagree).
+- **`26.3` (JDK 25):** upstream on the same game as Horizon, and the reference for L1. The harness is made from the `1.21.4`
+  source at run time (`tools/cost-compare/port_26_3.py`). See [Deviations](deviations.md#where-upstreams-two-branches-disagree).
 
 Where the two disagree, the disagreement gets a deviation entry that says which one we follow.
 
@@ -136,22 +136,24 @@ The exposure is small in the pathing, behavior and pathing API code: `Math.pow` 
 2. `cargo fmt --check`, then `cargo clippy -D warnings`.
 3. Unit tests. These include small hand-written fixtures with no Minecraft data, so they can run anywhere.
 4. Ledger check.
-5. The comparisons whose inputs changed, at low priority if another build or game is running.
+5. The comparisons whose inputs changed, at low priority if another build or game is running: Horizon's facts, the rules on
+   `26.3` (every difference must be explained by `rules-26.3.patch`), and the rules on `1.21.4`.
 6. For a new or changed comparison: three identical runs, and the injected errors.
 
 Injected errors that go uncaught must each be classified, as either a real hole in the test or an error with no possible
 effect. A hole stays listed until it is closed.
 
-Known holes today: twelve mutations remain listed as holes in `tools/cost-compare/known-missed.txt`.
+Known holes today: five mutations remain listed as holes in `tools/cost-compare/known-missed.txt`.
 
-- The six `normal cube: drop ...` exclusions and `exclusions ignored`: the golden facts read the collision shape with a
-  null level, where bamboo, moving pistons, scaffolding, shulker boxes, pointed dripstone and amethyst clusters throw and
-  count as not full. No state of those classes is ever "full", so the `instanceof` exclusion upstream cannot be seen.
 - `diagonal: a/b low mining with falling`: needs an instantly breakable block that is not walkable at a corner's feet, a
   falling block over it, and `breakPenalty` 0 (config 10), all at once.
 - `goals: strict direction without step allowed` and `goals: run away from nothing allowed`: upstream throws in the
   constructor, which a golden file cannot record. The unit tests in `goals.rs` cover them; `mutate.py` does not run unit tests.
 - `goals: inside strictly below outside`: needs an inside and an outside cell with bit-equal heuristics.
+
+The seven `normal cube` entries were holes until S2. They are now listed as no effect: no state of the six excluded classes
+has `shape_full`, in Java or in the table built from Horizon, and `facts-compare` holds that for every state. A shulker box
+is full over Horizon's empty level, which is why the table reads `shape_full` as false for blocks with a dynamic shape.
 
 Two were closed in S0: tool choice (the harness now binds the vanilla block tags, so a pickaxe and an empty hand differ)
 and the open top trapdoor (added to the block list, also waterlogged, and to the fluid-heavy grids).
@@ -170,8 +172,8 @@ lines, a world border per grid (`W` lines, so placing meets the border), configu
 sprint, with and without walking on water, magma, both diagonals), clean-diagonal, pond, door-above and falling-stack
 scenarios, waterlogged take-off blocks, and fractional `GoalRunAway` distances.
 
-The remaining 63 are listed with a reason in `known-missed.txt`: 51 "no effect" (each with the code or sweep fact that
-makes the error unobservable) and 12 holes (above).
+The remaining 63 are listed with a reason in `known-missed.txt`: 58 "no effect" (each with the code or sweep fact that
+makes the error unobservable) and 5 holes (above).
 
 The eight errors that were missed on `MovementTraverse` and `MovementDescend` alone were tried again with the other
 movements and the stronger grids:
@@ -196,8 +198,7 @@ configurations, and the registry sweep covers all 27,866 states under 2 configur
 Limits of this result:
 
 - It is L0. The block facts come from Java `1.21.4`, not from Horizon. S2 tests those.
-- The holes above stay open, and `normal cube` matters most for S2, because Horizon's shape fact may say "full" where
-  Java's null-level shape throws.
+- Twelve injected errors were listed as holes at the time. S2 settled seven of them, and the other five stay open.
 - State flags come from the harness. The glue that will set them on Horizon doesn't exist yet.
 - `GoalThreeBlocks` is not ported (`later`), because it belongs to `MineProcess`.
 
@@ -209,6 +210,55 @@ unreachable) was fixed.
 
 This doesn't give a calendar for the rest. S1 was direct translation with an exact oracle, and S3 to S5 are largely
 rewrites, with no such oracle from S4 on.
+
+### S2 result
+
+The gate passed at Horizon Nightly `66f3981`, upstream `26.3` commit `25111da` and upstream `1.21.4` commit `1b8e87c`.
+
+**Horizon's facts against Java's (L1).** All 1,786,150 facts of all 35,723 block states of `26.3` are equal, and each state's
+id, name and properties match. No exception is listed. The table comes from `mod/glue/state_facts.rs`, which the mod will
+use. Of 103 errors injected into that file, 97 are caught, and the other 6 cannot show in vanilla's data (the reasons are in
+`tools/facts-compare/mutate.py`).
+
+Two things turned up on the way:
+
+- A bare `Bootstrap` binds no fluid tags, so the harness said that lava is pathfindable. Both harnesses now bind them. No
+  engine answer changed, and the `1.21.4` comparison stayed at 0 wrong.
+- Over Horizon's empty level a shulker box is full, while upstream's null level throws and counts it as not full. The table
+  reads `shape_full` as false for every block with a dynamic shape, which is exactly the set that throws, plus scaffolding
+  and powder snow, which are not full anyway.
+
+**Where the facts come from.** Horizon exports them from Java 26.3 when a version is prepared: `gameplay-facts.json`,
+`block-behaviours.json`, `block-tags.json` and `mob-data.json`, which holds `isPathfindable`. The three versions checked
+(Nightly 2026-11-01, Nightly 2026-11-05 and the test build) have identical exports. If `mob-data.json` is missing or has the
+wrong length, `MobData` falls back to guesses, so the mod has to refuse to path in that case.
+
+**Between the game versions.** All facts of the 27,848 states that both versions share are equal. `chain` is gone (18 states)
+and `iron_chain` appears, and 192 blocks are new in `26.3`. This list comes from one run of `run_facts.py --versions-against`,
+which the gate does not repeat.
+
+**The new blocks.** No rule was tuned on them. The rules treat them as upstream's `26.3` does, and the registry sweep on `26.3`
+covers them. The ones the rules let a player walk through are plants, torches, buttons, a pressure plate and openable
+doors and gates, and `sulfur_spike` is not passable. Some are refused as a floor although a player could stand on them,
+such as copper chests and shelves, so paths avoid them. This was read from the sweep's groups, not played.
+
+**The rules on `26.3`.** With the engine as it is, 22,349 of 22,516,728 results differ from upstream's `26.3`. With
+`tools/cost-compare/rules-26.3.patch` applied to a scratch copy, none do, and the gate holds that. So the two branches' rule
+differences explain all of them on these worlds. The rules are listed in [deviations.md](deviations.md#where-upstreams-two-branches-disagree).
+The `26.3` run has no injected errors and no repeat runs of its own.
+
+Limits of this result:
+
+- It tests our mapping and Horizon's loaders against Java. It says nothing about how Horizon behaves in play, such as its
+  physics or its server's rules. L3 and L4 test those.
+- Facts are read over an empty level, so a shape that depends on neighbours or a block entity is only checked there.
+- Tool strength is checked for a diamond pickaxe and an empty hand, without enchantments.
+- `MobData` is not compiled in the tool, which reads the same column of `mob-data.json` itself.
+- The walk test still has not been played on `66f3981`.
+
+Measured effort for S2: about 3.5 hours of work, plus a pause. One Sonnet agent ported the harness (15 minutes, 275,000
+tokens), and most of the waiting was on the injected errors. Running them on 6 workers took about 39 minutes against 104
+one at a time, so 2.7 times faster, with the same counts. A hard-killed run now counts as not applied rather than caught.
 
 ## Reports
 
@@ -258,8 +308,6 @@ top of them.
 
 ## Open questions
 
-- Whether upstream's `26.3` branch runs in the comparison, and whether vanilla tags can be loaded without a running game.
-- Where `isPathfindable` comes from in Horizon. A trait declaration was found, not its implementation.
 - Whether the checks in `tools/gate.py` should later also run on public CI. Without Minecraft there, CI could only run
   steps 1 to 4.
 - Whether Horizon's pinned revision stays at `4aa6854`, or moves to one with `native_movement_input`.
