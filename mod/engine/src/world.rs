@@ -6,6 +6,11 @@ pub trait WorldView {
     fn state_id(&self, x: i32, y: i32, z: i32) -> usize;
     /// `BlockStateInterface.worldContainsLoadedChunk`: whether the live world has this column loaded.
     fn contains_loaded_chunk(&self, x: i32, z: i32) -> bool;
+    /// `CalculationContext.isLoaded`: whether the column is loaded or held by the cache, as the search asks it.
+    /// `BlockStateInterface.isLoaded`: the glue answers with its cache. The default is the live check alone, which is what a world without a cache means.
+    fn is_loaded(&self, x: i32, z: i32) -> bool {
+        self.contains_loaded_chunk(x, z)
+    }
     /// The lowest Y of the world.
     fn min_y(&self) -> i32;
     /// The world's height in blocks.

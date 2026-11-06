@@ -1,6 +1,6 @@
 # Workspace for development and tests. The mod bundle itself goes through horizon-mixins, see docs/PLAN.md.
 [workspace]
-members = ["mod/engine", "tools/cost-compare"]
+members = ["mod/engine", "tools/cost-compare", "tools/search-compare"]
 # Horizon's crates belong to their own workspace. tools/facts-compare reaches them by path.
 exclude = ["upstream"]
 resolver = "2"

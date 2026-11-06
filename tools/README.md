@@ -44,7 +44,10 @@ a rule: it builds worlds and settings, calls upstream's own classes, and writes 
    and depends on `mod/engine` by path; it has no `Cargo.lock` or profile of its own.
 3. `mutate.py` puts one deliberate error at a time into a copy of the engine and reports whether the comparison notices.
    Use it to check that the data is strong enough, because a clean comparison can also mean a weak test. Each mutation is
-   `(file, pattern, replacement, name)`; `mutate.py REPO --where` shows where every pattern matches.
+   `(file, pattern, replacement, name)`; `mutate.py REPO --where` shows where every pattern matches. To save time, a run stops at its
+   first wrong result (the unmutated run never does), so the `wrong=` count of a caught error means little. Verdicts are saved next to
+   the golden file and reused only when the compiler, every copied source, the golden file and the mutation are byte-identical;
+   `BARITONE_MUTATE_NO_CACHE=1` turns that off. `BARITONE_MUTATE_JOBS` sets the workers, by default half of the threads.
 
 ```sh
 # From the repository root; JDK 21, an upstream checkout at the pinned commit. The first run may download Minecraft.
@@ -116,6 +119,92 @@ Known limits:
   run alone (`mutate.py REPO GOLDEN "name|name"`).
 - Injected errors that stay uncaught are listed with a reason in `cost-compare/known-missed.txt`; those judgements come
   from reading the code and the exported facts, not from a proof.
+
+## search-compare
+
+L2: does the same world, goal and settings give the same search? It compares whole searches of upstream's real classes
+(`AStarPathFinder`, `Path`, `CutoffPath`, `SplicedPath`, `Favoring`, `Avoidance`, and `PathingBehavior.createPathfinder` by
+reflection) with `mod/engine`, node by node. The Java side never holds a second implementation: it builds worlds and settings, runs
+upstream and writes down what it answered.
+
+1. `java/baritone/pathing/calc/SearchGoldenDump.java` is a JUnit test. It sits in upstream's package `baritone.pathing.calc`,
+   because `Path` is package-private and the search keeps its state in protected fields. `java/.../SearchBridge.java` is a public
+   door into `cost-compare`'s `SpikeGoldenDump` (palette, configurations, test context), so both tools share them without a copy
+   and without a change to that file. `run_search.py` copies both Java directories into the checkout and removes them again.
+2. **Worlds** (`V` lines) are generated from fixed seeds: 12 kinds (flat, hills, caves, lakes, ladders and vines, village with doors,
+   stairs, slabs, trapdoors and gates, walls with gaps and chasms, falls and pits, towers, mazes, random palette noise, terraces),
+   32 to 96 blocks on a side and 24 to 64 high, from the 191-state palette of `cost-compare`. Each has an origin (also far from 0,
+   negative, next to the world border, and three small ones that put z = 0 inside the world), a minimum Y of 0, -64, -20 or -3 (the last two put
+   the terrain across y = 0), chunk states (loaded, only known to the cache, not loaded), and a world border (the default one, or one
+   that cuts the world). Cells are run-length coded. Three hand-built worlds follow the generated ones (`specials`): a world 4064 high
+   (y from -2032) with a ladder column, a platform at y = 0 and two high platforms, searched under all 16 configurations; a one-wide ladder
+   shaft 4064 high, searched up and down with caps of 2047 and 2049 and without; and a one-wide corridor 70000 long along z from a negative
+   z, searched at caps of 46000, 46400 and 65540. They exist because the random worlds are at most 64 high and 96 long, so they never reach
+   the wrap of the cell key's y part (2048 blocks), a y span of 256, or the wrap of `getDistFromStartSq` (46341 blocks). Both wraps are
+   upstream's behaviour, kept (`docs/deviations.md`, U1 and U2).
+3. **Searches** (`E` lines): start, the player's feet (the same, a block away, farther, higher; the goal is sometimes the start itself),
+   one of 16 configurations, one of 23 sets of search settings (`K` lines: favoring coefficient, `pathingMaxChunkBorderFetch`,
+   `minimumImprovementRepropagation`, `pathCutoffMinimumLength` and `Factor`, `cutoffAtLoadBoundary`, `simplifyUnloadedYCoord`,
+   avoidance, also with only one of the two coefficients away from 1), a goal of any of the 11 classes (composite and inverted too), and a node cap of 1, 2, 30, 63, 64, 65, 500, 5000 or
+   none. Chains of up to four segments search from the end of the previous path with `Favoring` built from it (one in four changes
+   the goal), and `SplicedPath.trySplice` joins them with `allowOverlapCutoff` off and on. 15 % of the chains start with a short
+   search whose path only serves as a favoring base. Spawners and mobs sit within 10 blocks of the start; in 30 % of the chains some of
+   them are moved by an offset that makes upstream's `longHash` of the sphere equal that of the start's surroundings (y + 1 and z - 2873465,
+   and two more) or nearly (2^24 apart in x or z, 256 in y), so the collisions of that polynomial are exercised.
+4. **Stopping.** A node cap is made on the Java side without changing upstream: the goal is wrapped, and on the N-th `isInGoal`
+   call (one per node taken out of the open set) the wrapper calls `cancel()`. The loop ends after that node is expanded. The harness
+   then calls `bestSoFar(false, numNodes)` and `postProcess`, `cutoffAtLoadedChunks` and `staticCutoff` itself, in `calculate`'s order,
+   so each stage can be compared. A search without a cap goes through `calculate(huge, huge)`. A search that has no cap and would
+   run past 20,000 nodes is stopped by the same wrapper and written as a run with that cap. The time limits never fire on either side.
+5. **What is compared**, as text, line by line: result type, nodes considered, movements considered, nodes made (`mapSize`), a hash
+   of the positions taken out of the open set in order (ties decide that order), the seven `bestSoFar` nodes with their costs (bits),
+   `mostRecentConsidered`, `pathToMostRecentNodeConsidered`, `bestPathSoFar()`, the path after each of the three stages and the final
+   path, with every movement's kind, destination, cost (bits) and `calculatedWhileLoaded`, the goal after simplification, and the
+   splice of each segment. In the Rust run, `calculate()` of a second finder is also checked against the staged run (one search in
+   three).
+6. `src/main.rs` reads the file, runs the engine and compares. It also counts how often each case was reached, using hooks in the
+   engine that only count (`SearchStats`, `popped_hash`). The run fails if a count is zero, unless the case is exempt with a
+   reason: coverage includes each result type, each of the seven coefficients, every `Moves` value and `MovementFall` in a final path,
+   decrease-key, ties in the heap, `numEmptyChunk` ending a search, border rejection, `MIN_IMPROVEMENT` keeping an update out, `runBackwards`
+   failing into a `CutoffPath`, the `realStart` fake node, favoring, both cutoffs, trySplice with overlap, without and refused,
+   a simplified goal, and final paths that cross x = 0, y = 0 and z = 0, span 256 in y or pass 46340 blocks. `src/parse.rs` is copied from `cost-compare/src/main.rs` (it is a binary crate).
+7. `mutate.py` injects errors one at a time into a copy of the search code (491 of them: open set, nodes, the A* loop, paths, cutoffs,
+   splicing, favoring, avoidance, planning, movements and the move table) and checks that the comparison notices. It uses the output format
+   and workers of `tools/cost-compare/mutate.py` (`BARITONE_MUTATE_JOBS`), and for a missed one it also runs the engine's unit tests and prints a
+   note, which never counts as caught. A full run took 34 minutes on 12 workers. Missed ones are in `known-missed.txt` as `no effect` or `hole`.
+
+```sh
+# From the repository root; JDK 21, an upstream checkout at the pinned commit. Writes reports/search-compare-1.21.4.json.
+python3 tools/run_search.py --upstream upstream/baritone-1.21.4 --jdk DIR --scratch DIR [--worlds 900 --cases 24 --repeat 3]
+
+# By hand, with a golden file already written:
+cargo run --release -p search-compare -- /some/path/search-golden.txt
+python3 tools/search-compare/mutate.py . /some/path/search-golden.txt
+```
+
+Known limits:
+
+- The timeout logic (`failing`, the 64-node clock check) is not compared: no clock fires on either side. Unit tests in `astar.rs` cover it.
+- Cancellation is not compared against Java (`CANCELLATION` is exempt in the report): the harness stops runs by the node cap, which acts as a timeout.
+  Upstream resets its flag when a search starts, so there is nothing to compare. For one search in three the harness checks the Rust promises
+  instead (a raised flag, also raised during the search, ends with no path; a second `calculate` is refused; `postProcess` twice fails;
+  `staticCutoff` without a goal changes nothing) and counts a failure as a mismatch.
+- A search that throws is compared as `EXCEPTION` only. Upstream's `calculate` swallows the exception, so the Java side cannot name the cause.
+  The Rust side checks it instead: a search may throw only with a NaN heuristic (cause `ImplausibleHeuristic`) or a `pathCutoffFactor` above 1
+  (cause `CutoffOutOfRange`), and any other exception or cause counts as a mismatch. 275 of 29,446 searches threw in the committed corpus run.
+- The first cell key equal to `Long.MIN_VALUE` throws in upstream and not here (`docs/deviations.md`, D9); it needs a position beyond the world
+  border, so the corpus does not contain it.
+- `run_search.py` refuses to start Gradle while a game (`horizon-client`) runs; close it or wait.
+- A search without a cap and with more than 20,000 nodes is compared as a run with a cap of 20,000.
+- The stage lines (after `postProcess`, `cutoffAtLoadedChunks`, `staticCutoff`) exist for runs with a node cap only; a run
+  through `calculate` shows the final path.
+- `PathingBehavior.createPathfinder` is the real method, called by reflection on an instance made without its constructor, with
+  small stand-ins for the player context (feet position, entity list, cached world). The entity list is empty, so the avoidances of
+  mobs are added by the harness with upstream's own `Avoidance` class right after; `Avoidance.create` chooses which mobs avoid,
+  which is the glue's job (S4). Spawner avoidance goes through `Avoidance.create` itself.
+- The block facts and the world are Minecraft 1.21.4's, not Horizon's. The worlds are small boxes; the world outside them is air and
+  not loaded. Searches do not reach 26.3's differences (see the cost-compare section).
+- The Rust side reads the whole file; the default size is about 100 MB.
 
 ## facts-compare
 

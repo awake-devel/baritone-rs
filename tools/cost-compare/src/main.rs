@@ -217,6 +217,7 @@ fn parse_config(p: &[&str]) -> (Config, bool) {
         walk_on_water_penalty: dbl(get("waterwalk")),
         cost_heuristic: dbl(get("costheuristic")),
         axis_height: int(get("axisheight")),
+        search: Default::default(),
     };
     assert!(kv.is_empty(), "config line with settings the engine does not have: {:?}", kv.keys().collect::<Vec<_>>());
     (c, pick)
@@ -291,6 +292,11 @@ impl Tally {
             true
         } else {
             self.wrong += 1;
+            if STOP_AT_FIRST.load(std::sync::atomic::Ordering::Relaxed) {
+                // Injected-error runs only need to know that something differs. The normal run never does this.
+                println!("stopped at the first wrong result");
+                std::process::exit(1);
+            }
             false
         }
     }
@@ -700,6 +706,8 @@ fn dbl_dec(v: &str) -> f64 {
     v.parse().unwrap_or_else(|_| panic!("not a number: {v}"))
 }
 
+static STOP_AT_FIRST: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 fn main() {
     std::panic::set_hook(Box::new(|info| {
         let mut l = PANICS.lock().unwrap();
@@ -707,8 +715,9 @@ fn main() {
             l.push(info.to_string());
         }
     }));
-    let path = std::env::args().nth(1).expect("usage: cost-compare GOLDEN_FILE [quiet]");
+    let path = std::env::args().nth(1).expect("usage: cost-compare GOLDEN_FILE [quiet [first]]");
     let quiet = std::env::args().nth(2).as_deref() == Some("quiet");
+    STOP_AT_FIRST.store(std::env::args().nth(3).as_deref() == Some("first"), std::sync::atomic::Ordering::Relaxed);
     let file = std::io::BufReader::with_capacity(1 << 20, std::fs::File::open(path).expect("cannot open the golden file"));
     let run = run(file, quiet);
     for (name, t) in &run.tallies {

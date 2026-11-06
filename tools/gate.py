@@ -16,6 +16,10 @@ Steps, in order:
   6 repeat             two more runs that must give identical results
   7 mutation           tools/cost-compare/mutate.py; fails on 'not applied' and on a missed mutation
                        that is not listed in tools/cost-compare/known-missed.txt
+  8 search comparison  tools/run_search.py (L2: whole searches node by node), only when its inputs differ from the report. As in
+                       steps 5 to 7, the report is written only after steps 8 to 10 all pass
+  9 search repeat      two more runs that must give identical reports
+ 10 search mutation    tools/search-compare/mutate.py, judged the same way against tools/search-compare/known-missed.txt
 
 Steps that cannot run are printed as SKIPPED and listed at the end. Exit status: 0 passed, 1 failed,
 2 incomplete (nothing failed, but something was skipped). A skipped step is never a pass.
@@ -39,11 +43,13 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import run_compare as rc  # noqa: E402
 import run_facts as rf  # noqa: E402
+import run_search as rs  # noqa: E402
 
 REPO = rc.REPO
 CRATE = rc.CRATE
 RESULT = os.path.join(REPO, "gate-result.json")
 KNOWN_MISSED = os.path.join(CRATE, "known-missed.txt")
+SEARCH_KNOWN_MISSED = os.path.join(rs.CRATE, "known-missed.txt")
 PASS, FAIL, SKIPPED, CURRENT = "PASSED", "FAILED", "SKIPPED", "UP TO DATE"
 
 
@@ -90,12 +96,26 @@ def judge_mutation(caught, missed, not_applied, known):
     return not (not_applied or unlisted), msgs
 
 
-def mutation_inputs_hash():
+def mutation_inputs_hash(crate=CRATE):
     """sha256 over mutate.py and known-missed.txt: a change to either means the mutation step must run again."""
     h = hashlib.sha256()
-    for path in (os.path.join(CRATE, "mutate.py"), KNOWN_MISSED):
+    for path in (os.path.join(crate, "mutate.py"), os.path.join(crate, "known-missed.txt")):
         h.update(rc.sha256_file(path).encode())
     return h.hexdigest()
+
+
+def search_current(report, current_sources, commit, worlds, cases, mutation_inputs):
+    """The same question as comparison_current, for the search comparison's report."""
+    if not report:
+        return False
+    old = {k: v for k, v in report.get("sources", {}).items() if k != "golden"}
+    return (
+        old == current_sources
+        and report.get("upstream_commit") == commit
+        and report.get("worlds") == int(worlds)
+        and report.get("cases_per_world") == int(cases)
+        and report.get("gate", {}).get("mutation_inputs") == mutation_inputs
+    )
 
 
 def comparison_current(report, current_sources, commit, grids, mutation_inputs):
@@ -321,24 +341,73 @@ class Gate:
             first["gate"] = {"mutation_inputs": minputs}
             rc.write_report(first, path)
 
-    def mutation(self, golden):
-        rcode, out = self.sh([sys.executable, os.path.join(CRATE, "mutate.py"), REPO, golden], REPO, low=busy())
+    def search(self):
+        names = ("search comparison", "search repeat runs", "search mutation")
+        a = self.a
+        if a.quick:
+            for n in names:
+                self.record(n, SKIPPED, "--quick")
+            return
+        worlds, cases = rs.DEFAULT_WORLDS, rs.DEFAULT_CASES
         try:
-            with open(KNOWN_MISSED, encoding="utf-8") as f:
+            upstream, jdk, scratch, _, branch = rc.resolve(a)
+            commit = rc.upstream_commit(upstream)
+        except rc.Fail as e:
+            for n in names:
+                self.record(n, SKIPPED, str(e))
+            return
+        path = os.path.join(REPO, "reports", f"search-compare-{branch}.json")
+        minputs = mutation_inputs_hash(rs.CRATE)
+        if not a.force and search_current(load_report(path), rs.source_hashes(), commit, worlds, cases, minputs):
+            self.record("search comparison", CURRENT, f"report for {branch} matches the inputs; not re-run")
+            self.record("search repeat runs", CURRENT, "not needed")
+            self.record("search mutation", CURRENT, "not needed")
+            return
+        if os.path.exists(path):
+            os.remove(path)
+        try:
+            first, _ = rs.one_run(upstream, jdk, scratch, worlds, cases, branch, "run1")
+        except rc.Fail as e:
+            self.record("search comparison", FAIL, "\n" + str(e))
+            return
+        res = first["results"]
+        self.record("search comparison", PASS, f"{branch}: {res['searches']} searches, {res['lines_compared']} lines, {res['mismatches']} mismatches")
+        for i in (2, 3):
+            try:
+                again, _ = rs.one_run(upstream, jdk, scratch, worlds, cases, branch, f"run{i}")
+            except rc.Fail as e:
+                self.record("search repeat runs", FAIL, f"run {i}: {e}")
+                return
+            if again != first:
+                self.record("search repeat runs", FAIL, f"run {i} differs from run 1 (no report is written)")
+                return
+        self.record("search repeat runs", PASS, "3 runs, identical reports")
+        if a.no_mutation:
+            self.record("search mutation", SKIPPED, "--no-mutation; no report is written, so the next full run starts again")
+            return
+        golden = os.path.join(scratch, f"search-golden-{branch}-run3.txt")
+        if self.mutation(golden, rs.CRATE, SEARCH_KNOWN_MISSED, "search mutation"):
+            first["gate"] = {"mutation_inputs": minputs}
+            rc.write_report(first, path)
+
+    def mutation(self, golden, crate=CRATE, known_missed=KNOWN_MISSED, step="mutation"):
+        rcode, out = self.sh([sys.executable, os.path.join(crate, "mutate.py"), REPO, golden], REPO, low=busy())
+        try:
+            with open(known_missed, encoding="utf-8") as f:
                 known = parse_known_missed(f.read())
             caught, missed, not_applied = parse_mutation_output(out)
         except (OSError, ValueError, SyntaxError) as e:
-            self.record("mutation", FAIL, str(e) + "\n" + out[-1500:])
+            self.record(step, FAIL, str(e) + "\n" + out[-1500:])
             return False
         ok, msgs = judge_mutation(caught, missed, not_applied, known)
         summary = f"{len(caught)} caught, {len(missed)} missed ({len([m for m in missed if m in known])} listed), {len(not_applied)} not applied"
-        self.record("mutation", PASS if ok else FAIL, summary + ("\n" + "\n".join(msgs) if msgs else ""))
+        self.record(step, PASS if ok else FAIL, summary + ("\n" + "\n".join(msgs) if msgs else ""))
         return ok
 
     # -- driver --------------------------------------------------------------------------------
 
     def run(self):
-        for step in (self.public_tree, self.cargo, self.python_tests, self.ledger, self.facts, self.rules_26_3, self.comparison):
+        for step in (self.public_tree, self.cargo, self.python_tests, self.ledger, self.facts, self.rules_26_3, self.comparison, self.search):
             step()
             if self.failed:
                 break

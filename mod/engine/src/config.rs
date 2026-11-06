@@ -46,4 +46,66 @@ pub struct Config {
     pub cost_heuristic: f64,
     /// `axisHeight`, read by `GoalAxis`.
     pub axis_height: i32,
+    /// What the search and the path code read.
+    pub search: SearchSettings,
+}
+
+/// The settings of the search, the path cutoffs and the favoring. Defaults are upstream's.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SearchSettings {
+    /// `backtrackCostFavoringCoefficient`, default 0.5. 1 turns the favoring of the previous path off.
+    pub backtrack_cost_favoring_coefficient: f64,
+    /// `pathingMaxChunkBorderFetch`, default 50: the search stops after this many moves into unloaded chunks.
+    pub pathing_max_chunk_border_fetch: i32,
+    /// `minimumImprovementRepropagation`, default true: a cost must improve by 0.01 to replace the old one.
+    pub minimum_improvement_repropagation: bool,
+    /// `pathCutoffMinimumLength`, default 30.
+    pub path_cutoff_minimum_length: i32,
+    /// `pathCutoffFactor`, default 0.9.
+    pub path_cutoff_factor: f64,
+    /// `cutoffAtLoadBoundary`, default false.
+    pub cutoff_at_load_boundary: bool,
+    /// `simplifyUnloadedYCoord`, default true.
+    pub simplify_unloaded_y_coord: bool,
+    /// `primaryTimeoutMS`, default 500. Used when no path is being followed.
+    pub primary_timeout_ms: i64,
+    /// `failureTimeoutMS`, default 2000.
+    pub failure_timeout_ms: i64,
+    /// `planAheadPrimaryTimeoutMS`, default 4000. Used when planning the next segment.
+    pub plan_ahead_primary_timeout_ms: i64,
+    /// `planAheadFailureTimeoutMS`, default 5000.
+    pub plan_ahead_failure_timeout_ms: i64,
+    /// `avoidance`, default false.
+    pub avoidance: bool,
+    /// `mobSpawnerAvoidanceCoefficient`, default 2.0.
+    pub mob_spawner_avoidance_coefficient: f64,
+    /// `mobSpawnerAvoidanceRadius`, default 16.
+    pub mob_spawner_avoidance_radius: i32,
+    /// `mobAvoidanceCoefficient`, default 1.5.
+    pub mob_avoidance_coefficient: f64,
+    /// `mobAvoidanceRadius`, default 8.
+    pub mob_avoidance_radius: i32,
+}
+
+impl Default for SearchSettings {
+    fn default() -> Self {
+        SearchSettings {
+            backtrack_cost_favoring_coefficient: 0.5,
+            pathing_max_chunk_border_fetch: 50,
+            minimum_improvement_repropagation: true,
+            path_cutoff_minimum_length: 30,
+            path_cutoff_factor: 0.9,
+            cutoff_at_load_boundary: false,
+            simplify_unloaded_y_coord: true,
+            primary_timeout_ms: 500,
+            failure_timeout_ms: 2000,
+            plan_ahead_primary_timeout_ms: 4000,
+            plan_ahead_failure_timeout_ms: 5000,
+            avoidance: false,
+            mob_spawner_avoidance_coefficient: 2.0,
+            mob_spawner_avoidance_radius: 16,
+            mob_avoidance_coefficient: 1.5,
+            mob_avoidance_radius: 8,
+        }
+    }
 }

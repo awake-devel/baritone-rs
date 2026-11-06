@@ -12,3 +12,10 @@ version = "0.0.0"
 dependencies = [
  "baritone-engine",
 ]
+
+[[package]]
+name = "search-compare"
+version = "0.0.0"
+dependencies = [
+ "baritone-engine",
+]

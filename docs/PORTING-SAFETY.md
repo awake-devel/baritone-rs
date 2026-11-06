@@ -35,7 +35,7 @@ Each level answers a different question. Passing one says nothing about the next
 - **L0** covers the seven movement costs, the predicates and the goals: [`tools/cost-compare`](../tools/README.md).
 - **L1** covers every block state of `26.3`: [`tools/facts-compare`](../tools/README.md). It compares the table the mod would
   build from Horizon's data with what Java says.
-- **L2** needs a node cap in place of upstream's time limits, which would otherwise make runs differ.
+- **L2** needs a node cap in place of upstream's time limits, which would otherwise make runs differ: [`tools/search-compare`](../tools/README.md).
 - **L3** exists as a first step: [`tools/walk-test`](../tools/README.md) drives a fixed course. A scenario checks arrival,
   time and blocks changed. It does not claim tick-for-tick equality with Java Minecraft, because nothing compares them
   yet.
@@ -259,6 +259,47 @@ Limits of this result:
 Measured effort for S2: about 3.5 hours of work, plus a pause. One Sonnet agent ported the harness (15 minutes, 275,000
 tokens), and most of the waiting was on the injected errors. Running them on 6 workers took about 39 minutes against 104
 one at a time, so 2.7 times faster, with the same counts. A hard-killed run now counts as not applied rather than caught.
+
+### S3 result
+
+The gate passed on upstream `1.21.4` commit `1b8e87c`, with nothing skipped.
+
+**Whole searches against Java (L2).** All 29,446 searches over 903 worlds match, node by node: 236,240 compared lines, 8,609
+splice lines and 0 mismatches, and three runs give identical reports. The Java side runs upstream's own classes, and a hash of
+the positions taken out of the open set catches a different order of ties. The worlds cover 12 generated kinds and three built by
+hand, including a 4064-high shaft and a 70,000-long corridor, under 16 configurations, 11 goal classes and many search settings.
+
+**Injected errors.** Of 491 errors in the search code, 415 are caught and 76 are missed, each listed with a reason in
+`tools/search-compare/known-missed.txt`: 57 cannot change an answer, and 19 are real holes. The reasons were read from the source,
+not proved. The holes are:
+
+- The timeouts and the failing flag (17), because no clock fires in the comparison. Unit tests catch most of them, but not the
+  equality edges of the failure timeout and of the 5-block failing distance.
+- The heap's early return for a single element, and the default `isLoaded` of a world without a cache (a unit test catches the
+  second).
+
+**Reviews.** Two independent reviews found no difference that changes a path. They found one overflow that could not wrap
+(fixed), differences missing from the deviations file (added), and test gaps such as no search crossing y = 0 (closed). The
+gate then found what the workflow never built: `facts-compare` and two scratch copies of the workspace needed changes for the new
+crate and setting. No engine answer changed.
+
+**Upstream behaviour kept.** `getDistFromStartSq` wraps at about 46,341 blocks, and the cell key aliases at 2048 blocks in y. Both
+are now reached by the corpus, and the Rust matches them. See [deviations.md](deviations.md).
+
+Limits of this result:
+
+- Block facts and rules are `1.21.4`'s in this comparison, not Horizon's. S2 links them, but no whole search has run on `26.3`.
+- Timeouts and cancellation are not compared with Java, only unit-tested.
+- The worlds are small boxes with unloaded air around them, and nothing has been played.
+- Rust copies `Movement` values where Java shares objects between paths. That has no effect yet, and S4 must check it once the
+  executor keeps state on them.
+- The harness calls upstream's `createPathfinder` by reflection, with a small stand-in for the player.
+
+Measured effort for S3: about 6 hours of work. A workflow of 6 agents took 4 h 40 min and 1.77 million tokens, and the last 85 minutes
+went to the tool and the gate. Stopping an injected error's run at its first wrong result, and using 12 workers, took the search
+errors from 1 h 51 min (479 errors, 6 workers) to 34 minutes, and the cost errors from 39 minutes to about 19, with the same counts
+on the cost errors. Verdicts are saved next to the golden file and reused only on byte-identical inputs, so a gate that repeats
+them on unchanged code takes about a minute for that step.
 
 ## Reports
 

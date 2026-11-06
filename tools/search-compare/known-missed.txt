@@ -1,0 +1,83 @@
+# Injected errors (see mutate.py) that the L2 comparison does not catch, and why.
+# Format: <mutation name> | <class>: <reason>
+# class is "no effect" (the error cannot change any answer of the comparison) or "hole" (a real gap in the test, left open on purpose).
+# The gate fails on a missed mutation that is not listed here. Each reason was read from the engine and upstream source after the
+# corpus had been strengthened where that was cheap (the Rust-only property checks in src/main.rs were added for that: single use,
+# cancel flag, post processing twice, static cutoff without a goal). "Unit tests catch it" means the run of `cargo test -p baritone-engine`
+# fails on the mutant; mutate.py does not count that as caught. Order: the old entries first, then the new ones in the order of mutate.py.
+inverse coefficients a little off | no effect: every comparison against bestHeuristicSoFar has a margin of MIN_IMPROVEMENT (0.01); a relative change of 1e-7 of the cost only matters for an exact tie at that margin, which no generated search reaches
+start node: combined cost 0 | no effect: the start node is alone in the open set when it is taken out, so its key orders nothing, and no later code reads the combined cost of a node that was taken out
+node cost starts below infinity | no effect: a node's cost starts at COST_INF only to lose against any real cost; 999999 loses the same way unless a path costs about a million ticks, and the first cost is never printed
+favoring: coefficient 1 not skipped | no effect: with a coefficient of 1 the map is not empty, but every entry is 1.0 and multiplies a cost by 1.0, so costs, order and paths are the same; only Favoring.isEmpty differs and nothing outside the search reads it (a unit test catches it)
+avoidance: spawners with coefficient 1 | no effect: same for the avoidance spheres, they multiply by 1.0 (a unit test catches it)
+static cutoff: goal check needs a longer path | no effect: at a length of exactly pathCutoffMinimumLength the cut keeps min - 1 as the last index, which is the whole path, so cutting and not cutting give the same path
+heap: removed slot not cleared | no effect: the array slot above the size is only read again after an insert has written to it
+heap: single element early return | hole: without the early return the last node taken out is written back to slot 1 with a stale heap position; that only matters when a node that was already taken out gets a cheaper cost later, which needs an inconsistent heuristic, and no generated search has one (a unit test catches it)
+heap: right child read past the end | no effect: the slot past the end holds the key of the element being sifted down, so the right child is chosen only when that key is smaller than the left one, and the loop then stops on it at once, where it stopped before
+heap: right child without size check | no effect: the same, the loop never has a child past the end to look at
+cell key: x mask short | no effect: two nodes of one search would need x columns 2^32 blocks apart to share a cell, and the world border is 30 million blocks
+cell key: z mask short | no effect: the same for z
+clock: checked at the second node of 64 | hole: the timeout logic is outside L2, the clock is fake and upstream's limits never fire in the Java run; unit tests in astar.rs cover it (a unit test catches it)
+clock: checked every 32 nodes | hole: the same (a unit test catches it)
+clock: failure timeout needs to be passed | hole: the same, and it is the edge of equality (now equal to the limit) that neither the comparison nor the unit tests reach
+clock: both timeouts needed | hole: the same (a unit test catches it)
+clock: primary timeout while failing | hole: the same (a unit test catches it)
+clock: primary timeout ignores failing | hole: the same (a unit test catches it)
+clock: primary timeout needs to be passed | hole: the same, at the edge of equality (a unit test catches it)
+clock: failure timeout from the primary one | hole: the same (a unit test catches it)
+clock: primary timeout from the failure one | hole: the same (a unit test catches it)
+failing flag starts false | hole: the failing flag only matters to the primary timeout, which is outside L2 (a unit test catches it)
+failing flag never cleared | hole: the same (a unit test catches it)
+failing flag: at least 5 blocks | hole: the same, and the edge of exactly 5 blocks is not in the unit tests
+failing flag: distance of the current node | hole: the same, and no unit test separates the current node from the neighbor
+border: dynamic check on every move | no effect: a static move was already refused by the first border check on the same column, and its result column is the nominal one
+cost check: zero allowed | no effect: no verified rule returns a cost of 0 or less, so ImplausibleCost is not reached
+cost check: NaN allowed | no effect: no verified rule returns NaN
+cost check: none | no effect: the same
+destination check: both must differ | no effect: a static move always ends on its nominal column in the verified rules, so WrongDestination is not reached
+destination check: none | no effect: the same
+height check: none | no effect: a static move always ends on its nominal row in the verified rules, so WrongHeight is not reached
+favoring: always on | no effect: with an empty map every lookup gives 1.0, so the flag is only a shortcut
+favor cache: always looked up | no effect: the cache only saves a lookup, a node's favoring never changes
+fake node: heuristic not checked | no effect: it only checks that the real start's heuristic is not NaN, and a NaN would already have stopped the search at the start node's own check
+assemble: second run allowed | no effect: private, called once per path, from postProcess, which refuses a second run
+post process: size check dropped | no effect: it checks a cutoff that cannot change the size when runBackwards gave consistent movements
+post process: no sanity check | no effect: the invariants hold for every path the search builds
+cutoff: source of the whole path | no effect: every caller cuts from index 0, where the first position of the cut is the source of the whole path (a unit test catches it)
+static cutoff: minimum length itself cut | no effect: at exactly the minimum length the cut keeps the whole path, as for the old entry about the goal check
+sanity: empty path allowed | no effect: the checks of sanityCheck raise errors on corrupt paths, and no path the engine builds is corrupt
+sanity: source not tested | no effect: the same (a unit test catches it)
+sanity: destination not tested | no effect: the same
+sanity: size not tested | no effect: the same (a unit test catches it)
+sanity: movement source not tested | no effect: the same (a unit test catches it)
+sanity: movement destination not tested | no effect: the same (a unit test catches it)
+sanity: loop not tested | no effect: the same (a unit test catches it)
+sanity: positions not remembered | no effect: the same (a unit test catches it)
+splice: missing position is 0 | no effect: the position that joins the paths is either a position of the first path that the second one contains, or the first path's end, which is the second path's source, so it is always found
+splice: overlap error dropped | no effect: SpliceOverlap is not reachable, see the exemption in the report
+splice: goal of the second path | no effect: all segments of one chain are searched for the same goal
+avoidance coefficient: x ignored | no effect: Avoidance.coefficient(x, y, z) is not called by the search or by Favoring; upstream only uses applySpherical (a unit test catches it)
+avoidance coefficient: y ignored | no effect: the same (a unit test catches it)
+avoidance coefficient: edge outside | no effect: the same (a unit test catches it)
+avoidance coefficient: outside is 0 | no effect: the same (a unit test catches it)
+avoidance: squared radius is the radius | no effect: radius_sq is only read by Avoidance.coefficient (a unit test catches it)
+avoidance: mobs with coefficient 1 | no effect: with a coefficient of 1 the sphere multiplies by 1.0, as for the spawners
+sphere: y and z swapped | no effect: the sphere is symmetric when its y and z offsets are swapped, so the same positions get the same product
+favoring: never empty | no effect: the same as "always on" in the search (a unit test catches it)
+goal render pos: y 0 | no effect: only x and z of the position are read, to make a GoalXZ
+timeouts: choice inverted | hole: plan::timeouts is not called by the comparison, since no clock fires; a unit test catches it
+timeouts: plan ahead pair swapped | hole: the same (a unit test catches it)
+timeouts: pair swapped | hole: the same (a unit test catches it)
+timeouts: plan ahead primary of the normal search | hole: the same (a unit test catches it)
+descend cost: height test dropped | no effect: runBackwards takes the destination from the same cost call, so the result row always equals it (a unit test catches it)
+diagonal cost: height test dropped | no effect: the same
+parkour cost: x not tested | no effect: runBackwards builds the parkour destination from the same cost call, so it always matches
+parkour cost: y not tested | no effect: the same
+parkour cost: z not tested | no effect: the same
+parkour cost: destination not tested | no effect: the same
+parkour cost: destination needs three differences | no effect: the same
+apply0: traverse offsets swapped | no effect: it permutes the four traverse moves among themselves, and runBackwards matches by destination, which no other move shares in these cells (a unit test catches it)
+world: default isLoaded false | hole: the harness world overrides isLoaded, so the default of a world without a cache is only run by unit tests (a unit test catches it)
+long hash: start value | no effect: the hash is only compared for equality, and adding a constant keeps equal hashes equal (a unit test catches it)
+long hash: x term doubled | no effect: still injective on the box of one search, so the same positions share a favoring entry (a unit test catches it)
+long hash: first multiplier | no effect: it multiplies the start value only, so every hash moves by the same constant and equal hashes stay equal (a unit test catches it)

@@ -263,6 +263,7 @@ fn set_field(s: &mut State, key: &str, v: &str) {
 /// The settings that decide the predicates, at upstream's defaults, or with the other choices that change an answer.
 fn config(flipped: bool) -> Config {
     Config {
+        search: Default::default(),
         has_throwaway: true,
         has_water_bucket: false,
         can_sprint: true,

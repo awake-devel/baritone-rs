@@ -530,3 +530,10 @@ impl<'a, W: WorldView> Ctx<'a, W> {
         self.cfg.place_penalty
     }
 }
+
+impl Border {
+    /// `BetterWorldBorder.entirelyContains`: whether the block column lies inside the border. `x + 1` is `int` arithmetic before it becomes a double.
+    pub fn entirely_contains(&self, x: i32, z: i32) -> bool {
+        (x.wrapping_add(1) as f64) > self.min_x && (x as f64) < self.max_x && (z.wrapping_add(1) as f64) > self.min_z && (z as f64) < self.max_z
+    }
+}

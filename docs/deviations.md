@@ -3,7 +3,7 @@
 Each place where this port differs from upstream on purpose. The rules are in
 [PORTING-SAFETY.md](PORTING-SAFETY.md#deviations). Upstream lines are cited at the `1.21.4` commit `1b8e87c`.
 
-Entries 1 to 4 are decided and wait for the code they apply to. Entry 5 is active and has no effect on any real search.
+Entries 1 to 4 are decided and wait for the code they apply to. Entry 5 is active and has no effect on any real search. Entries 6 to 10 are active (S3) and change no chosen path that a game can reach.
 
 ## How exceptions work today
 
@@ -76,6 +76,93 @@ Fields: upstream, ours, why, changes chosen paths, decided by, expectation in th
 - **Changes chosen paths:** no. It needs coordinates about 70 times beyond the world border.
 - **Decided by:** nobody needed. Fixes with no effect on paths are made and recorded.
 - **Comparison:** none. The comparison does not call `heuristic()` on such goals, because upstream would not return.
+
+### D6. The search stops on a node cap, a given clock and a flag
+
+- **Status:** active, in `search::astar`.
+- **Upstream:** `AStarPathFinder.calculate0` reads `System.currentTimeMillis` and stops at the primary or failure timeout,
+  and at `cancelRequested`. `AbstractNodeCostSearch.calculate` sets `cancelRequested = false` first, so a `cancel()`
+  that arrives before the call is lost.
+- **Ours:** the caller gives a clock (a closure with milliseconds) and the same checks run every 64 nodes with the same
+  `failing` flag. A node cap is added: the N-th node is taken out and fully expanded, then the loop ends the way a
+  timeout ends it, in `bestSoFar`. The cancel flag is the caller's `AtomicBool`; `calculate` does not reset it.
+- **Why:** runs have to be comparable (L2), and tests need a fake clock. A cancel must not get lost.
+- **Changes chosen paths:** no. With no cap and a real clock the loop is upstream's. A search that ends on the cap ends at a
+  node count, where upstream ends at a time.
+- **Decided by:** the stage plan.
+- **Comparison:** L2 (`tools/search-compare`) runs with a node cap and compares what both sides have after it. Java gets the same cap
+  without a change to upstream: its goal is wrapped, and on the N-th `isInGoal` call (one per node taken out of the open set) the wrapper
+  calls `cancel()`. The loop then ends after that node has been expanded; the harness takes `bestSoFar(false, numNodes)` and runs
+  `postProcess`, `cutoffAtLoadedChunks` and `staticCutoff` itself, as `calculate` does. Searches without a cap go through `calculate`.
+  The time limits never fire on either side, so the timeout logic itself is not part of L2 (unit tests cover it).
+
+### D7. Failures are values, and one path type stands for three
+
+- **Status:** active, in `search`.
+- **Upstream:** an implausible cost, a wrong destination, a NaN heuristic, a path checked twice, a bad `subList` and a failed
+  sanity check throw. `calculate` turns the exception into `Type.EXCEPTION`. `Path`, `CutoffPath` and `SplicedPath` are three
+  classes. `Path.<init>` loops forever if the `previous` links form a cycle.
+- **Ours:** `SearchError` values, with the same conditions and upstream's messages for the sanity check. One `Path` struct.
+  A cycle of `previous` is an error. A second `calculate` on a finder returns `Exception` (`SearchError::Reused`) as a
+  value, where upstream throws `IllegalStateException("Path finder cannot be reused!")` before its try block
+  (`AbstractNodeCostSearch.java:122-124`), so the caller of upstream sees the exception and never a result.
+- **Why:** the engine does not throw, and the three classes differ only in how they are made.
+- **Changes chosen paths:** no.
+- **Decided by:** nobody needed.
+- **Comparison:** none for the causes of the errors in upstream, since `calculate` swallows them (it logs and answers
+  `EXCEPTION`). `tools/search-compare` compares that a search threw, and checks on the Rust side that the cause is the one the
+  settings explain (a NaN heuristic, or a `pathCutoffFactor` above 1). The unit tests make each error.
+
+### D8. Costs of a path are copied when it is made
+
+- **Status:** active, in `Path::from_nodes`.
+- **Upstream:** `Path` keeps the `PathNode` objects and reads their `cost` in `assembleMovements`, later. A search that
+  went on after `bestPathSoFar` would change them.
+- **Ours:** the costs are copied when the path is made.
+- **Why:** nodes are in an arena that the path does not borrow.
+- **Changes chosen paths:** no. `postProcess` is only called on the finished search.
+- **Decided by:** nobody needed.
+- **Comparison:** none.
+
+### D9. The first cell key may equal the key that means "no cell yet"
+
+- **Status:** active, in `search::node`. No effect in the game.
+- **Upstream:** `AbstractNodeCostSearch` starts with `prevCellKey = Long.MIN_VALUE` and `prevCell = null`
+  (line 57). If the first lookup of a search has the key `Long.MIN_VALUE`, `cellKey == prevCellKey` is true and
+  `cell = prevCell` is null, so `cell[index]` throws a `NullPointerException` (lines 199-200) and `calculate` answers `EXCEPTION`.
+  The key is `Long.MIN_VALUE` for x from -2147483648 to -2147483633, z from 0 to 15 and y from 0 to 7 (the cell
+  of `x >> 4 = -134217728`, whose 28 low bits are `0x8000000`, shifted into the sign bit).
+- **Ours:** the cells are a map with no sentinel, so the search runs normally there.
+- **Why:** the position is 70 times beyond the world border (30 million blocks), so no game reaches it. The same position
+  at x + 16 or y = 9 gives another key and matched in a trial run.
+- **Changes chosen paths:** no, for every position a game can have.
+- **Decided by:** nobody needed.
+- **Comparison:** none. A trial run through upstream's classes, outside the committed corpus, with a start at `(-2147483647, 1, 1)`
+  found exactly this difference in 2 of 2,825 searches and no other.
+
+### D10. `slowPath` is not read
+
+- **Status:** active, in `search::astar`.
+- **Upstream:** `calculate0` reads the debug setting `slowPath` and, when it is on, uses `slowPathTimeoutMS` for both
+  timeouts and logs a line.
+- **Ours:** the caller gives both timeouts, so a caller that wants the slow path passes `slowPathTimeoutMS` itself. The
+  setting is not read.
+- **Why:** it is a debugging aid; the engine has no settings object to read at that point and no log.
+- **Changes chosen paths:** no. A timeout acts only on a search that runs out of time.
+- **Decided by:** nobody needed.
+- **Comparison:** none (the time limits never fire in L2).
+
+### Upstream behaviour kept, found in S3 (reported, not fixed)
+
+The port does what upstream does here; a change would change paths, so it is the owner's call.
+
+- **U1. `getDistFromStartSq` is an `int` and wraps.** A best node 46,341 to 65,535 blocks from the start has a squared
+  distance that wraps to a value below 25 or negative, so the partial path is refused as "no path". In a one-wide corridor
+  both sides answered a segment at a cap of 46,000 nodes and a failure at caps from 46,343 to 65,536. The committed corpus has a
+  corridor of 70,000 blocks along z (caps 46,000, 46,400 and 65,540) for this.
+- **U2. The y part of the cell key repeats every 2048 blocks** (`(y >> 3) & 0xFF`, bug 4 in `tools/search-compare/known-missed.txt`). Two nodes
+  2048 blocks apart in y, with the same x and z, share a slot, so a search in a column higher than 2048 stops at 2048 nodes and
+  returns a segment. The committed corpus has a one-wide shaft 4064 high for this. A vanilla world is at most 384 high.
 
 ## Where upstream's two branches disagree
 

@@ -22,4 +22,10 @@ pub mod config;
 pub mod costs;
 pub mod goals;
 pub mod movement;
+pub mod plan;
+pub mod pos;
+pub mod search;
 pub mod world;
+
+#[cfg(test)]
+mod testing;

@@ -1,34 +1,39 @@
 class	method	status	commit	hash	covered_by	note
-AStarPathFinder	<init>	missing	1b8e87c	6c63beb1dc416301		
-AStarPathFinder	calculate0	missing	1b8e87c	ff1cb876659fb955		
-AbstractNodeCostSearch	<init>	missing	1b8e87c	186065221c2d7af3		
-AbstractNodeCostSearch	bestPathSoFar	missing	1b8e87c	f273828c8cc02918		
-AbstractNodeCostSearch	bestSoFar	missing	1b8e87c	9a46f85941037245		
-AbstractNodeCostSearch	calculate	missing	1b8e87c	c793b51e35154bcb		
-AbstractNodeCostSearch	calculate0	missing	1b8e87c	4aa0003e5cb2cd64		
-AbstractNodeCostSearch	cancel	missing	1b8e87c	cbf3dd85495e1b8e		
-AbstractNodeCostSearch	getDistFromStartSq	missing	1b8e87c	57bb0eea9a8fbf8a		
-AbstractNodeCostSearch	getGoal	missing	1b8e87c	9cc0af05d3f36268		
-AbstractNodeCostSearch	getNodeAtPosition	missing	1b8e87c	6d32706c819a5b12		
-AbstractNodeCostSearch	getStart	missing	1b8e87c	106a4659193ca569		
-AbstractNodeCostSearch	isFinished	missing	1b8e87c	c6335fd30a6ac66c		
-AbstractNodeCostSearch	mapSize	missing	1b8e87c	3d8c1eefa89c140c		
-AbstractNodeCostSearch	pathToMostRecentNodeConsidered	missing	1b8e87c	0520764f85fc79bb		
+AStarPathFinder	<init>	redesign	1b8e87c	6c63beb1dc416301		`AStarPathFinder::new`. The finder holds the context, the favoring and a node arena.
+AStarPathFinder	calculate0	port	1b8e87c	ff1cb876659fb955	search-compare	The limits are the caller's: a node cap, a clock closure and a cancel flag. slowPath, the printing and the debug log are dropped. A bad cost, destination or heuristic is a `SearchError`.
+AbstractNodeCostSearch	<init>	redesign	1b8e87c	186065221c2d7af3		`AStarPathFinder::new`. The cell map is a std HashMap of 16 x 8 x 16 cells; the sizes and load factor settings are not used.
+AbstractNodeCostSearch	bestPathSoFar	port	1b8e87c	f273828c8cc02918	search-compare	
+AbstractNodeCostSearch	bestSoFar	port	1b8e87c	9a46f85941037245	search-compare	Printing and logging dropped. Path costs are read from the nodes at the time.
+AbstractNodeCostSearch	calculate	port	1b8e87c	c793b51e35154bcb	search-compare	Reuse answers Exception(Reused). The reset of cancelRequested at the start is not translated: the flag is the caller's and a cancel before the start is kept. The cache claim and release are dropped.
+AbstractNodeCostSearch	calculate0	redesign	1b8e87c	4aa0003e5cb2cd64		Abstract. `AStarPathFinder::calculate0` is the only implementation.
+AbstractNodeCostSearch	cancel	redesign	1b8e87c	cbf3dd85495e1b8e		The caller owns an AtomicBool and passes it in `SearchLimits`.
+AbstractNodeCostSearch	getDistFromStartSq	port	1b8e87c	57bb0eea9a8fbf8a	search-compare	
+AbstractNodeCostSearch	getGoal	port	1b8e87c	9cc0af05d3f36268	search-compare	
+AbstractNodeCostSearch	getNodeAtPosition	port	1b8e87c	6d32706c819a5b12	search-compare	Nodes are indices into an arena. The previous-cell cache is dropped, it changes no result. The hash argument is not needed.
+AbstractNodeCostSearch	getStart	port	1b8e87c	106a4659193ca569	search-compare	
+AbstractNodeCostSearch	isFinished	port	1b8e87c	c6335fd30a6ac66c	search-compare	
+AbstractNodeCostSearch	mapSize	port	1b8e87c	3d8c1eefa89c140c	search-compare	
+AbstractNodeCostSearch	pathToMostRecentNodeConsidered	port	1b8e87c	0520764f85fc79bb	search-compare	
 ActionCosts	distanceToTicks	port	1b8e87c	66539f392ef9e3df	cost-compare	
 ActionCosts	generateFallNBlocksCost	port	1b8e87c	0a9e50921b3c966b	cost-compare	Built once and cached in a OnceLock.
 ActionCosts	oldFormula	drop	1b8e87c	0dbc7f355b38467b		Unused in upstream main code; only a formula kept for reference.
 ActionCosts	velocity	port	1b8e87c	4c2faa435c01bdb3	cost-compare	
+Avoidance	<init>(BlockPos,double,int)	redesign	1b8e87c	3b231d48c2e5bc90		`Avoidance::new`.
+Avoidance	<init>(int,int,int,double,int)	redesign	1b8e87c	ab2bcc4ba12084ab		`Avoidance::new`.
+Avoidance	applySpherical	port	1b8e87c	1346212a473546f4	search-compare	
+Avoidance	coefficient	port	1b8e87c	6c85fd6056604052	search-compare	
+Avoidance	create	port	1b8e87c	c35bf90560618381	search-compare	Takes the spawner and mob positions. Which mobs count (spiders by light, piglins by anger, endermen by stare) and the spawner lookup are the glue's job, at S4.
 BetterWorldBorder	<init>	redesign	1b8e87c	c801738720d0b7d9	cost-compare	`Border` holds the limits.
 BetterWorldBorder	canPlaceAt	port	1b8e87c	40bebb2ed52c7b25	cost-compare	
-BetterWorldBorder	entirelyContains	missing	1b8e87c	020955157dc84691		
-BinaryHeapOpenSet	<init>()	missing	1b8e87c	529fe85f77c361b8		
-BinaryHeapOpenSet	<init>(int)	missing	1b8e87c	74b9336521c5c66b		
-BinaryHeapOpenSet	insert	missing	1b8e87c	34b14aa509cab776		
-BinaryHeapOpenSet	isEmpty	missing	1b8e87c	8ee17edc4801074e		
-BinaryHeapOpenSet	removeLowest	missing	1b8e87c	4cc67b3e28f567da		
-BinaryHeapOpenSet	siftUp	missing	1b8e87c	e55f80167b7a8549		
-BinaryHeapOpenSet	size	missing	1b8e87c	22996621ae0759a4		
-BinaryHeapOpenSet	update	missing	1b8e87c	98fbae3ac199902a		
+BetterWorldBorder	entirelyContains	port	1b8e87c	020955157dc84691		`x + 1` wraps as int before the comparison.
+BinaryHeapOpenSet	<init>()	redesign	1b8e87c	529fe85f77c361b8		`BinaryHeapOpenSet::new`.
+BinaryHeapOpenSet	<init>(int)	redesign	1b8e87c	74b9336521c5c66b		`BinaryHeapOpenSet::with_capacity`.
+BinaryHeapOpenSet	insert	port	1b8e87c	34b14aa509cab776	search-compare	Takes the node arena, because the heap position lives in the node.
+BinaryHeapOpenSet	isEmpty	port	1b8e87c	8ee17edc4801074e	search-compare	
+BinaryHeapOpenSet	removeLowest	port	1b8e87c	4cc67b3e28f567da	search-compare	An empty heap answers None where upstream throws.
+BinaryHeapOpenSet	siftUp	port	1b8e87c	e55f80167b7a8549	search-compare	
+BinaryHeapOpenSet	size	port	1b8e87c	22996621ae0759a4	search-compare	
+BinaryHeapOpenSet	update	port	1b8e87c	98fbae3ac199902a	search-compare	
 BlockStateInterface	<init>(BetterWorldBorder,int,int)	missing	1b8e87c	1eda20ba48aae6ec		
 BlockStateInterface	<init>(IPlayerContext)	missing	1b8e87c	0539aaf67088d815		
 BlockStateInterface	<init>(IPlayerContext,boolean)	missing	1b8e87c	527c461524f246fa		
@@ -40,7 +45,7 @@ BlockStateInterface	getBlock	missing	1b8e87c	03bdbff6f1a0ed4e
 BlockStateInterface	getFromChunk(LevelChunk,int,int,int)	missing	1b8e87c	958980b714941679		
 BlockStateInterface	getFromChunk(LevelChunkSection[],int,int,int)	missing	1b8e87c	432785696527061b		
 BlockStateInterface	getUncached	missing	1b8e87c	2077484bf5878c40		
-BlockStateInterface	isLoaded	missing	1b8e87c	cea78bc4c6b82cb7		
+BlockStateInterface	isLoaded	redesign	1b8e87c	cea78bc4c6b82cb7		The glue implements `WorldView::is_loaded` with its cache. The default is the live check.
 BlockStateInterface	releaseCache	missing	1b8e87c	57e630960605fef8		
 BlockStateInterface	worldContainsLoadedChunk	redesign	1b8e87c	9a51597ac6b0d5b9	cost-compare	`WorldView::contains_loaded_chunk`; S4 connects it to the live world.
 CachedChunk	<init>	later	1b8e87c	eb24195f9a2d5dfa		Persistent cache: after the processes; the first release has no cache.
@@ -98,7 +103,7 @@ CalculationContext	get(BlockPos)	missing	1b8e87c	b838fc1560d5f2b6
 CalculationContext	get(int,int,int)	port	1b8e87c	61c5a8a956d8d1d6	cost-compare	Outside the world the state is air; BlockStateInterface.get0 is not translated.
 CalculationContext	getBaritone	drop	1b8e87c	08de1327a8ac60af		Multi-instance Java API layer.
 CalculationContext	getBlock	missing	1b8e87c	ff9b056508b1e63b		
-CalculationContext	isLoaded	missing	1b8e87c	6116ae9c8a508ae9		
+CalculationContext	isLoaded	port	1b8e87c	6116ae9c8a508ae9		`WorldView::is_loaded`.
 CalculationContext	isPossiblyProtected	drop	1b8e87c	1948731765551e24		Always false upstream.
 CalculationContext	newMiningKeys	missing	1b8e87c	4434c52d5c8de6b0		
 CalculationContext	placeBucketCost	redesign	1b8e87c	16684b5f7de384fa	cost-compare	Returns placeBlockCost upstream; Config.place_penalty serves both.
@@ -117,12 +122,12 @@ CustomGoalProcess	onLostControl	missing	1b8e87c	02ba15f70dc67392
 CustomGoalProcess	onTick	missing	1b8e87c	447f2ca527fd08ff		
 CustomGoalProcess	path	missing	1b8e87c	95f47ff15a96493c		
 CustomGoalProcess	setGoal	missing	1b8e87c	488fc75dee396526		
-CutoffPath	<init>(IPath,int)	missing	1b8e87c	06d1ae15b8266fe2		
-CutoffPath	<init>(IPath,int,int)	missing	1b8e87c	b263057bb466da39		
-CutoffPath	getGoal	missing	1b8e87c	50a9d398a5a822ff		
-CutoffPath	getNumNodesConsidered	missing	1b8e87c	4657048dd65c49a6		
-CutoffPath	movements	missing	1b8e87c	9ff71a2ec2408a25		
-CutoffPath	positions	missing	1b8e87c	b7e64f7afa055602		
+CutoffPath	<init>(IPath,int)	redesign	1b8e87c	06d1ae15b8266fe2		`Path::cutoff`. A bad range is a `SearchError` where upstream's subList throws.
+CutoffPath	<init>(IPath,int,int)	redesign	1b8e87c	b263057bb466da39		`Path::cutoff`. A bad range is a `SearchError` where upstream's subList throws.
+CutoffPath	getGoal	port	1b8e87c	50a9d398a5a822ff	search-compare	One `Path` struct stands for Path, CutoffPath and SplicedPath.
+CutoffPath	getNumNodesConsidered	port	1b8e87c	4657048dd65c49a6	search-compare	One `Path` struct stands for Path, CutoffPath and SplicedPath.
+CutoffPath	movements	port	1b8e87c	9ff71a2ec2408a25	search-compare	One `Path` struct stands for Path, CutoffPath and SplicedPath.
+CutoffPath	positions	port	1b8e87c	b7e64f7afa055602	search-compare	One `Path` struct stands for Path, CutoffPath and SplicedPath.
 ExploreProcess	<init>	later	1b8e87c	51c9f51cc44c1095		Process: next after the first release (mine, follow, explore, in that order).
 ExploreProcess	applyJsonFilter	later	1b8e87c	ada0b134c95bc29d		Process: next after the first release (mine, follow, explore, in that order).
 ExploreProcess	calcFilter	later	1b8e87c	200fe40bf3ea908c		Process: next after the first release (mine, follow, explore, in that order).
@@ -143,6 +148,10 @@ ExploreProcess.IChunkFilter	isAlreadyExplored	later	1b8e87c	dc670bf5d24b3a66		Pr
 ExploreProcess.JsonChunkFilter	<init>	later	1b8e87c	8866e4d1f070f2b7		Process: next after the first release (mine, follow, explore, in that order).
 ExploreProcess.JsonChunkFilter	countRemain	later	1b8e87c	01f45c8c68717029		Process: next after the first release (mine, follow, explore, in that order).
 ExploreProcess.JsonChunkFilter	isAlreadyExplored	later	1b8e87c	ab870a6ee4f61fc2		Process: next after the first release (mine, follow, explore, in that order).
+Favoring	<init>(IPath,CalculationContext)	redesign	1b8e87c	3fd5b204257288a8		`Favoring::from_previous`. The coefficient comes from the settings.
+Favoring	<init>(IPlayerContext,IPath,CalculationContext)	redesign	1b8e87c	fb0a2c449d12b6a0		`Favoring::new`. The avoidances come from `Avoidance::create`, which the caller feeds.
+Favoring	calculate	port	1b8e87c	c595a8db6f667123	search-compare	
+Favoring	isEmpty	port	1b8e87c	cdc858519f608efe	search-compare	
 FollowProcess	<init>	later	1b8e87c	a40e4d6735efcaa2		Process: next after the first release (mine, follow, explore, in that order).
 FollowProcess	currentFilter	later	1b8e87c	5c113f6d2fa838c1		Process: next after the first release (mine, follow, explore, in that order).
 FollowProcess	displayName0	later	1b8e87c	0398b34e877c6f1f		Process: next after the first release (mine, follow, explore, in that order).
@@ -261,10 +270,22 @@ GoalYLevel	hashCode	drop	1b8e87c	6b1b23018d75fb80		No goal is hashed.
 GoalYLevel	heuristic	port	1b8e87c	f46da47852d52114	cost-compare	
 GoalYLevel	isInGoal	port	1b8e87c	8c4b30e28bde1666	cost-compare	
 GoalYLevel	toString	drop	1b8e87c	5d73102a49970fc0		Only for display; commands (S4) can format their own text.
-IOpenSet	insert	missing	1b8e87c	b4deb9bf2f10037e		
-IOpenSet	isEmpty	missing	1b8e87c	69c4fc8c60b25dbd		
-IOpenSet	removeLowest	missing	1b8e87c	2a263e3e13d4483f		
-IOpenSet	update	missing	1b8e87c	88540755a638e6a5		
+IOpenSet	insert	redesign	1b8e87c	b4deb9bf2f10037e		No interface: the pathfinder uses `BinaryHeapOpenSet` only.
+IOpenSet	isEmpty	redesign	1b8e87c	69c4fc8c60b25dbd		No interface: the pathfinder uses `BinaryHeapOpenSet` only.
+IOpenSet	removeLowest	redesign	1b8e87c	2a263e3e13d4483f		No interface: the pathfinder uses `BinaryHeapOpenSet` only.
+IOpenSet	update	redesign	1b8e87c	88540755a638e6a5		No interface: the pathfinder uses `BinaryHeapOpenSet` only.
+IPath	cutoffAtLoadedChunks	redesign	1b8e87c	f3c8efbfa0e0707c		`Path::cutoff_at_loaded_chunks`.
+IPath	getDest	redesign	1b8e87c	77136027b0a1803c		`Path::dest`.
+IPath	getGoal	redesign	1b8e87c	8a31c3e40a385e1b		`Path::goal`.
+IPath	getNumNodesConsidered	redesign	1b8e87c	10695df0a1323d56		`Path::num_nodes_considered`.
+IPath	getSrc	redesign	1b8e87c	8ae7725739837c94		`Path::src`.
+IPath	length	redesign	1b8e87c	ef5380e3bf740348		`Path::length`.
+IPath	movements	redesign	1b8e87c	6500cd5fedf88741		`Path::movements`.
+IPath	positions	redesign	1b8e87c	2c7a82a6f3ad613b		`Path::positions`.
+IPath	postProcess	redesign	1b8e87c	3fcb8cdc08553d69		`Path::post_process`.
+IPath	sanityCheck	port	1b8e87c	6c9b5496674aff55	search-compare	
+IPath	staticCutoff	redesign	1b8e87c	dc27d0e5f23b1553		`Path::static_cutoff`.
+IPath	ticksRemainingFrom	later	1b8e87c	79d91911d5c8be31		Used by the executor and ticksRemainingInSegment: S4.
 InputOverrideHandler	<init>	missing	1b8e87c	83ac5d53c5456d6b		
 InputOverrideHandler	clearAllKeys	missing	1b8e87c	d0e2c41528c77b15		
 InputOverrideHandler	getBlockBreakHelper	missing	1b8e87c	abc272a91324687c		
@@ -272,10 +293,10 @@ InputOverrideHandler	inControl	missing	1b8e87c	a4534235ac06f46c
 InputOverrideHandler	isInputForcedDown	missing	1b8e87c	8251719ec0b517bf		
 InputOverrideHandler	onTick	missing	1b8e87c	b0e4908457c6b7df		
 InputOverrideHandler	setInputForceState	missing	1b8e87c	126fc0a3d8ffe822		
-LinkedListOpenSet	insert	missing	1b8e87c	e260b2a42a79b253		
-LinkedListOpenSet	isEmpty	missing	1b8e87c	8c346ecac3df27a6		
-LinkedListOpenSet	removeLowest	missing	1b8e87c	a6b78cce5a55d37b		
-LinkedListOpenSet	update	missing	1b8e87c	9a4a68372cb97d66		
+LinkedListOpenSet	insert	drop	1b8e87c	e260b2a42a79b253		Not used by the pathfinder; upstream keeps it for its open set test.
+LinkedListOpenSet	isEmpty	drop	1b8e87c	8c346ecac3df27a6		Not used by the pathfinder; upstream keeps it for its open set test.
+LinkedListOpenSet	removeLowest	drop	1b8e87c	a6b78cce5a55d37b		Not used by the pathfinder; upstream keeps it for its open set test.
+LinkedListOpenSet	update	drop	1b8e87c	9a4a68372cb97d66		Not used by the pathfinder; upstream keeps it for its open set test.
 LookBehavior	<init>	missing	1b8e87c	dd0f6a2f5b59ea19		
 LookBehavior	getAimProcessor	missing	1b8e87c	4dd326b65fa404d2		
 LookBehavior	getEffectiveRotation	missing	1b8e87c	4f0681935f22aa95		
@@ -327,83 +348,83 @@ MineProcess.GoalThreeBlocks	hashCode	later	1b8e87c	60fc2508440abd71		Process: ne
 MineProcess.GoalThreeBlocks	heuristic	later	1b8e87c	0c0551a1ec975b75		Process: next after the first release (mine, follow, explore, in that order).
 MineProcess.GoalThreeBlocks	isInGoal	later	1b8e87c	a611ad8b8438e84b		Process: next after the first release (mine, follow, explore, in that order).
 MineProcess.GoalThreeBlocks	toString	later	1b8e87c	3669a6976d6b71e5		Process: next after the first release (mine, follow, explore, in that order).
-Movement	<init>(IBaritone,BetterBlockPos,BetterBlockPos,BetterBlockPos[])	missing	1b8e87c	2f48e88c7287f8a1		
-Movement	<init>(IBaritone,BetterBlockPos,BetterBlockPos,BetterBlockPos[],BetterBlockPos)	missing	1b8e87c	74088287641e4e86		
-Movement	calculateCost	missing	1b8e87c	c6cdc8d04918ae75		
-Movement	calculateValidPositions	missing	1b8e87c	2d58b95babd90d11		
-Movement	calculatedWhileLoaded	missing	1b8e87c	ad40ba650fbc1fce		
-Movement	checkLoadedChunk	missing	1b8e87c	b69102e6560d403a		
-Movement	getCost()	missing	1b8e87c	8ca681380229112d		
-Movement	getCost(CalculationContext)	missing	1b8e87c	2e59021b15c879dd		
-Movement	getDest	missing	1b8e87c	ef439a1590aa54c7		
-Movement	getDirection	missing	1b8e87c	211ff52e1c6ec8e3		
-Movement	getSrc	missing	1b8e87c	6be22d8df7288701		
-Movement	getValidPositions	missing	1b8e87c	637bda20ef2fdb84		
-Movement	holdWaterline	missing	1b8e87c	d2fe23f667fc7b26		
-Movement	lookForSwimVelocity	missing	1b8e87c	ffc8c2b099e06844		
-Movement	override	missing	1b8e87c	2f38c18661421e09		
-Movement	pitchForSwimVelocity	missing	1b8e87c	a715f1f1804de095		
-Movement	playerInValidPosition	missing	1b8e87c	070d9969b2bd0bc2		
-Movement	preTurnIntoTheBend	missing	1b8e87c	578c25c1d8d69b73		
-Movement	prepared	missing	1b8e87c	eae3867ba73b8b38		
-Movement	recalculateCost	missing	1b8e87c	e7ec743f307f538d		
-Movement	reset	missing	1b8e87c	20247ab911639e9e		
-Movement	resetBlockCache	missing	1b8e87c	c7740c02ac6ef5b3		
-Movement	safeToCancel()	missing	1b8e87c	2fef8ae86af16f11		
-Movement	safeToCancel(MovementState)	missing	1b8e87c	dfd31fd5316ca91d		
-Movement	shouldSwim	missing	1b8e87c	0499657898822fe3		
-Movement	toBreak	missing	1b8e87c	3d1cc95adf1aa01d		
-Movement	toBreakAll	missing	1b8e87c	b9d13341c6f54c6d		
-Movement	toPlace	missing	1b8e87c	55e066d696ecc2ac		
-Movement	toWalkInto	missing	1b8e87c	b4ce8638adae76f0		
-Movement	update	missing	1b8e87c	3ddb04be9cc19623		
-Movement	updateState	missing	1b8e87c	88bc25824f1ae844		
-MovementAscend	<init>	missing	1b8e87c	f97db35233e1a72e		
-MovementAscend	calculateCost	missing	1b8e87c	57e33d60a46f1c69		
-MovementAscend	calculateValidPositions	missing	1b8e87c	870e4046e4679bdd		
+Movement	<init>(IBaritone,BetterBlockPos,BetterBlockPos,BetterBlockPos[])	redesign	1b8e87c	2f48e88c7287f8a1		`Movement::new` keeps kind, src and dest. toBreak and toPlace are executor work.
+Movement	<init>(IBaritone,BetterBlockPos,BetterBlockPos,BetterBlockPos[],BetterBlockPos)	redesign	1b8e87c	74088287641e4e86		`Movement::new` keeps kind, src and dest. toBreak and toPlace are executor work.
+Movement	calculateCost	redesign	1b8e87c	c6cdc8d04918ae75		`Movement::calculate_cost` matches on the kind.
+Movement	calculateValidPositions	later	1b8e87c	2d58b95babd90d11		Executor: S4.
+Movement	calculatedWhileLoaded	redesign	1b8e87c	ad40ba650fbc1fce		The field `calculated_while_loaded` is an Option.
+Movement	checkLoadedChunk	port	1b8e87c	b69102e6560d403a	search-compare	
+Movement	getCost()	port	1b8e87c	8ca681380229112d		None where upstream unboxes a null and throws.
+Movement	getCost(CalculationContext)	port	1b8e87c	2e59021b15c879dd		
+Movement	getDest	redesign	1b8e87c	ef439a1590aa54c7		Public field `dest`.
+Movement	getDirection	later	1b8e87c	211ff52e1c6ec8e3		Executor: S4.
+Movement	getSrc	redesign	1b8e87c	6be22d8df7288701		Public field `src`.
+Movement	getValidPositions	later	1b8e87c	637bda20ef2fdb84		Executor: S4.
+Movement	holdWaterline	later	1b8e87c	d2fe23f667fc7b26		Executor: S4.
+Movement	lookForSwimVelocity	later	1b8e87c	ffc8c2b099e06844		Executor: S4.
+Movement	override	port	1b8e87c	2f38c18661421e09	search-compare	`Movement::override_cost`.
+Movement	pitchForSwimVelocity	later	1b8e87c	a715f1f1804de095		Executor: S4.
+Movement	playerInValidPosition	later	1b8e87c	070d9969b2bd0bc2		Executor: S4.
+Movement	preTurnIntoTheBend	later	1b8e87c	578c25c1d8d69b73		Executor: S4.
+Movement	prepared	later	1b8e87c	eae3867ba73b8b38		Executor: S4.
+Movement	recalculateCost	port	1b8e87c	e7ec743f307f538d		
+Movement	reset	later	1b8e87c	20247ab911639e9e		Executor: S4.
+Movement	resetBlockCache	later	1b8e87c	c7740c02ac6ef5b3		Executor: S4.
+Movement	safeToCancel()	later	1b8e87c	2fef8ae86af16f11		Executor: S4.
+Movement	safeToCancel(MovementState)	later	1b8e87c	dfd31fd5316ca91d		Executor: S4.
+Movement	shouldSwim	later	1b8e87c	0499657898822fe3		Executor: S4.
+Movement	toBreak	later	1b8e87c	3d1cc95adf1aa01d		Executor: S4.
+Movement	toBreakAll	later	1b8e87c	b9d13341c6f54c6d		Executor: S4.
+Movement	toPlace	later	1b8e87c	55e066d696ecc2ac		Executor: S4.
+Movement	toWalkInto	later	1b8e87c	b4ce8638adae76f0		Executor: S4.
+Movement	update	later	1b8e87c	3ddb04be9cc19623		Executor: S4.
+Movement	updateState	later	1b8e87c	88bc25824f1ae844		Executor: S4.
+MovementAscend	<init>	redesign	1b8e87c	f97db35233e1a72e		`Movement::new`. toBreak and toPlace are executor work.
+MovementAscend	calculateCost	port	1b8e87c	57e33d60a46f1c69		
+MovementAscend	calculateValidPositions	later	1b8e87c	870e4046e4679bdd		Executor: S4.
 MovementAscend	cost	port	1b8e87c	a1de32bdeb227a53	cost-compare	
-MovementAscend	headBonkClear	missing	1b8e87c	e630635a510b9e7c		
-MovementAscend	reset	missing	1b8e87c	23ce7033958c272b		
-MovementAscend	safeToCancel	missing	1b8e87c	9344a6eed892eca9		
-MovementAscend	updateState	missing	1b8e87c	2831fdcdc5c33ef1		
-MovementDescend	<init>	missing	1b8e87c	09599d7ac7244418		
-MovementDescend	calculateCost	missing	1b8e87c	37df4709e7715a6d		
-MovementDescend	calculateValidPositions	missing	1b8e87c	288833ad4ab1d4a2		
+MovementAscend	headBonkClear	later	1b8e87c	e630635a510b9e7c		Executor: S4.
+MovementAscend	reset	later	1b8e87c	23ce7033958c272b		Executor: S4.
+MovementAscend	safeToCancel	later	1b8e87c	9344a6eed892eca9		Executor: S4.
+MovementAscend	updateState	later	1b8e87c	2831fdcdc5c33ef1		Executor: S4.
+MovementDescend	<init>	redesign	1b8e87c	09599d7ac7244418		`Movement::new`. toBreak and toPlace are executor work.
+MovementDescend	calculateCost	port	1b8e87c	37df4709e7715a6d		
+MovementDescend	calculateValidPositions	later	1b8e87c	288833ad4ab1d4a2		Executor: S4.
 MovementDescend	cost	port	1b8e87c	0279f30ee709b206	cost-compare	
 MovementDescend	dynamicFallCost	port	1b8e87c	e01387427bb0637a	cost-compare	allowFallIntoLava is false outside the elytra code.
-MovementDescend	forceSafeMode	missing	1b8e87c	c4ca6e92420007a1		
-MovementDescend	reset	missing	1b8e87c	5fe72d7ce18dddc9		
-MovementDescend	safeMode	missing	1b8e87c	7b1def7002d96a97		
-MovementDescend	skipToAscend	missing	1b8e87c	c0a2eb2f4548e8bb		
-MovementDescend	updateState	missing	1b8e87c	9156ee8590018c18		
-MovementDiagonal	<init>(IBaritone,BetterBlockPos,BetterBlockPos,BetterBlockPos,BetterBlockPos)	missing	1b8e87c	ccbdf63ed5cbb51a		
-MovementDiagonal	<init>(IBaritone,BetterBlockPos,BetterBlockPos,BetterBlockPos,Direction,int)	missing	1b8e87c	3eec2988bcb57519		
-MovementDiagonal	<init>(IBaritone,BetterBlockPos,Direction,Direction,int)	missing	1b8e87c	baefdf4fb6162e7b		
-MovementDiagonal	calculateCost	missing	1b8e87c	37df4709e7715a6d		
-MovementDiagonal	calculateValidPositions	missing	1b8e87c	c4c03e664af16e51		
+MovementDescend	forceSafeMode	later	1b8e87c	c4ca6e92420007a1		Executor: S4.
+MovementDescend	reset	later	1b8e87c	5fe72d7ce18dddc9		Executor: S4.
+MovementDescend	safeMode	later	1b8e87c	7b1def7002d96a97		Executor: S4.
+MovementDescend	skipToAscend	later	1b8e87c	c0a2eb2f4548e8bb		Executor: S4.
+MovementDescend	updateState	later	1b8e87c	9156ee8590018c18		Executor: S4.
+MovementDiagonal	<init>(IBaritone,BetterBlockPos,BetterBlockPos,BetterBlockPos,BetterBlockPos)	redesign	1b8e87c	ccbdf63ed5cbb51a		`Movement::new`. toBreak and toPlace are executor work. The diagonal takes its end from `Moves.apply0`.
+MovementDiagonal	<init>(IBaritone,BetterBlockPos,BetterBlockPos,BetterBlockPos,Direction,int)	redesign	1b8e87c	3eec2988bcb57519		`Movement::new`. toBreak and toPlace are executor work. The diagonal takes its end from `Moves.apply0`.
+MovementDiagonal	<init>(IBaritone,BetterBlockPos,Direction,Direction,int)	redesign	1b8e87c	baefdf4fb6162e7b		`Movement::new`. toBreak and toPlace are executor work. The diagonal takes its end from `Moves.apply0`.
+MovementDiagonal	calculateCost	port	1b8e87c	37df4709e7715a6d		
+MovementDiagonal	calculateValidPositions	later	1b8e87c	c4c03e664af16e51		Executor: S4.
 MovementDiagonal	cost	port	1b8e87c	c422c1e311ef5484	cost-compare	
 MovementDiagonal	isBlockingDoor	port	1b8e87c	db372b2640e5044e	cost-compare	
-MovementDiagonal	prepared	missing	1b8e87c	6180a6f1184bfb3e		
-MovementDiagonal	safeToCancel	missing	1b8e87c	59a6e5bef1c2dffe		
-MovementDiagonal	sprint	missing	1b8e87c	295bc12222939373		
-MovementDiagonal	toBreak	missing	1b8e87c	08dd54ec4c07d34d		
-MovementDiagonal	toWalkInto	missing	1b8e87c	699d613c4f4f838e		
-MovementDiagonal	updateState	missing	1b8e87c	785d042514ddb708		
-MovementDownward	<init>	missing	1b8e87c	3fee61e2f5b4d4ab		
-MovementDownward	calculateCost	missing	1b8e87c	b98f2f7234fd0837		
-MovementDownward	calculateValidPositions	missing	1b8e87c	383246429d6b166b		
+MovementDiagonal	prepared	later	1b8e87c	6180a6f1184bfb3e		Executor: S4.
+MovementDiagonal	safeToCancel	later	1b8e87c	59a6e5bef1c2dffe		Executor: S4.
+MovementDiagonal	sprint	later	1b8e87c	295bc12222939373		Executor: S4.
+MovementDiagonal	toBreak	later	1b8e87c	08dd54ec4c07d34d		Executor: S4.
+MovementDiagonal	toWalkInto	later	1b8e87c	699d613c4f4f838e		Executor: S4.
+MovementDiagonal	updateState	later	1b8e87c	785d042514ddb708		Executor: S4.
+MovementDownward	<init>	redesign	1b8e87c	3fee61e2f5b4d4ab		`Movement::new`. toBreak and toPlace are executor work.
+MovementDownward	calculateCost	port	1b8e87c	b98f2f7234fd0837		
+MovementDownward	calculateValidPositions	later	1b8e87c	383246429d6b166b		Executor: S4.
 MovementDownward	cost	port	1b8e87c	f895b0d4306457e0	cost-compare	
-MovementDownward	reset	missing	1b8e87c	b43e6509299e61f2		
-MovementDownward	updateState	missing	1b8e87c	53d0b489162e47c4		
-MovementFall	<init>	missing	1b8e87c	4bb102f992e7629f		
-MovementFall	avoid	missing	1b8e87c	f7ca9c2ac76f59e0		
-MovementFall	buildPositionsToBreak	missing	1b8e87c	df00a0bf8ca01b01		
-MovementFall	calculateCost	missing	1b8e87c	ac2b756bbcecb7be		
-MovementFall	calculateValidPositions	missing	1b8e87c	050b67d207870d0e		
-MovementFall	prepared	missing	1b8e87c	3d3b4ce15f7917c6		
-MovementFall	safeToCancel	missing	1b8e87c	f5a789f9c1ee179e		
-MovementFall	updateState	missing	1b8e87c	9093b11d6694c793		
-MovementFall	willPlaceBucket	missing	1b8e87c	e0506533818050c7		
+MovementDownward	reset	later	1b8e87c	b43e6509299e61f2		Executor: S4.
+MovementDownward	updateState	later	1b8e87c	53d0b489162e47c4		Executor: S4.
+MovementFall	<init>	redesign	1b8e87c	4bb102f992e7629f		`Movement::new`. toBreak and toPlace are executor work.
+MovementFall	avoid	later	1b8e87c	f7ca9c2ac76f59e0		Executor: S4.
+MovementFall	buildPositionsToBreak	later	1b8e87c	df00a0bf8ca01b01		Executor: S4.
+MovementFall	calculateCost	port	1b8e87c	ac2b756bbcecb7be		
+MovementFall	calculateValidPositions	later	1b8e87c	050b67d207870d0e		Executor: S4.
+MovementFall	prepared	later	1b8e87c	3d3b4ce15f7917c6		Executor: S4.
+MovementFall	safeToCancel	later	1b8e87c	f5a789f9c1ee179e		Executor: S4.
+MovementFall	updateState	later	1b8e87c	9093b11d6694c793		Executor: S4.
+MovementFall	willPlaceBucket	later	1b8e87c	e0506533818050c7		Executor: S4.
 MovementHelper	attemptToPlaceABlock	later	1b8e87c	4473a56a0d0bdd8a		Executor side: S4.
 MovementHelper	avoidAdjacentBreaking	port	1b8e87c	b94c152b1b81a19c	cost-compare	
 MovementHelper	avoidBreaking(BlockStateInterface,int,int,int,BlockState)	later	1b8e87c	479795bcf839b293		Executor side: S4.
@@ -465,88 +486,90 @@ MovementHelper	possiblyFlowing	port	1b8e87c	135e5ad22ff9a802	cost-compare
 MovementHelper	steppingOnBlocks	later	1b8e87c	2549cdcfe6accd89		Executor side: S4.
 MovementHelper	switchToBestToolFor(IPlayerContext,BlockState)	later	1b8e87c	266b18edf4cca6d2		Executor side: S4.
 MovementHelper	switchToBestToolFor(IPlayerContext,BlockState,ToolSet,boolean)	later	1b8e87c	2f3e6afe62ce4008		Executor side: S4.
-MovementParkour	<init>	missing	1b8e87c	2644f3c489c09eac		
-MovementParkour	calculateCost	missing	1b8e87c	a815eed498afb743		
-MovementParkour	calculateValidPositions	missing	1b8e87c	1c83db9b93285e8e		
+MovementParkour	<init>	redesign	1b8e87c	2644f3c489c09eac		`Movement::new`. toBreak and toPlace are executor work.
+MovementParkour	calculateCost	port	1b8e87c	a815eed498afb743		
+MovementParkour	calculateValidPositions	later	1b8e87c	1c83db9b93285e8e		Executor: S4.
 MovementParkour	checkOvershootSafety	port	1b8e87c	3ae6a69df2ef75fb	cost-compare	
-MovementParkour	cost(CalculationContext,BetterBlockPos,Direction)	later	1b8e87c	15bead88f4c78933		Used by the Movement object: S4.
+MovementParkour	cost(CalculationContext,BetterBlockPos,Direction)	port	1b8e87c	15bead88f4c78933		`Movement::parkour_from`.
 MovementParkour	cost(CalculationContext,int,int,int,Direction,MutableMoveResult)	port	1b8e87c	4091af1ab98e61ec	cost-compare	
 MovementParkour	costFromJumpDistance	port	1b8e87c	7e22736fb45b19fa	cost-compare	
-MovementParkour	safeToCancel	missing	1b8e87c	55e0812dcb1fa176		
-MovementParkour	updateState	missing	1b8e87c	bcd5f0021510c0ac		
-MovementPillar	<init>	missing	1b8e87c	6bb63703f7092286		
-MovementPillar	calculateCost	missing	1b8e87c	b98f2f7234fd0837		
-MovementPillar	calculateValidPositions	missing	1b8e87c	383246429d6b166b		
+MovementParkour	safeToCancel	later	1b8e87c	55e0812dcb1fa176		Executor: S4.
+MovementParkour	updateState	later	1b8e87c	bcd5f0021510c0ac		Executor: S4.
+MovementPillar	<init>	redesign	1b8e87c	6bb63703f7092286		`Movement::new`. toBreak and toPlace are executor work.
+MovementPillar	calculateCost	port	1b8e87c	b98f2f7234fd0837		
+MovementPillar	calculateValidPositions	later	1b8e87c	383246429d6b166b		Executor: S4.
 MovementPillar	cost	port	1b8e87c	a08876128e928e32	cost-compare	
-MovementPillar	prepared	missing	1b8e87c	d9a71a7a9bf934bf		
-MovementPillar	updateState	missing	1b8e87c	7b1bb2c43de52022		
-MovementTraverse	<init>	missing	1b8e87c	73be90078e8f594a		
-MovementTraverse	calculateCost	missing	1b8e87c	57e33d60a46f1c69		
-MovementTraverse	calculateValidPositions	missing	1b8e87c	383246429d6b166b		
+MovementPillar	prepared	later	1b8e87c	d9a71a7a9bf934bf		Executor: S4.
+MovementPillar	updateState	later	1b8e87c	7b1bb2c43de52022		Executor: S4.
+MovementTraverse	<init>	redesign	1b8e87c	73be90078e8f594a		`Movement::new`. toBreak and toPlace are executor work.
+MovementTraverse	calculateCost	port	1b8e87c	57e33d60a46f1c69		
+MovementTraverse	calculateValidPositions	later	1b8e87c	383246429d6b166b		Executor: S4.
 MovementTraverse	cost	port	1b8e87c	d3f6b3b49021d2c3	cost-compare	
-MovementTraverse	prepared	missing	1b8e87c	cca0bb7772344049		
-MovementTraverse	reset	missing	1b8e87c	e415f81bea730766		
-MovementTraverse	safeToCancel	missing	1b8e87c	3ed0a190a240e5f9		
-MovementTraverse	updateState	missing	1b8e87c	71cb6aeb8d77e9f1		
+MovementTraverse	prepared	later	1b8e87c	cca0bb7772344049		Executor: S4.
+MovementTraverse	reset	later	1b8e87c	e415f81bea730766		Executor: S4.
+MovementTraverse	safeToCancel	later	1b8e87c	3ed0a190a240e5f9		Executor: S4.
+MovementTraverse	updateState	later	1b8e87c	71cb6aeb8d77e9f1		Executor: S4.
 Moves	<init>(int,int,int)	redesign	1b8e87c	44231cfdfba4e7ef	cost-compare	The enum has offset and flag functions instead of fields.
 Moves	<init>(int,int,int,boolean,boolean)	redesign	1b8e87c	7cb2b27c96e607f1	cost-compare	The enum has offset and flag functions instead of fields.
 Moves	apply	port	1b8e87c	779e80c6d2db7615	cost-compare	
-Moves	apply0	later	1b8e87c	b5940876ecff327f		Builds the Movement object for the executor: S4.
+Moves	apply0	port	1b8e87c	b5940876ecff327f	search-compare	`Moves::apply0` returns a plain `Movement`.
 Moves	cost	port	1b8e87c	6507478cc7637f64	cost-compare	
-Moves.ASCEND_EAST	apply0	later	1b8e87c	82befa80a322409b		Builds the Movement object for the executor: S4.
+Moves.ASCEND_EAST	apply0	port	1b8e87c	82befa80a322409b	search-compare	
 Moves.ASCEND_EAST	cost	port	1b8e87c	c09999f38037c521	cost-compare	
-Moves.ASCEND_NORTH	apply0	later	1b8e87c	5840674a8bed750d		Builds the Movement object for the executor: S4.
+Moves.ASCEND_NORTH	apply0	port	1b8e87c	5840674a8bed750d	search-compare	
 Moves.ASCEND_NORTH	cost	port	1b8e87c	3c50ccfed4c74428	cost-compare	
-Moves.ASCEND_SOUTH	apply0	later	1b8e87c	2c4b91e0dd562ebf		Builds the Movement object for the executor: S4.
+Moves.ASCEND_SOUTH	apply0	port	1b8e87c	2c4b91e0dd562ebf	search-compare	
 Moves.ASCEND_SOUTH	cost	port	1b8e87c	6251f76353be464f	cost-compare	
-Moves.ASCEND_WEST	apply0	later	1b8e87c	dcdbc38e248f1934		Builds the Movement object for the executor: S4.
+Moves.ASCEND_WEST	apply0	port	1b8e87c	dcdbc38e248f1934	search-compare	
 Moves.ASCEND_WEST	cost	port	1b8e87c	1e2a86575a5041fa	cost-compare	
 Moves.DESCEND_EAST	apply	port	1b8e87c	30c21f538d329e1a	cost-compare	
-Moves.DESCEND_EAST	apply0	later	1b8e87c	73122da6f17abf68		Builds the Movement object for the executor: S4.
+Moves.DESCEND_EAST	apply0	port	1b8e87c	73122da6f17abf68	search-compare	
 Moves.DESCEND_NORTH	apply	port	1b8e87c	10d65b3cc97b5576	cost-compare	
-Moves.DESCEND_NORTH	apply0	later	1b8e87c	73122da6f17abf68		Builds the Movement object for the executor: S4.
+Moves.DESCEND_NORTH	apply0	port	1b8e87c	73122da6f17abf68	search-compare	
 Moves.DESCEND_SOUTH	apply	port	1b8e87c	7379c0c73316808c	cost-compare	
-Moves.DESCEND_SOUTH	apply0	later	1b8e87c	73122da6f17abf68		Builds the Movement object for the executor: S4.
+Moves.DESCEND_SOUTH	apply0	port	1b8e87c	73122da6f17abf68	search-compare	
 Moves.DESCEND_WEST	apply	port	1b8e87c	e9ecb37f117bf0da	cost-compare	
-Moves.DESCEND_WEST	apply0	later	1b8e87c	73122da6f17abf68		Builds the Movement object for the executor: S4.
+Moves.DESCEND_WEST	apply0	port	1b8e87c	73122da6f17abf68	search-compare	
 Moves.DIAGONAL_NORTHEAST	apply	port	1b8e87c	3f7d4ad55f9223e2	cost-compare	
-Moves.DIAGONAL_NORTHEAST	apply0	later	1b8e87c	58f34f1252443313		Builds the Movement object for the executor: S4.
+Moves.DIAGONAL_NORTHEAST	apply0	port	1b8e87c	58f34f1252443313	search-compare	
 Moves.DIAGONAL_NORTHWEST	apply	port	1b8e87c	37f0875bd4e63c56	cost-compare	
-Moves.DIAGONAL_NORTHWEST	apply0	later	1b8e87c	12d86debe03cbc27		Builds the Movement object for the executor: S4.
+Moves.DIAGONAL_NORTHWEST	apply0	port	1b8e87c	12d86debe03cbc27	search-compare	
 Moves.DIAGONAL_SOUTHEAST	apply	port	1b8e87c	f0d560e47c43791c	cost-compare	
-Moves.DIAGONAL_SOUTHEAST	apply0	later	1b8e87c	936a7e1cc1c1f1e0		Builds the Movement object for the executor: S4.
+Moves.DIAGONAL_SOUTHEAST	apply0	port	1b8e87c	936a7e1cc1c1f1e0	search-compare	
 Moves.DIAGONAL_SOUTHWEST	apply	port	1b8e87c	4a9c5ef07fd0aef2	cost-compare	
-Moves.DIAGONAL_SOUTHWEST	apply0	later	1b8e87c	68366343b667f430		Builds the Movement object for the executor: S4.
-Moves.DOWNWARD	apply0	later	1b8e87c	e049d60adcfa5347		Builds the Movement object for the executor: S4.
+Moves.DIAGONAL_SOUTHWEST	apply0	port	1b8e87c	68366343b667f430	search-compare	
+Moves.DOWNWARD	apply0	port	1b8e87c	e049d60adcfa5347	search-compare	
 Moves.DOWNWARD	cost	port	1b8e87c	12710018011f58a2	cost-compare	
 Moves.PARKOUR_EAST	apply	port	1b8e87c	ab49329c947898f7	cost-compare	
-Moves.PARKOUR_EAST	apply0	later	1b8e87c	3b62684be1ddff36		Builds the Movement object for the executor: S4.
+Moves.PARKOUR_EAST	apply0	port	1b8e87c	3b62684be1ddff36	search-compare	
 Moves.PARKOUR_NORTH	apply	port	1b8e87c	281f8906d1d6a1d4	cost-compare	
-Moves.PARKOUR_NORTH	apply0	later	1b8e87c	4f83341973bcf773		Builds the Movement object for the executor: S4.
+Moves.PARKOUR_NORTH	apply0	port	1b8e87c	4f83341973bcf773	search-compare	
 Moves.PARKOUR_SOUTH	apply	port	1b8e87c	7d5d8ed7ca012237	cost-compare	
-Moves.PARKOUR_SOUTH	apply0	later	1b8e87c	9f16ef33434d5a7e		Builds the Movement object for the executor: S4.
+Moves.PARKOUR_SOUTH	apply0	port	1b8e87c	9f16ef33434d5a7e	search-compare	
 Moves.PARKOUR_WEST	apply	port	1b8e87c	78e5d9d06e456149	cost-compare	
-Moves.PARKOUR_WEST	apply0	later	1b8e87c	48ca9301f25ad7c6		Builds the Movement object for the executor: S4.
-Moves.PILLAR	apply0	later	1b8e87c	381c8535ddb1abcf		Builds the Movement object for the executor: S4.
+Moves.PARKOUR_WEST	apply0	port	1b8e87c	48ca9301f25ad7c6	search-compare	
+Moves.PILLAR	apply0	port	1b8e87c	381c8535ddb1abcf	search-compare	
 Moves.PILLAR	cost	port	1b8e87c	b0b834c4fa21c16d	cost-compare	
-Moves.TRAVERSE_EAST	apply0	later	1b8e87c	3d55184a41c800c8		Builds the Movement object for the executor: S4.
+Moves.TRAVERSE_EAST	apply0	port	1b8e87c	3d55184a41c800c8	search-compare	
 Moves.TRAVERSE_EAST	cost	port	1b8e87c	d30a43bc94d7f531	cost-compare	
-Moves.TRAVERSE_NORTH	apply0	later	1b8e87c	5bdec649b03659fd		Builds the Movement object for the executor: S4.
+Moves.TRAVERSE_NORTH	apply0	port	1b8e87c	5bdec649b03659fd	search-compare	
 Moves.TRAVERSE_NORTH	cost	port	1b8e87c	9082a39ed40a85dc	cost-compare	
-Moves.TRAVERSE_SOUTH	apply0	later	1b8e87c	49617f7a25536f1f		Builds the Movement object for the executor: S4.
+Moves.TRAVERSE_SOUTH	apply0	port	1b8e87c	49617f7a25536f1f	search-compare	
 Moves.TRAVERSE_SOUTH	cost	port	1b8e87c	e70bd54f58f4fb69	cost-compare	
-Moves.TRAVERSE_WEST	apply0	later	1b8e87c	c248762a8195eaf4		Builds the Movement object for the executor: S4.
+Moves.TRAVERSE_WEST	apply0	port	1b8e87c	c248762a8195eaf4	search-compare	
 Moves.TRAVERSE_WEST	cost	port	1b8e87c	ba3d53757f3dca93	cost-compare	
-Path	<init>	missing	1b8e87c	f9432c6813b438f9		
-Path	assembleMovements	missing	1b8e87c	158889f2a78c3dd5		
-Path	getDest	missing	1b8e87c	db14168876712f37		
-Path	getGoal	missing	1b8e87c	50a9d398a5a822ff		
-Path	getNumNodesConsidered	missing	1b8e87c	4657048dd65c49a6		
-Path	getSrc	missing	1b8e87c	e30808ff5782ed0b		
-Path	movements	missing	1b8e87c	4147fb6cb7509795		
-Path	positions	missing	1b8e87c	b7e64f7afa055602		
-Path	postProcess	missing	1b8e87c	87e6d2ccd3eaa090		
-Path	runBackwards	missing	1b8e87c	7cb062a4fdbc2b78		
+Path	<init>	redesign	1b8e87c	f9432c6813b438f9		`Path::from_nodes`. Costs are copied from the nodes when the path is made. A cycle in the previous links is an error, where upstream would loop forever.
+Path	assembleMovements	port	1b8e87c	158889f2a78c3dd5	search-compare	
+Path	getDest	port	1b8e87c	db14168876712f37	search-compare	
+Path	getGoal	port	1b8e87c	50a9d398a5a822ff	search-compare	
+Path	getNumNodesConsidered	port	1b8e87c	4657048dd65c49a6	search-compare	
+Path	getSrc	port	1b8e87c	e30808ff5782ed0b	search-compare	
+Path	movements	port	1b8e87c	4147fb6cb7509795	search-compare	An unverified path answers `SearchError::NotVerified`.
+Path	positions	port	1b8e87c	b7e64f7afa055602	search-compare	
+Path	postProcess	port	1b8e87c	87e6d2ccd3eaa090	search-compare	Also stands for the checks that make it throw on a second call.
+Path	runBackwards	port	1b8e87c	7cb062a4fdbc2b78	search-compare	
+PathBase	cutoffAtLoadedChunks	port	1b8e87c	3b7cbf94111efd6f	search-compare	
+PathBase	staticCutoff	port	1b8e87c	484ecfa8df878449	search-compare	A factor above 1 can make the cut longer than the path: upstream's subList throws, here it is a `SearchError`.
 PathExecutor	<init>	missing	1b8e87c	43cddb0e30389ece		
 PathExecutor	canSprintFromDescendInto	missing	1b8e87c	088ce295a464aeb9		
 PathExecutor	canStartHeadHitting	missing	1b8e87c	0209ef113fa91a49		
@@ -578,18 +601,18 @@ PathExecutor	toPlace	missing	1b8e87c	9b115e1e5d46965f
 PathExecutor	toWalkInto	missing	1b8e87c	bad5159cf3f9cef4		
 PathExecutor	trySplice	missing	1b8e87c	264377a9939fc4af		
 PathExecutor	underHeadBonkCeiling	missing	1b8e87c	cf0f03be5b1c11e1		
-PathNode	<init>	missing	1b8e87c	0e6c746b24f48c2e		
-PathNode	equals	missing	1b8e87c	0197f1fb3aabbc65		
-PathNode	hashCode	missing	1b8e87c	eb3322274863152b		
-PathNode	isOpen	missing	1b8e87c	edb273355743efed		
+PathNode	<init>	redesign	1b8e87c	0e6c746b24f48c2e		`PathNode::new`. A NaN heuristic is a `SearchError`.
+PathNode	equals	port	1b8e87c	0197f1fb3aabbc65	search-compare	`PathNode::same_position`.
+PathNode	hashCode	drop	1b8e87c	eb3322274863152b		The node arena has no hash set.
+PathNode	isOpen	port	1b8e87c	edb273355743efed	search-compare	
 PathingBehavior	<init>	missing	1b8e87c	b31dd33664f809a5		
 PathingBehavior	calcFailedLastTick	missing	1b8e87c	d53de6b7e97026b6		
 PathingBehavior	cancelEverything	missing	1b8e87c	30be79508cd2554b		
 PathingBehavior	cancelSegmentIfSafe	missing	1b8e87c	406515e90009f269		
-PathingBehavior	createPathfinder	missing	1b8e87c	56d442b09a94dd16		
+PathingBehavior	createPathfinder	port	1b8e87c	56d442b09a94dd16	search-compare	`plan::create_pathfinder`. The player's feet and the avoidances come from the caller.
 PathingBehavior	dispatchEvents	missing	1b8e87c	e6e30bc7e7421d57		
 PathingBehavior	estimatedTicksToGoal	missing	1b8e87c	cbece6ffa3889b35		
-PathingBehavior	findPathInNewThread	missing	1b8e87c	404bd8c609c300fc		
+PathingBehavior	findPathInNewThread	redesign	1b8e87c	404bd8c609c300fc		The thread, the locks and the events are S4. `plan::timeouts` is the choice of timeouts and `plan::next_segment_search` is the search it builds for the next segment.
 PathingBehavior	forceCancel	missing	1b8e87c	b852772908eaa216		
 PathingBehavior	getCurrent	missing	1b8e87c	4da2c572ebdccf5d		
 PathingBehavior	getGoal	missing	1b8e87c	50a9d398a5a822ff		
@@ -634,13 +657,13 @@ PrecomputedData	forCurrentSettings	redesign	1b8e87c	94ce2920cd06156c		No shared 
 PrecomputedData	fullyPassable	port	1b8e87c	3c1295499672cdcc	cost-compare	
 PrecomputedData	matchesCurrentSettings	redesign	1b8e87c	3fb86567443521aa		No shared table, so no settings match test.
 PrecomputedData	neverBreak	port	1b8e87c	8114dc78249b7daf	cost-compare	
-SplicedPath	<init>	missing	1b8e87c	55f3ac4536f20a1f		
-SplicedPath	getGoal	missing	1b8e87c	50a9d398a5a822ff		
-SplicedPath	getNumNodesConsidered	missing	1b8e87c	4657048dd65c49a6		
-SplicedPath	length	missing	1b8e87c	259760ce8f3aee18		
-SplicedPath	movements	missing	1b8e87c	9ff71a2ec2408a25		
-SplicedPath	positions	missing	1b8e87c	b7e64f7afa055602		
-SplicedPath	trySplice	missing	1b8e87c	415a7b16c26d970d		
+SplicedPath	<init>	redesign	1b8e87c	55f3ac4536f20a1f		Built inside `Path::try_splice`, and checked there.
+SplicedPath	getGoal	port	1b8e87c	50a9d398a5a822ff	search-compare	
+SplicedPath	getNumNodesConsidered	port	1b8e87c	4657048dd65c49a6	search-compare	
+SplicedPath	length	port	1b8e87c	259760ce8f3aee18	search-compare	
+SplicedPath	movements	port	1b8e87c	9ff71a2ec2408a25	search-compare	
+SplicedPath	positions	port	1b8e87c	b7e64f7afa055602	search-compare	
+SplicedPath	trySplice	port	1b8e87c	415a7b16c26d970d	search-compare	Either path may be None, as upstream's null.
 SprintJump	<init>	missing	1b8e87c	55ff403ea9e9abe2		
 SprintJump	across	missing	1b8e87c	dfe17ea0fa46c43c		
 SprintJump	along	missing	1b8e87c	29bf30e8723f9893		

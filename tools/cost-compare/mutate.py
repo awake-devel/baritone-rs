@@ -14,6 +14,8 @@ the mutant does not build. Patterns must occur exactly once in their file (--whe
 Each mutation is (file, pattern, replacement, name): the first occurrence of the pattern in the file (a path relative to the
 repository) is replaced. Patterns match source text exactly, which is why rustfmt.toml sets a very wide max_width.
 """
+import hashlib
+import json
 import os
 import queue
 import re
@@ -22,6 +24,8 @@ import signal
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 E = "mod/engine/src/"
@@ -885,7 +889,7 @@ M = [
 
 RUN_TIMEOUT = 300  # seconds; the unmutated comparison takes under a minute on 10000 grids
 ABORTED = {"aborted": (0, 0)}  # what build_and_run returns when the comparison itself exits with an error
-COPIED = ["Cargo.toml", "Cargo.lock", "rustfmt.toml", "mod/engine/Cargo.toml", "mod/engine/src", "tools/cost-compare/Cargo.toml", "tools/cost-compare/src"]
+COPIED = ["Cargo.toml", "Cargo.lock", "rustfmt.toml", "mod/engine/Cargo.toml", "mod/engine/src", "tools/cost-compare/Cargo.toml", "tools/cost-compare/src", "tools/search-compare/Cargo.toml", "tools/search-compare/src"]
 FAMILY = re.compile(r"^(\w+): \d+ evals, \d+ finite, \d+ distinct, exact \d+, within 1e-9 (\d+), WRONG (\d+)\s*$", re.M)
 
 
@@ -916,6 +920,72 @@ def default_jobs():
     return max(1, (os.cpu_count() or 2) // 2)
 
 
+def run_timeout(baseline_seconds):
+    """The limit for one mutant's run: an error that makes the engine loop is noticed without waiting 5 minutes. The baselines ran with
+    all workers busy, so they already include what the machine can do under this load."""
+    return max(60, min(RUN_TIMEOUT, 4 * baseline_seconds))
+
+
+class ResultCache:
+    """Verdicts of mutations already run on exactly these inputs, so a killed or repeated run does not start again.
+
+    A verdict is reused only when the compiler, every file the workers copy and the golden file are byte-identical and the mutation is
+    the same text. Editing the engine therefore discards everything. The file lives next to the golden file, outside the repository.
+    BARITONE_MUTATE_NO_CACHE=1 turns this off."""
+
+    VERSION = 1
+
+    def __init__(self, repo, copied, golden, tool):
+        self.lock = threading.Lock()
+        self.results = {}
+        self.path = None
+        if os.environ.get("BARITONE_MUTATE_NO_CACHE"):
+            return
+        h = hashlib.sha256(f"{self.VERSION} {tool}\n".encode())
+        h.update(subprocess.run(["rustc", "-vV"], capture_output=True).stdout)
+        for rel in copied:
+            top = os.path.join(repo, rel)
+            walked = [(d, n) for d, _, names in os.walk(top) for n in names] if os.path.isdir(top) else [(os.path.dirname(top), os.path.basename(top))]
+            for d, n in sorted(walked):
+                p = os.path.join(d, n)
+                h.update(os.path.relpath(p, repo).encode() + b"\0" + file_hash(p).encode())
+        h.update(file_hash(golden).encode())
+        folder = os.path.dirname(os.path.abspath(golden))
+        prefix = f"mutate-results-{tool}-"
+        self.path = os.path.join(folder, prefix + h.hexdigest()[:24] + ".jsonl")
+        for name in os.listdir(folder):
+            if name.startswith(prefix) and os.path.join(folder, name) != self.path:
+                os.remove(os.path.join(folder, name))
+        if os.path.exists(self.path):
+            with open(self.path, encoding="utf-8") as f:
+                for line in f:
+                    try:
+                        key, value = json.loads(line)
+                    except ValueError:
+                        continue  # the last line of a killed run
+                    self.results[key] = value
+
+    @staticmethod
+    def key(mutation):
+        return hashlib.sha256(json.dumps(mutation[:3]).encode()).hexdigest()
+
+    def get(self, mutation):
+        return self.results.get(self.key(mutation))
+
+    def put(self, mutation, value):
+        if self.path:
+            with self.lock, open(self.path, "a", encoding="utf-8") as f:
+                f.write(json.dumps([self.key(mutation), value]) + "\n")
+
+
+def file_hash(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for block in iter(lambda: f.read(1 << 20), b""):
+            h.update(block)
+    return h.hexdigest()
+
+
 def baseline_failed(why):
     print("baseline run failed:", why)
     print("\n0 caught, 0 missed, 1 not applied")
@@ -941,12 +1011,12 @@ class Worker:
         self.prefix = ["nice", "-n", "15"] if low else []
         self.exe = os.path.join(root, "target", "release", "cost-compare")
 
-    def build_and_run(self):
+    def build_and_run(self, args=("quiet",), timeout=RUN_TIMEOUT):
         c = subprocess.run(self.prefix + ["cargo", "build", "--release", "--quiet", "-p", "cost-compare"], cwd=self.ws, env=self.env, capture_output=True, text=True)
         if c.returncode:
             return None, "no build: " + c.stderr[:200]
         try:
-            r = subprocess.run(self.prefix + [self.exe, self.gold, "quiet"], capture_output=True, text=True, timeout=RUN_TIMEOUT)
+            r = subprocess.run(self.prefix + [self.exe, self.gold, *args], capture_output=True, text=True, timeout=timeout)
         except subprocess.TimeoutExpired:
             # an error that makes the engine loop (a goal's search box turned huge) is noticed too
             return ABORTED, "comparison timed out"
@@ -958,7 +1028,7 @@ class Worker:
             return ABORTED, "comparison aborted: " + (r.stdout + r.stderr)[-200:]
         return counts(r.stdout), ""
 
-    def try_mutation(self, mutation):
+    def try_mutation(self, mutation, args, timeout):
         file, a, b, _ = mutation
         path = os.path.join(self.ws, file)
         with open(path, encoding="utf-8") as f:
@@ -968,7 +1038,7 @@ class Worker:
         with open(path, "w", encoding="utf-8") as f:
             f.write(orig.replace(a, b, 1))
         try:
-            return self.build_and_run()
+            return self.build_and_run(args, timeout)
         finally:
             with open(path, "w", encoding="utf-8") as f:
                 f.write(orig)
@@ -987,10 +1057,13 @@ def main():
     low = low_priority()
     jobs = int(os.environ.get("BARITONE_MUTATE_JOBS") or (2 if low else default_jobs()))
     root = tempfile.mkdtemp(prefix="cost-compare-")
+    began = time.time()
     try:
         with ThreadPoolExecutor(jobs) as pool:
             workers = list(pool.map(lambda i: Worker(repo, gold, os.path.join(root, str(i)), low), range(jobs)))
+            started = time.time()
             baselines = list(pool.map(lambda w: w.build_and_run(), workers))
+            timeout = run_timeout(time.time() - started)
             for base, why in baselines:
                 if base is None or base is ABORTED:
                     return baseline_failed(why)
@@ -998,16 +1071,33 @@ def main():
                 return baseline_failed("the workers disagree on the unmutated run")
             base = baselines[0][0]
             print(f"baseline: wrong={sum(w for _, w in base.values())} close={sum(c for c, _ in base.values())} ({len(base)} families), {jobs} workers", flush=True)
+            # Stopping at the first wrong result only proves something when the unmutated run has none.
+            args = ("quiet", "first") if not any(w for _, w in base.values()) else ("quiet",)
+            cache = ResultCache(repo, COPIED, gold, "cost-compare")
             free = queue.SimpleQueue()
             for w in workers:
                 free.put(w)
 
+            def judged(got):
+                """(verdict, wrong, close) from what a run gave."""
+                if got is ABORTED:
+                    return "CAUGHT", 0, 0
+                return "CAUGHT" if got != base else "MISSED", sum(w for _, w in got.values()), sum(c for c, _ in got.values())
+
             def one(mutation):
+                done = cache.get(mutation)
+                if done:
+                    return done, ""
                 w = free.get()
                 try:
-                    return w.try_mutation(mutation)
+                    got, why = w.try_mutation(mutation, args, timeout)
                 finally:
                     free.put(w)
+                if got is None:
+                    return None, why
+                verdict = judged(got)
+                cache.put(mutation, verdict)
+                return verdict, why
 
             caught, missed, bad = [], [], []
             # map() gives the results in the list's order, so the output does not depend on the number of workers.
@@ -1015,18 +1105,13 @@ def main():
                 if got is None:
                     bad.append(name + (" (" + why + ")" if why else ""))
                     continue
-                if got is ABORTED:
-                    print(f"CAUGHT  wrong={0:6d} close={0:6d} {name}", flush=True)
-                    caught.append(name)
-                    continue
-                differs = got != base
-                wrong = sum(w for _, w in got.values())
-                close = sum(c for c, _ in got.values())
-                print(f"{'CAUGHT ' if differs else 'MISSED '} wrong={wrong:6d} close={close:6d} {name}", flush=True)
-                (caught if differs else missed).append(name)
+                verdict, wrong, close = got
+                print(f"{verdict:7s} wrong={wrong:6d} close={close:6d} {name}", flush=True)
+                (caught if verdict == "CAUGHT" else missed).append(name)
     finally:
         shutil.rmtree(root, ignore_errors=True)
     print(f"\n{len(caught)} caught, {len(missed)} missed, {len(bad)} not applied")
+    print(f"took {time.time() - began:.0f} s with {jobs} workers")
     print("missed:", missed)
     print("not applied:", bad)
     return 0

@@ -130,6 +130,8 @@ def rules_explain_every_difference(golden, scratch):
         shutil.copy(os.path.join(REPO, name), copy)
     shutil.copytree(os.path.join(REPO, "mod", "engine"), os.path.join(copy, "mod", "engine"), ignore=shutil.ignore_patterns("target"))
     shutil.copytree(CRATE, os.path.join(copy, "tools", "cost-compare"), ignore=shutil.ignore_patterns("target", "__pycache__", "java", "port-26.3"))
+    # The root workspace lists it as a member, so Cargo needs it there, although this run does not build it.
+    shutil.copytree(os.path.join(REPO, "tools", "search-compare"), os.path.join(copy, "tools", "search-compare"), ignore=shutil.ignore_patterns("target", "__pycache__", "java"))
     with open(PATCH_26_3, encoding="utf-8") as f:
         p = run(["patch", "-p1", "-F0"], cwd=copy, input=f.read())
     if p.returncode:

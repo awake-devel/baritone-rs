@@ -1,0 +1,10 @@
+[package]
+name = "search-compare"
+version = "0.0.0"
+edition = "2021"
+license = "LGPL-3.0-or-later"
+publish = false
+description = "Compares upstream's real searches with baritone-engine, node by node (L2)"
+
+[dependencies]
+baritone-engine = { path = "../../mod/engine" }
