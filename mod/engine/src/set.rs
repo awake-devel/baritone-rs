@@ -270,6 +270,7 @@ fn table() -> Vec<Setting> {
         s("allowParkourPlace", Bool(false)),
         s("allowParkourAscend", Bool(true)),
         s("allowJumpAtBuildLimit", Bool(false)),
+        s("allowWalkOnBuildLimit", Bool(true)),
         s("allowWaterBucketFall", Bool(true)),
         s("allowDiagonalDescend", Bool(false)),
         s("allowDiagonalAscend", Bool(false)),
@@ -582,6 +583,7 @@ impl Settings {
         q.plan_ahead_primary_timeout_ms = self.get_long("planAheadPrimaryTimeoutMS");
         q.plan_ahead_failure_timeout_ms = self.get_long("planAheadFailureTimeoutMS");
         q.avoidance = self.get_bool("avoidance");
+        q.walk_on_build_limit = self.get_bool("allowWalkOnBuildLimit");
         q.mob_spawner_avoidance_coefficient = self.get_double("mobSpawnerAvoidanceCoefficient");
         q.mob_spawner_avoidance_radius = self.get_int("mobSpawnerAvoidanceRadius");
         q.mob_avoidance_coefficient = self.get_double("mobAvoidanceCoefficient");
@@ -819,7 +821,9 @@ mod tests {
         c.search.primary_timeout_ms = 1;
         c.cost_heuristic = 0.0;
         s.apply_to_config(&mut c);
-        let want = Config::upstream_defaults();
+        let mut want = Config::upstream_defaults();
+        // the one port setting that differs from upstream's search: walking on the top layer (U15)
+        want.search.walk_on_build_limit = true;
         assert_eq!(format!("{c:?}"), format!("{want:?}"));
         let mut e = ExecSettings { allow_sprint: false, max_cost_increase: 0.0, ..ExecSettings::default() };
         s.apply_to_exec(&mut e);

@@ -85,6 +85,10 @@ pub struct SearchSettings {
     pub mob_avoidance_coefficient: f64,
     /// `mobAvoidanceRadius`, default 8.
     pub mob_avoidance_radius: i32,
+    /// Not upstream: `allowWalkOnBuildLimit`. Upstream's search refuses any node whose feet are above `maxY`, so a player
+    /// standing on the world's highest block layer (feet at `maxY + 1`) can't move at all (U15). When true, feet may be at
+    /// `maxY + 1`, one above the top layer, and no higher. False here keeps upstream's search; the mod's settings default it to true.
+    pub walk_on_build_limit: bool,
 }
 
 impl Default for SearchSettings {
@@ -106,6 +110,7 @@ impl Default for SearchSettings {
             mob_spawner_avoidance_radius: 16,
             mob_avoidance_coefficient: 1.5,
             mob_avoidance_radius: 8,
+            walk_on_build_limit: false,
         }
     }
 }

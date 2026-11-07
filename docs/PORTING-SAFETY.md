@@ -443,7 +443,10 @@ fails without the fix). The fix is not yet in a build that ran on the server.
 
 **Not tested yet on a server:** breaking and placing (adventure mode and the empty inventory allowed neither), the chat open (`horizon-ctl
 key t` does not open it, so all runs had it closed), small setbacks under 3 blocks (the method can't see them), any anticheat kick
-(none happened, but the runs were short), and another server. Going further on 6b6t needs either U15 changed or a start below the roof.
+(none happened, but the runs were short), and another server.
+
+**After the owner's decision on U15:** `allowWalkOnBuildLimit` (D34, on by default) was built (`native-66f3981-08329dda4b30`) and run on
+6b6t's roof: `/b goto` 50 blocks away arrived, 50.7 blocks in 9.2 s, with no setback. The repeated-cancel fix was in that build too.
 
 ## Reports
 

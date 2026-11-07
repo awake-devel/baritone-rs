@@ -188,7 +188,8 @@ impl<'c, 'a, W: WorldView> AStarPathFinder<'c, 'a, W> {
         let gs = ctx.cfg.goal_settings();
         let settings = &ctx.cfg.search;
         let min_y = ctx.min_y;
-        let max_y = ctx.max_y;
+        // U15: with `walk_on_build_limit`, feet may stand on the top layer, one above `maxY`.
+        let max_y = if settings.walk_on_build_limit { ctx.max_y + 1 } else { ctx.max_y };
         let start_node = self.map.get_node_at_position(self.start_x, self.start_y, self.start_z, &self.goal, &gs)?;
         self.start_node = Some(start_node);
         {
@@ -446,6 +447,34 @@ mod tests {
         // a finder runs once
         let again = f.calculate(500, 2000, &SearchLimits::default(), &mut || 0);
         assert_eq!((again.kind, again.error), (ResultType::Exception, Some(SearchError::Reused)));
+    }
+
+    #[test]
+    fn walking_on_the_top_layer_needs_the_build_limit_setting() {
+        // U15, found on 6b6t: a floor on the highest layer (y 15 of a 16-high world) puts the feet at maxY + 1.
+        let mut world = TestWorld::flat(20, 20);
+        for x in 0..20 {
+            for z in 0..20 {
+                world.set(x, 15, z, STONE);
+            }
+        }
+        let run = |on: bool| {
+            let mut cfg = test_config();
+            cfg.search.walk_on_build_limit = on;
+            let fx = Fixture::with_config(cfg);
+            let ctx = fx.ctx(&world);
+            let mut f = finder(&ctx, Pos::new(1, 16, 1), Goal::Block { x: 8, y: 16, z: 1 });
+            let r = f.calculate(500, 2000, &SearchLimits::default(), &mut || 0);
+            (r.kind, r.path.map(|p| p.positions().to_vec()))
+        };
+        // upstream's search: no move at all from the top layer
+        assert_ne!(run(false).0, ResultType::SuccessToGoal);
+        let (kind, path) = run(true);
+        assert_eq!(kind, ResultType::SuccessToGoal);
+        let expect: Vec<Pos> = (1..=8).map(|x| Pos::new(x, 16, 1)).collect();
+        assert_eq!(path.unwrap(), expect);
+        // the setting allows one layer above maxY, no more: the default is upstream's
+        assert!(!crate::config::SearchSettings::default().walk_on_build_limit);
     }
 
     #[test]

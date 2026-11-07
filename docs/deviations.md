@@ -436,6 +436,15 @@ Fields: upstream, ours, why, changes chosen paths, decided by, expectation in th
   pattern `^([^ ]+) +(.+)` (see `apply_file_text`): a leading space or a name with no value is "Invalid syntax in setting file", anything else that does not parse is "Unable to parse line".
 - **Changes chosen paths:** no.
 
+### D34. Walking on the world's top layer (`allowWalkOnBuildLimit`, fixes U15)
+
+- **Status:** active, in `search/astar.rs` (the height check), `config.rs` (`SearchSettings::walk_on_build_limit`) and `set.rs`.
+- **Upstream:** the search drops any node whose feet are above `maxY`, so nothing moves from the top layer (U15).
+- **Ours:** a new setting, `allowWalkOnBuildLimit`, lets the feet be at `maxY + 1` and no higher. The mod's settings default it to
+  **true** (owner's choice, 2026-11-07, for 6b6t's spawn floor at y 319); `SearchSettings::default()` keeps it false, so the Java
+  comparisons (L2) still run upstream's search. Test: `walking_on_the_top_layer_needs_the_build_limit_setting`.
+- **Changes chosen paths:** yes, but only for a player or a path on the top layer.
+
 ### Upstream behaviour kept, found in S3 (reported, not fixed)
 
 The port does what upstream does here; a change would change paths, so it is the owner's call.
@@ -484,12 +493,12 @@ The port does what upstream does here; a change would change paths, so it is the
   (`minY + height - 1`, 319 in the Overworld), and a player standing on the highest block layer has feet at `maxY + 1`. So every
   move from there, even a flat step, is refused and the search ends with no path. Found on 6b6t.org (2026-11-07), whose main-world
   spawn is an obsidian floor at y 319: `/b goto` 50 blocks away on that floor answered "No path to the goal was found." at once. The
-  port does the same (`search/astar.rs`, the `max_y` check). Allowing feet at `maxY + 1` would change paths, so it is the owner's call.
+  port kept this until the owner chose to change it: D34 (`allowWalkOnBuildLimit`, on by default in the mod).
 - **U16. Adventure mode is not considered.** Nothing in upstream reads the game mode or `mayBuild`, so with `allowBreak` on (the
   default) the search still plans to dig. The game refuses the break, the movement times out after its cost plus
   `movementTimeoutTicks`, the new search finds the same path, and the player stands still in that loop until stopped. Found in
   6b6t.org's lobby (2026-11-07): an Ascend through dirt and grass (cost 43.6) repeated every 148 ticks. `/b set allowBreak false`
-  avoids it. The port does the same; reading the game mode would change paths, so it is the owner's call.
+  avoids it. The port does the same; the owner chose to keep it (2026-11-07).
 
 ## Where upstream's two branches disagree
 
