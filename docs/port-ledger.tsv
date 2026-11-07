@@ -302,15 +302,15 @@ LinkedListOpenSet	insert	drop	1b8e87c	e260b2a42a79b253		Not used by the pathfind
 LinkedListOpenSet	isEmpty	drop	1b8e87c	8c346ecac3df27a6		Not used by the pathfinder; upstream keeps it for its open set test.
 LinkedListOpenSet	removeLowest	drop	1b8e87c	a6b78cce5a55d37b		Not used by the pathfinder; upstream keeps it for its open set test.
 LinkedListOpenSet	update	drop	1b8e87c	9a4a68372cb97d66		Not used by the pathfinder; upstream keeps it for its open set test.
-LookBehavior	<init>	drop	1b8e87c	dd0f6a2f5b59ea19		Free look is not used: the glue sets the player's yaw and pitch from `Intent::rotation`.
-LookBehavior	getAimProcessor	drop	1b8e87c	4dd326b65fa404d2		Free look is not used: the glue sets the player's yaw and pitch from `Intent::rotation`.
-LookBehavior	getEffectiveRotation	drop	1b8e87c	4f0681935f22aa95		Free look is not used: the glue sets the player's yaw and pitch from `Intent::rotation`.
-LookBehavior	onPlayerRotationMove	drop	1b8e87c	21cba8780bde5cd6		Free look is not used: the glue sets the player's yaw and pitch from `Intent::rotation`.
-LookBehavior	onPlayerUpdate	drop	1b8e87c	3e1f966eaa8a8833		Free look is not used: the glue sets the player's yaw and pitch from `Intent::rotation`.
-LookBehavior	onSendPacket	drop	1b8e87c	cd165ee044ee3fc8		Free look is not used: the glue sets the player's yaw and pitch from `Intent::rotation`.
-LookBehavior	onTick	drop	1b8e87c	26c5bd7446d04111		Free look is not used: the glue sets the player's yaw and pitch from `Intent::rotation`.
-LookBehavior	onWorldEvent	drop	1b8e87c	b7241aa897b0d4c0		Free look is not used: the glue sets the player's yaw and pitch from `Intent::rotation`.
-LookBehavior	pig	drop	1b8e87c	78a1a9c317663c9f		Free look is not used: the glue sets the player's yaw and pitch from `Intent::rotation`.
+LookBehavior	<init>	drop	1b8e87c	dd0f6a2f5b59ea19		Free look is `freelook::LookState`.
+LookBehavior	getAimProcessor	drop	1b8e87c	4dd326b65fa404d2		`look::AimProcessor`, used by `Pathing`.
+LookBehavior	getEffectiveRotation	port	1b8e87c	4f0681935f22aa95		
+LookBehavior	onPlayerRotationMove	drop	1b8e87c	21cba8780bde5cd6		The player takes `game.yaw` when its tick starts, and the glue has put the rotation there (D35).
+LookBehavior	onPlayerUpdate	redesign	1b8e87c	3e1f966eaa8a8833		`LookState::plan` decides the rotation of the next player tick and what happens to the view (D35); the glue puts it in at the input step and back after the tick.
+LookBehavior	onSendPacket	redesign	1b8e87c	cd165ee044ee3fc8		`LookState` keeps the rotation the tick carried instead of reading the packet (D35).
+LookBehavior	onTick	drop	1b8e87c	26c5bd7446d04111		The random offsets (`randomLooking`) are not ported.
+LookBehavior	onWorldEvent	redesign	1b8e87c	b7241aa897b0d4c0		`LookState::clear`.
+LookBehavior	pig	drop	1b8e87c	78a1a9c317663c9f		Only for a ridden pig.
 LookBehavior	updateTarget	redesign	1b8e87c	ea4ae106d35df1d7		`Controls::look`.
 LookBehavior.AbstractAimProcessor	<init>(AbstractAimProcessor)	later	1b8e87c	2eda6ab93a04c81f		The random offsets (`randomLooking`) and the forked processor of the elytra code are not ported.
 LookBehavior.AbstractAimProcessor	<init>(IPlayerContext)	later	1b8e87c	50fb9a2d93282586		The random offsets (`randomLooking`) and the forked processor of the elytra code are not ported.
@@ -326,8 +326,8 @@ LookBehavior.AbstractAimProcessor	peekRotation	port	1b8e87c	de1a69eaf1ab1da1
 LookBehavior.AbstractAimProcessor	tick	later	1b8e87c	6883d573c94e39b0		The random offsets (`randomLooking`) and the forked processor of the elytra code are not ported.
 LookBehavior.AimProcessor	<init>	redesign	1b8e87c	2d79797ea89f32b2		`AimProcessor`: the previous rotation is the player's.
 LookBehavior.AimProcessor	getPrevRotation	redesign	1b8e87c	8ce25b03ace8e15c		`AimProcessor`: the previous rotation is the player's.
-LookBehavior.Target	<init>	drop	1b8e87c	5b012e9c6ff7c960		Free look is not used.
-LookBehavior.Target.Mode	resolve	drop	1b8e87c	a2cfb7cfedc5b285		Free look is not used.
+LookBehavior.Target	<init>	drop	1b8e87c	5b012e9c6ff7c960		`freelook::Plan`.
+LookBehavior.Target.Mode	resolve	redesign	1b8e87c	a2cfb7cfedc5b285		`freelook::resolve_mode`, without the elytra and swimming branches (D35).
 MineProcess	<init>	later	1b8e87c	bfae21d062cbb6cf		Process: next after the first release (mine, follow, explore, in that order).
 MineProcess	addNearby	later	1b8e87c	95a70841d1b7c495		Process: next after the first release (mine, follow, explore, in that order).
 MineProcess	coalesce	later	1b8e87c	06f301cb066ad1f6		Process: next after the first release (mine, follow, explore, in that order).

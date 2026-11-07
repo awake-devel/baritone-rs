@@ -267,7 +267,7 @@ measure, not changed here. The search worker took 0.2 to 4 ms for a short path a
      followed (`isPathing()`). While it is, the player's keyboard input is replaced completely by `PlayerMovementInput`, which reads only the forced inputs.
      The keys the player holds (movement, jump, sneak, and the sprint key) are not read at all. A player cannot steer, jump or stop a path with keys; `stop` is the way out.
    - Out of control (no path, nothing forced), the keyboard is put back on the next tick, and keys still held count again at once.
-   - The mouse is not replaced, but the executor sets the yaw it wants every tick (upstream does that server-side with free look; the glue sets `game.yaw`, so the camera is held while a path runs).
+   - The mouse is not replaced. With `freeLook` (upstream's default) the executor's rotation is only put in for the player's own tick, so the camera stays the player's own (D35); with it off the glue sets `game.yaw` every tick and the camera is held while a path runs.
    - The sprint state is overridden by `isSprinting()` during a path (`onPlayerSprintState`), `flying` is set to false on every movement tick, and the game's auto jump is off while a path runs.
    - Attack and use are not replaced; only a movement that forces them (placing, breaking, opening a door) presses them.
    - In this port: `Intent::active` says "in control". When it is false the glue must leave the player's keys alone. When it is true, the glue feeds the hook from the intent only,

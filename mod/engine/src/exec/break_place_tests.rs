@@ -80,6 +80,7 @@ fn a_block_in_the_way_is_prepared_with_the_best_tool_and_clicked_only_when_the_c
     assert_eq!(s, MoveStatus::Prepping);
     assert_eq!(c.select, Some(3), "the pickaxe");
     let look = c.look.expect("an aim at the block");
+    assert!(c.look_force, "aiming at a block to break is a forced rotation (free look)");
     assert!(!c.keys.click_left);
     assert!(look.yaw < -80.0 && look.yaw > -100.0, "east: {look:?}");
     // the crosshair on the block: click

@@ -23,6 +23,7 @@ pub mod command;
 pub mod config;
 pub mod costs;
 pub mod exec;
+pub mod freelook;
 pub mod goals;
 pub mod inventory;
 pub mod look;

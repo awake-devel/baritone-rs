@@ -454,6 +454,7 @@ impl<R: SearchRunner<S>, S> Pathing<R, S> {
         // `InputOverrideHandler.inControl`
         let in_control = k.forward || k.back || k.left || k.right || k.sneak || k.jump || self.is_pathing();
         let look = self.controls.look.take();
+        let look_force = std::mem::take(&mut self.controls.look_force);
         if !in_control && look.is_none() {
             return Intent::neutral();
         }
@@ -468,6 +469,8 @@ impl<R: SearchRunner<S>, S> Pathing<R, S> {
         Intent {
             active: in_control,
             rotation,
+            look_target: look,
+            look_force,
             forward: k.forward,
             back: k.back,
             left: k.left,

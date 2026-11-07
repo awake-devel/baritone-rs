@@ -414,7 +414,7 @@ ledger check and `tools/check_public_tree.py` with the deny list all pass. The J
 - The timing bounds (0.4 to 2.5 times the estimate) are my own choice; the actual ratios in the breaking and placing scenarios ran 0.79 to 1.15.
 - The unit and property tests use fixed-seed random runs and a simple simulator, which is not evidence of real physics.
 
-**Left out on purpose.** Parkour and swimming (off by upstream's defaults, branches fail by name, D16); `goto <block>` and the other processes (mine, follow, explore, build, farm, elytra); using doors, buttons and levers beyond what D15 says (`allowInventory`); Depth Strider and Frost Walker from the boots (D22); the stored settings that nothing reads (`freeLook`, `renderPath`, `allowInventory`, D29).
+**Left out on purpose.** Parkour and swimming (off by upstream's defaults, branches fail by name, D16); `goto <block>` and the other processes (mine, follow, explore, build, farm, elytra); using doors, buttons and levers beyond what D15 says (`allowInventory`); Depth Strider and Frost Walker from the boots (D22); the stored settings that nothing reads (`renderPath`, `allowInventory`, D29).
 
 Measured effort: the first part took a workflow of 7 agents, 3 h 39 min and 1.96 million tokens, and its last agent ended before writing this section. The second part took a workflow of 7 agents (probe, engine, glue, scenarios, two reviews, fixes), 2 h 47 min and 2.04 million tokens, then two gate runs by hand.
 
@@ -447,6 +447,17 @@ key t` does not open it, so all runs had it closed), small setbacks under 3 bloc
 
 **After the owner's decision on U15:** `allowWalkOnBuildLimit` (D34, on by default) was built (`native-66f3981-08329dda4b30`) and run on
 6b6t's roof: `/b goto` 50 blocks away arrived, 50.7 blocks in 9.2 s, with no setback. The repeated-cancel fix was in that build too.
+
+**Free look (`freeLook`, D35, 2026-11-07).** `freeLook`, `blockFreeLook`, `antiCheatCompatibility`, `smoothLook` and `smoothLookTicks` are read now, with upstream's
+defaults (so by default a walk no longer turns the camera, and a dig or place still does). The mod puts the executor's rotation in at the start of the game's input
+step (the existing pinned hook; no hook was added) and puts the player's view back right after the player's tick, so the picks for the clicks, the movement and the
+packet carry the aim and no frame shows it. Ran, single player, one game window (build `native-66f3981-f4c75a4a5b49`): with the camera set to 150/10, `freeLook` on, a
+50-block walk east left the client view at 150/10 for the whole walk while the server's rotation was -90 and the player arrived (1030.5, 100, 1000.5); `freeLook` off turned the
+view to 270 as before. With `blockFreeLook` on, digging 8 stone blocks through a wall and bridging a 4-block gap with cobblestone both finished with the view still at
+150/10 and the server looking at the blocks (yaw -90/90, pitch 26/80); with it off (upstream's default) the view turned to the block (270/26). L3 on that build: 42 of 42
+scenarios passed. Limits: single player only; the 20 Hz server rotation was sampled through the console at about 8 Hz, not read from packets; `smoothLook`, `antiCheatCompatibility`
+off and the elytra and swimming branches were not run in the game (the first two only in unit tests); a real mouse turn during a path was not tried; the third-person model sees the aim for one tick; the aim
+still takes effect one tick after the mod decides it, as before.
 
 ## Reports
 

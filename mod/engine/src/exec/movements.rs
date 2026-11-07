@@ -564,6 +564,7 @@ pub fn update<W: WorldView>(mv: &Movement, rt: &mut MoveRuntime, env: &Env<'_, W
     // If the movement target has to force the new rotations, or we aren't using silent move, then force the rotations
     if let Some(t) = rt.state.target {
         controls.look = Some(t.rotation);
+        controls.look_force = t.force;
     }
     controls.clear_all_keys();
     controls.keys = rt.state.keys;

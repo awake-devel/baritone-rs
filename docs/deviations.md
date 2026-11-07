@@ -3,7 +3,7 @@
 Each place where this port differs from upstream on purpose. The rules are in
 [PORTING-SAFETY.md](PORTING-SAFETY.md#deviations). Upstream lines are cited at the `1.21.4` commit `1b8e87c`.
 
-Entries 1 to 4 are decided and wait for the code they apply to. Entry 5 is active and has no effect on any real search. Entries 6 to 10 are active (S3) and change no chosen path that a game can reach. Entries 11 to 23 are active (S4, executor, state machine and the mod): they change when a search is cancelled (12) and what `/b stop` waits for (13), and nothing a search returns. Entries 24 to 32 are active (S4, breaking, placing, settings, commands and the glue): none changes a search; 28 changes what the executor does when the settings forbid an action that a path in progress still asks for.
+Entries 1 to 4 are decided and wait for the code they apply to. Entry 5 is active and has no effect on any real search. Entries 6 to 10 are active (S3) and change no chosen path that a game can reach. Entries 11 to 23 are active (S4, executor, state machine and the mod): they change when a search is cancelled (12) and what `/b stop` waits for (13), and nothing a search returns. Entries 24 to 32 are active (S4, breaking, placing, settings, commands and the glue): none changes a search; 28 changes what the executor does when the settings forbid an action that a path in progress still asks for. Entry 35 is active (free look): it changes what the player's camera does while a path runs, and nothing a search returns.
 
 ## How exceptions work today
 
@@ -231,12 +231,12 @@ Fields: upstream, ours, why, changes chosen paths, decided by, expectation in th
 - **Status:** active, in `look`.
 - **Upstream:** `Mth.atan2` (Minecraft's own approximation), random offsets on the aim (`randomLooking` 0.01 and `randomLooking113`),
   free look with a server-only rotation, and `smoothLook`.
-- **Ours:** `f64::atan2`, no random offsets, no free look and no smoothing: `Intent::rotation` is what the glue sets as the player's yaw and
-  pitch. The mouse grid (`peekRotation`, `nudgeToLevel`) is ported. The sensitivity is the player's own option, as upstream
+- **Ours:** `f64::atan2` and no random offsets. Free look and `smoothLook` are ported since D35: `Intent::rotation` is the rotation of the player's
+  tick, and `freelook.rs` decides whether the view keeps it. The mouse grid (`peekRotation`, `nudgeToLevel`) is ported. The sensitivity is the player's own option, as upstream
   (`LookBehavior`, `options.sensitivity()`): the glue copies Horizon's `settings.sensitivity` into `ExecSettings::mouse_sensitivity` every tick and
   `Pathing` hands it to the aim processor each time (a test in `sim.rs` pins it; before the S4 review the setting was never read and the grid was fixed at 0.5).
   `Rotation::new` turns a NaN or an infinity into 0 where upstream throws.
-- **Why:** the first two differ by far less than the mouse grid (0.15 degrees). The glue has no server-only rotation.
+- **Why:** the first two differ by far less than the mouse grid (0.15 degrees).
 - **Changes chosen paths:** no.
 - **Decided by:** the task for S4.
 
@@ -380,8 +380,8 @@ Fields: upstream, ours, why, changes chosen paths, decided by, expectation in th
 
 - **Status:** active, in `set.rs`.
 - **Ours:** one table of the settings of this port, with upstream's names, types and defaults (checked against `Settings.java` for each and against `Config::upstream_defaults` and
-  `ExecSettings::default` for all). Not carried: the settings of processes that do not exist, the chat prefix and notifications. `freeLook`, `renderPath` and `allowInventory` are stored
-  but read by nobody in the engine. Names are matched without regard to case. Values are printed as Java prints them (`2.0`, `1.0E7`, a block without `minecraft:`, an item with it) and read as
+  `ExecSettings::default` for all). Not carried: the settings of processes that do not exist, the chat prefix and notifications. `renderPath` and `allowInventory` are stored
+  but read by nobody in the engine; `freeLook`, `blockFreeLook`, `antiCheatCompatibility`, `smoothLook` and `smoothLookTicks` are read through `look_settings` (D35). Names are matched without regard to case. Values are printed as Java prints them (`2.0`, `1.0E7`, a block without `minecraft:`, an item with it) and read as
   `SettingsUtil` reads them, except: a number is read with Rust's parser after trimming and a trailing `d` or `f` (no hexadecimal floats), "modified" means "not equal to the default" where
   upstream compares object identity, and the command's errors read `Expected a valid setting` without the position of the argument. `set save` and `set load` ask the glue for the file
   (`SetEffect`); `Settings::to_file_text` and `apply_file_text` are the file's text.
@@ -420,7 +420,7 @@ Fields: upstream, ours, why, changes chosen paths, decided by, expectation in th
   on first use and written after each change. Completion is a pinned `RETURN` on the command tree's suggestions, with a module added to `horizon-command` to hand the function across crates. The table of block facts is made again when a `Sig`
   changes (settings, hotbar items and enchantments, throwaway, bucket, food above 6, potion), not each tick; upstream builds a new `CalculationContext` per search and a `ToolSet` per use, and the table here is the same snapshot taken
   when something changed. `canSprint` is `allowSprint` and food above 6, as upstream. `frostWalker` and `waterSpeedMultiplier` stay 0 and 1.0 (not carried from the boots, as in the walking-only version; U8 explains the second).
-  The settings `freeLook` and `renderPath` are stored; the path is always drawn and the camera is always the mod's while a path runs.
+  The setting `renderPath` is stored; the path is always drawn. The camera follows `freeLook` (D35).
   The `trace` command and the word `trace` in completion are not upstream's. `/b trace` prints the exact position of the player every tick, whatever `censorCoordinates` says; it is opt-in and off at each start.
   `/b` and `/baritone` are claimed from servers: a server's own command of that name is not sent while the mod is loaded, also when the mod is switched off, and the chat box completes them from the mod. Other commands pass untouched.
   The test triggers (`BARITONE_RS_L3_SPEC`, `BARITONE_RS_SCENARIO_DIR`) run only in a single-player world whose name starts with `l3-`; `tools/l3/run.py` refuses a name that does not, and a name that already exists.
@@ -444,6 +444,31 @@ Fields: upstream, ours, why, changes chosen paths, decided by, expectation in th
   **true** (owner's choice, 2026-11-07, for 6b6t's spawn floor at y 319); `SearchSettings::default()` keeps it false, so the Java
   comparisons (L2) still run upstream's search. Test: `walking_on_the_top_layer_needs_the_build_limit_setting`.
 - **Changes chosen paths:** yes, but only for a player or a path on the top layer.
+
+### D35. Free look (`freeLook`, `blockFreeLook`, `antiCheatCompatibility`, `smoothLook`; replaces the camera hold of D17 and D29)
+
+- **Status:** active, in `freelook.rs` (the decision), `exec/state.rs` (`Intent::look_force`, `look_target`) and `mod/runtime.rs` (the swap).
+- **Upstream:** `LookBehavior` sets the player's rotation after the player's own update, so the movement packet carries it, and puts the
+  player's rotation back after the entities were updated. Per target, `Target.Mode.resolve` picks `CLIENT` (the view keeps it), `SERVER` (the view is put
+  back) or `NONE`. With `freeLook` (default **true**): a plain move is `SERVER` (`antiCheatCompatibility`, default true; `NONE` without it), a break or place
+  (`hasToForceRotations`) is `CLIENT` unless `blockFreeLook` (default **false**) is on. With `freeLook` off everything is `CLIENT`. `smoothLook` (default off)
+  replaces the view's yaw, in mode `CLIENT`, with the mean of the last `smoothLookTicks` (5) target yaws. The aim is made against `getEffectiveRotation`, the rotation the server was
+  last sent, and `objectMouseOver` is a ray along it. The movement of the tick uses the rotation through `RotationMoveEvent`.
+- **Ours:** the same decision and the same defaults (`freeLook` true, `blockFreeLook` false, `antiCheatCompatibility` true), so by default a walk leaves the
+  camera alone and a dig or a place turns it, as upstream. `blockFreeLook true` keeps the camera for those too. The mod's tick (`native_tick`, after the player's tick) plans the
+  rotation for the **next** player tick, as it did before (one tick of delay, as every other input of the mod). A mode `CLIENT` rotation is written to the view at once. A `SERVER`
+  one (and a smoothed one) is put in at the start of the game's input step (the pinned hook of `remote_handle_input`, which is before the clicks' picks, the movement and
+  `remote_send_state`) and the view is put back at the start of the next `native_tick`, after the whole player tick. So the picks of that tick (the block a click acts on), the movement, and the packet
+  all see the aim, and no frame is drawn in between. The effective rotation (`LookState::server_rotation`) is the aim last put in, or the player's own view when none is; `looking_at` is picked from it.
+  The `smoothLook` buffer averages the movement's target yaw before the aim processor, as upstream.
+- **Differs from upstream:** (1) The elytra and swimming branches of `Mode.resolve` (`elytraFreeLook`, `allowSwimming`) are not ported, as those movements are not. (2) Upstream's
+  `onPlayerRotationMove` (the movement uses the rotation by an event) is the swap itself here: the player's body takes `game.yaw` when the tick starts. (3) `serverRotation` is not read from the
+  outgoing packets but set to the aim the tick carried; when the mode is `NONE` or there is no target it is the player's own view. (4) The player's third-person model and the lead of a held lead (`rope_rot_old`) are ticked
+  inside the swap, so for that one tick they see the aim; the first-person view does not. (5) If the player's tick is skipped (the chunk is not loaded, an error), the swap is not made; if it ends early,
+  the view is put back at the next input step. (6) Smooth look does not average the pitch (upstream does only while gliding).
+- **Why:** the owner's wish that the camera stays the player's own while the server and the movement follow the path (task of 2026-11-07).
+- **Changes chosen paths:** no (the search never reads the view). It changes what the executor sees as its own rotation while a path runs (the aim is made against the rotation the server was sent, as upstream).
+- **Decided by:** the owner.
 
 ### Upstream behaviour kept, found in S3 (reported, not fixed)
 

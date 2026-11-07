@@ -182,6 +182,8 @@ pub struct Controls {
     pub keys: Keys,
     /// `LookBehavior.target`, set by a movement and consumed by `Pathing::tick` when it builds the intent.
     pub look: Option<Rotation>,
+    /// `MovementTarget.hasToForceRotations` of the target `look` came from: a break or a place (upstream's `blockInteract`).
+    pub look_force: bool,
     pub use_pos: Option<Pos>,
     /// The hotbar slot a movement asked for this tick; consumed by `Pathing::tick` when it builds the intent. A slot stays selected
     /// until another is asked for, as in the game.
@@ -214,6 +216,10 @@ pub struct Intent {
     pub active: bool,
     /// The yaw and pitch to set, already passed through the aim processor. `None`: leave the view as it is.
     pub rotation: Option<Rotation>,
+    /// The rotation the movement asked for, before the aim processor (`rotation` is the one that is sent). `smoothLook` averages these.
+    pub look_target: Option<Rotation>,
+    /// The target must be forced: a break or a place (`blockInteract` of `LookBehavior.updateTarget`). Free look decides with it.
+    pub look_force: bool,
     pub forward: bool,
     pub back: bool,
     pub left: bool,

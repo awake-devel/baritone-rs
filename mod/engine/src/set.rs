@@ -9,9 +9,9 @@
 // upstream's `settings.txt` reads the same here.
 //
 // Left out on purpose (docs/deviations.md D29): the settings of the processes and the builder that do not exist here, and the ones that
-// are the game's (the chat prefix, notifications, `censorCoordinates` is kept for the goal text). `freeLook`, `renderPath` and
-// `allowInventory` are stored and printed but read by nobody in the engine: the first two belong to the glue, and moving stacks
-// between the inventory and the hotbar is not ported.
+// are the game's (the chat prefix, notifications, `censorCoordinates` is kept for the goal text). `freeLook` and its four
+// companions (`look_settings`) are read by the glue through `freelook.rs`; `renderPath` and `allowInventory` are stored and printed but read by nobody
+// in the engine: the first belongs to the glue, and moving stacks between the inventory and the hotbar is not ported.
 use crate::config::Config;
 use crate::inventory::{Inventory, ToolSettings};
 use crate::settings::ExecSettings;
@@ -345,6 +345,10 @@ fn table() -> Vec<Setting> {
         // the glue's
         s("renderPath", Bool(true)),
         s("freeLook", Bool(true)),
+        s("blockFreeLook", Bool(false)),
+        s("antiCheatCompatibility", Bool(true)),
+        s("smoothLook", Bool(false)),
+        s("smoothLookTicks", Int(5)),
         s("censorCoordinates", Bool(false)),
     ]
 }
@@ -606,6 +610,11 @@ impl Settings {
         }
     }
 
+    /// The settings of free look (`freelook.rs`): the glue reads them each tick.
+    pub fn look_settings(&self) -> crate::freelook::LookSettings {
+        crate::freelook::LookSettings { free_look: self.get_bool("freeLook"), block_free_look: self.get_bool("blockFreeLook"), anti_cheat_compatibility: self.get_bool("antiCheatCompatibility"), smooth_look: self.get_bool("smoothLook"), smooth_look_ticks: self.get_int("smoothLookTicks") }
+    }
+
     /// Writes the settings into an `ExecSettings`. `mouse_sensitivity` and `can_use_blocks` are not upstream settings and are left alone.
     pub fn apply_to_exec(&self, e: &mut ExecSettings) {
         e.allow_sprint = self.get_bool("allowSprint");
@@ -856,6 +865,10 @@ mod tests {
             ("costHeuristic", "3.563"),
             ("renderPath", "true"),
             ("freeLook", "true"),
+            ("blockFreeLook", "false"),
+            ("antiCheatCompatibility", "true"),
+            ("smoothLook", "false"),
+            ("smoothLookTicks", "5"),
             ("maxCostIncrease", "10.0"),
             ("pathCutoffFactor", "0.9"),
             ("avoidBreakingMultiplier", "0.1"),

@@ -28,6 +28,8 @@ use baritone_engine::pos::Pos;
 use baritone_engine::process::pathing::{PathEvent, Pathing, Tables, TickEnv};
 use baritone_engine::raytrace::BlockHit;
 use baritone_engine::set::{Registry, SetEffect, Settings};
+use baritone_engine::freelook::{restored_view, LookSettings, LookState, Plan};
+use baritone_engine::look::Rotation;
 use baritone_engine::settings::ExecSettings;
 use baritone_engine::worker::{monotonic_ms_clock, Worker};
 use baritone_engine::world::{falling_box_hits, known_state, WorldView};
@@ -153,6 +155,9 @@ struct Mod {
     settings_rev: u64,
     ts: ToolSettings,
     exec: ExecSettings,
+    /// Free look (`freeLook` and its companions) and the rotation the server was last sent.
+    look_settings: LookSettings,
+    look: LookState,
     /// The dimension the goal was given in.
     dim: &'static str,
     /// The goal of the last `/b goto` or `/b path`, until the path ends.
@@ -424,6 +429,7 @@ fn refresh_tables(game: &Game<'_>, m: &mut Mod, hb: &Hotbar, food: i32) {
         if let Some(st) = SETTINGS.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
             m.settings = st.clone();
             m.settings.apply_to_exec(&mut m.exec);
+            m.look_settings = m.settings.look_settings();
             m.ts = m.settings.tool_settings();
         }
         m.settings_rev = rev;
@@ -489,9 +495,10 @@ fn ensure_started(game: &Game<'_>) -> Result<(), String> {
     let mut exec = ExecSettings::default();
     settings.apply_to_exec(&mut exec);
     let ts = settings.tool_settings();
+    let look_settings = settings.look_settings();
     // The real table is made from the hotbar just below; this one only holds the place.
     let tables = Arc::new(Tables::new(base.states.clone(), Config::upstream_defaults(), vec![0.0; base.states.len()]));
-    let mut m = Mod { pathing, tables, base, sig: None, settings, settings_rev, ts, exec, dim: game.dim.id(), target: None, was_active: false, auto_jump_saved: None, reported_cancel: None, unsprint: false };
+    let mut m = Mod { pathing, tables, base, sig: None, settings, settings_rev, ts, exec, look_settings, look: LookState::new(), dim: game.dim.id(), target: None, was_active: false, auto_jump_saved: None, reported_cancel: None, unsprint: false };
     let food = game.player.as_ref().map_or(20, |p| p.health.food.food);
     refresh_tables(game, &mut m, &read_hotbar(game), food);
     let mut s = state();
@@ -553,6 +560,8 @@ fn looking_at(game: &Game<'_>) -> Option<BlockHit> {
 fn release(m: &mut Mod, player: Option<&mut PlayerMotion>) {
     let _ = m.pathing.stop();
     m.target = None;
+    m.look.clear();
+    swap().plan = None;
     *input() = None;
     set_buttons(false, false);
     clear_draw();
@@ -589,6 +598,8 @@ pub(super) fn on_tick(game: &mut Game<'_>) {
     if !game.native_window() {
         return;
     }
+    // The player's tick is over (`tick_remote` runs this right after it): the player's view comes back before anything reads it.
+    end_silent_look(game);
     register_completion(game);
     let began = std::time::Instant::now();
     tick_path(game);
@@ -645,7 +656,20 @@ fn tick_path(game: &mut Game<'_>) {
     };
     let hotbar = read_hotbar(game);
     refresh_tables(game, m, &hotbar, p.health.food.food);
-    let view = player_view(game, p, &m.tables);
+    // `IPlayerContext.playerRotations` and `objectMouseOver`: with free look, the executor sees the rotation the server was sent, and the
+    // crosshair is the ray along it, not along the player's view.
+    let own = Rotation::new(game.yaw, game.pitch);
+    let eff = m.look.effective(&m.look_settings, own);
+    let view = if eff == own {
+        player_view(game, p, &m.tables)
+    } else {
+        game.yaw = eff.yaw;
+        game.pitch = eff.pitch;
+        let v = player_view(game, p, &m.tables);
+        game.yaw = own.yaw;
+        game.pitch = own.pitch;
+        v
+    };
     // the aim lands on the player's own mouse grid, as upstream (D17)
     m.exec.mouse_sensitivity = f64::from(game.settings.sensitivity);
     let [min_x, min_z, max_x, max_z] = game.border.bounds();
@@ -708,9 +732,16 @@ fn tick_path(game: &mut Game<'_>) {
     // Apply the intent. The keys go to the next tick's movement; the view and the sprint are the player's now.
     let intent = &out.intent;
     *input() = intent.active.then(|| Held { forward: intent.forward_impulse(), strafe: intent.strafe_impulse(), jump: intent.jump, sneak: intent.sneak });
-    if let Some(rot) = intent.rotation {
-        game.yaw = rot.yaw;
-        game.pitch = rot.pitch;
+    // Free look (docs/deviations.md D35): the rotation is the player's own view (mode client), or is put in for the next player tick only.
+    swap().plan = None;
+    if let Some(plan) = m.look.plan(&m.look_settings, intent.rotation, intent.look_target, intent.look_force) {
+        match restored_view(&plan, Rotation::new(game.yaw, game.pitch)) {
+            None => {
+                game.yaw = plan.rotation.yaw;
+                game.pitch = plan.rotation.pitch;
+            }
+            Some(_) => swap().plan = Some(plan),
+        }
     }
     // The slot: the game tells the server on its next tick (probed, with any screen). Nothing is put back when the path ends, as upstream.
     if let (true, Some(slot)) = (intent.active, intent.select_slot) {
@@ -786,7 +817,7 @@ fn trace_row(game: &Game<'_>, m: &Mod, intent: &baritone_engine::exec::state::In
         }
     }
     log::info!(
-        "{PREFIX} trace pos={:.3},{:.3},{:.3} vel={:.3},{:.3},{:.3} ground={} yaw={:.1} pitch={:.1} sprinting={} | intent active={} fwd={} strafe={} jump={} sneak={} sprint={} | hook calls={calls} applied={applied} | pathing={} calculating={} screen_playing={} | move {mov} | cancel={:?}",
+        "{PREFIX} trace pos={:.3},{:.3},{:.3} vel={:.3},{:.3},{:.3} ground={} yaw={:.1} pitch={:.1} sent_yaw={} sprinting={} | intent active={} fwd={} strafe={} jump={} sneak={} sprint={} | hook calls={calls} applied={applied} | pathing={} calculating={} screen_playing={} | move {mov} | cancel={:?}",
         p.position.x,
         p.position.y,
         p.position.z,
@@ -796,6 +827,7 @@ fn trace_row(game: &Game<'_>, m: &Mod, intent: &baritone_engine::exec::state::In
         p.ground.on_ground as u8,
         game.yaw,
         game.pitch,
+        m.look.server_rotation().map_or("-".to_string(), |r| format!("{:.1}/{:.1}", r.yaw, r.pitch)),
         p.sprinting as u8,
         intent.active as u8,
         intent.forward_impulse(),
@@ -813,6 +845,7 @@ fn trace_row(game: &Game<'_>, m: &Mod, intent: &baritone_engine::exec::state::In
 /// Start of the game's input step (`remote_handle_input`, pinned): puts the mod's button values where a held mouse button would be, and with the
 /// chat open lets the step see `Screen::Playing` for this one call. Without the swap the step does nothing but abort a dig (docs/PLAN.md).
 pub(super) fn on_input_head(game: &mut Game<'_>) {
+    begin_silent_look(game);
     let b = *buttons();
     if !b.driving() {
         return;
@@ -850,6 +883,53 @@ pub(super) fn on_movement(forward: &mut f32, strafe: &mut f32, jump: &mut bool, 
         *strafe = h.strafe;
         *jump = h.jump;
         *sneak = h.sneak;
+    }
+}
+
+// ---------------------------------------------------------------- free look
+
+/// A rotation put in for one player tick (free look, mode server, or smooth look): what to put in, and the view that was there.
+#[derive(Default)]
+struct Swap {
+    plan: Option<Plan>,
+    /// Set while the rotation is in: the player's view before it, until `end_silent_look` puts it back.
+    saved: Option<Rotation>,
+}
+
+static SWAP: Mutex<Swap> = Mutex::new(Swap { plan: None, saved: None });
+
+fn swap() -> MutexGuard<'static, Swap> {
+    SWAP.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// Start of the game's input step, which is the start of what the tick does for the player: the picks for the clicks, the movement, the
+/// packet with the rotation. The rotation of the plan is the game's view from here to `end_silent_look`.
+fn begin_silent_look(game: &mut Game<'_>) {
+    if !game.native_window() {
+        return;
+    }
+    // The last tick ended without `end_silent_look` (it returned early): the player's view first.
+    end_silent_look(game);
+    let mut sw = swap();
+    // the plan stays, to know how the view comes back
+    if let Some(plan) = sw.plan {
+        sw.saved = Some(Rotation::new(game.yaw, game.pitch));
+        game.yaw = plan.rotation.yaw;
+        game.pitch = plan.rotation.pitch;
+    }
+}
+
+/// End of the player's tick (the mod's own tick runs right after it): the player's view comes back, so the next frame draws it and the mouse
+/// goes on adding to it.
+fn end_silent_look(game: &mut Game<'_>) {
+    let mut sw = swap();
+    if let Some(before) = sw.saved.take() {
+        if let Some(plan) = sw.plan.take() {
+            if let Some(v) = restored_view(&plan, before) {
+                game.yaw = v.yaw;
+                game.pitch = v.pitch;
+            }
+        }
     }
 }
 

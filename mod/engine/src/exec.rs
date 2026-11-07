@@ -520,12 +520,14 @@ impl PathExecutor {
                     }
                     if let Some(t) = rt_fake.state.target {
                         controls.look = Some(t.rotation);
+                        controls.look_force = t.force;
                     }
                     controls.keys = rt_fake.state.keys;
                     controls.use_pos = rt_fake.state.use_pos;
                     return true;
                 }
                 controls.look = Some(crate::look::calc_rotation_from_vec3d(env.p.head(), data_pos, env.p.rotations()));
+                controls.look_force = false;
                 controls.keys.forward = true;
                 return true;
             }
@@ -751,6 +753,7 @@ mod tests {
         // the yaw looks east: -90
         let look = c.look.expect("a rotation is wanted");
         assert!((look.yaw + 90.0).abs() < 0.01, "{look:?}");
+        assert!(!c.look_force, "a plain walk is not forced");
         // hunger: no sprint
         let mut hungry = at(1.5, 3.5);
         hungry.food_level = 6;
