@@ -116,7 +116,7 @@ Read at Nightly 2026-11-05, revision `66f3981` (`NATIVE_HOOKS_API` 411). `tools/
 
 A bundle that touches one private field has to pin `horizon_revision`, even if its other hooks are stable, so the mod stays pinned. Using the stable hooks where they exist still keeps the part that needs rebasing small.
 
-**Horizon version.** The port targets `66f3981`, in the git-ignored checkout `upstream/horizon-nightly`. `../horizon/` stays at `4aa6854` for Eris. We stay on one Nightly for the length of a stage and update between stages.
+**Horizon version.** The port targets `66f3981`, in the git-ignored checkout `upstream/horizon-nightly`. `../horizon/` stays at `4aa6854` for another project that depends on it. We stay on one Nightly for the length of a stage and update between stages.
 
 ### Walking with the chat open
 

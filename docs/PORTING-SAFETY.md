@@ -487,7 +487,7 @@ Reports hold metadata only and may be committed. Generated data stays local.
 ## What must never enter the repository
 
 - Minecraft code, data or generated golden files.
-- Anything from Sunset, closed clients or Eris.
+- Anything from Sunset, closed clients or other private projects.
 - The elytra pathfinder's terrain generator files, which upstream describes as coming from Minecraft.
 - Tokens, account names, private hostnames or home paths.
 
