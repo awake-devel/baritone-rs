@@ -5,6 +5,7 @@
 // before the tick: `Config` (the search and the costs, in `config.rs`) and `ExecSettings` (the executor, this file).
 // Defaults are upstream's at commit 1b8e87c, except where the field says otherwise.
 use crate::config::Config;
+use crate::inventory::ToolSettings;
 
 /// The executor's settings. Defaults are upstream's (`Settings.java` at 1b8e87c).
 #[derive(Clone, Debug, PartialEq)]
@@ -39,6 +40,18 @@ pub struct ExecSettings {
     pub cancel_on_goal_invalidation: bool,
     /// `randomLooking` and `randomLooking113`: both are 0 here, see `look.rs`. Upstream's defaults are 0.01 and 2.
     pub mouse_sensitivity: f64,
+    /// `allowPlace`, default true. `Config::has_throwaway` is this and a block to place; the executor places nothing when it is off.
+    pub allow_place: bool,
+    /// `assumeSafeWalk`, default false: the player does not fall off an edge when walking, so bridging neither sneaks nor backs up.
+    pub assume_safe_walk: bool,
+    /// `walkWhileBreaking`, default true: a traverse walks on while it is breaking the blocks ahead.
+    pub walk_while_breaking: bool,
+    /// `pauseMiningForFallingBlocks`, default true: the movement waits while a falling block is where it would mine.
+    pub pause_mining_for_falling_blocks: bool,
+    /// `remainWithExistingLookDirection`, default true: an aim at a block the crosshair is on keeps the view.
+    pub remain_with_existing_look_direction: bool,
+    /// The settings of the tool and the block to place: `autoTool`, `acceptableThrowawayItems` and the others.
+    pub tool: ToolSettings,
     /// Not upstream. Whether the glue can carry out an `Intent::use_block` (right click on a door or fence gate). When
     /// false (the default), a movement that needs a closed door or gate opened fails with `MoveFailure::NeedsUseBlock`
     /// and the path is recalculated.
@@ -63,23 +76,25 @@ impl Default for ExecSettings {
             sprint_in_water: true,
             cancel_on_goal_invalidation: true,
             mouse_sensitivity: 0.5,
+            allow_place: true,
+            assume_safe_walk: false,
+            walk_while_breaking: true,
+            pause_mining_for_falling_blocks: true,
+            remain_with_existing_look_direction: true,
+            tool: ToolSettings::default(),
             can_use_blocks: false,
         }
     }
 }
 
 impl Config {
-    /// A settings snapshot with upstream's defaults, for this version of the mod: walking and sprinting only.
+    /// A settings snapshot with upstream's defaults (`Settings.java` at 1b8e87c): breaking and placing are on, parkour and swimming are off.
     ///
-    /// Differences from upstream's defaults, on purpose:
-    /// - `allow_break` is false (upstream: true). Nothing is broken, so a movement that needs a block removed costs `COST_INF`.
-    /// - `has_throwaway` is false, which is what upstream's `allowPlace` (true) and an empty inventory give. A movement
-    ///   that needs a block placed costs `COST_INF`. The glue must keep it false in this version.
-    /// - `has_water_bucket` is false: the fall movement without a bucket only.
-    /// - `allow_parkour` is false, as upstream's default.
-    ///
-    /// The fields the game decides (`can_sprint`, `frost_walker`, `water_mult`) are set to a player without
-    /// boots and a full stomach. The glue sets them each tick.
+    /// The fields that come from the player's inventory are false until the glue sets them each tick, with
+    /// `Settings::apply_inventory`: `has_throwaway` is upstream's `allowPlace` and a block to place, and `has_water_bucket` is
+    /// `allowWaterBucketFall` and a water bucket in the hotbar outside the Nether. With an empty hotbar nothing is placed and no fall
+    /// lands in a bucket, which is what upstream gives too. The fields the game decides (`can_sprint`, `frost_walker`, `water_mult`) are set
+    /// to a player without boots and a full stomach; the glue sets them each tick.
     pub fn upstream_defaults() -> Config {
         Config {
             has_throwaway: false,
@@ -87,7 +102,7 @@ impl Config {
             can_sprint: true,
             frost_walker: 0,
             water_mult: 1.0,
-            allow_break: false,
+            allow_break: true,
             allow_break_anyway: vec![],
             blocks_to_avoid: vec!["tripwire".to_string()],
             blocks_to_disallow_breaking: vec![],
@@ -126,10 +141,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn defaults_never_break_or_place() {
+    fn defaults_are_upstreams_and_wait_for_the_inventory() {
         let c = Config::upstream_defaults();
-        assert!(!c.allow_break && !c.has_throwaway && !c.has_water_bucket && !c.allow_parkour && !c.allow_swimming);
+        // breaking is on; placing and the bucket wait for a block and a bucket in the hotbar
+        assert!(c.allow_break && !c.has_throwaway && !c.has_water_bucket && !c.allow_parkour && !c.allow_swimming);
         assert!(c.allow_downward && !c.allow_diagonal_descend && !c.allow_diagonal_ascend);
+        assert_eq!((c.max_fall_no_water, c.max_fall_bucket), (3, 20));
+        assert!(ExecSettings::default().allow_place);
     }
 
     #[test]

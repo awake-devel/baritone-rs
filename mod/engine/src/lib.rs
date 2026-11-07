@@ -18,17 +18,21 @@
 #![forbid(unsafe_code)]
 
 pub mod blocks;
+pub mod buttons;
 pub mod command;
 pub mod config;
 pub mod costs;
 pub mod exec;
 pub mod goals;
+pub mod inventory;
 pub mod look;
 pub mod movement;
 pub mod plan;
 pub mod pos;
 pub mod process;
+pub mod raytrace;
 pub mod search;
+pub mod set;
 pub mod settings;
 pub mod worker;
 pub mod world;

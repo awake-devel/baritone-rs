@@ -3,7 +3,7 @@
 Each place where this port differs from upstream on purpose. The rules are in
 [PORTING-SAFETY.md](PORTING-SAFETY.md#deviations). Upstream lines are cited at the `1.21.4` commit `1b8e87c`.
 
-Entries 1 to 4 are decided and wait for the code they apply to. Entry 5 is active and has no effect on any real search. Entries 6 to 10 are active (S3) and change no chosen path that a game can reach. Entries 11 to 22 are active (S4, executor, state machine and the mod): they change when a search is cancelled (12) and what `/b stop` waits for (13), and nothing a search returns.
+Entries 1 to 4 are decided and wait for the code they apply to. Entry 5 is active and has no effect on any real search. Entries 6 to 10 are active (S3) and change no chosen path that a game can reach. Entries 11 to 23 are active (S4, executor, state machine and the mod): they change when a search is cancelled (12) and what `/b stop` waits for (13), and nothing a search returns. Entries 24 to 32 are active (S4, breaking, placing, settings, commands and the glue): none changes a search; 28 changes what the executor does when the settings forbid an action that a path in progress still asks for.
 
 ## How exceptions work today
 
@@ -214,18 +214,17 @@ Fields: upstream, ours, why, changes chosen paths, decided by, expectation in th
 - **Changes chosen paths:** no. But a closed door on the only route is searched again at once, so the walk loops until the door is opened by hand, or the glue sets `can_use_blocks`.
 - **Decided by:** the task for S4.
 
-### D16. Branches that break, place, use a bucket, swim or jump a gap fail by name
+### D16. Branches that swim, jump a gap or mine from inside a block fail by name
 
-- **Status:** active, in `exec::movements`. Each has a row marked `later` in the ledger.
-- **Upstream:** a movement mines what is in its way (`prepared`), places the bridge block, the support to jump onto and the pillar blocks,
-  lands a long fall with a water bucket, swims along the surface with `allowSwimming`, and mines what is selected when the head is
-  in a block.
-- **Ours:** the movement ends as `Failed` with a `MoveFailure` (`NeedsBreaking`, `NeedsPlacing`, `NeedsBucket`, `Swimming`,
-  `InsideWall`, `Parkour`). The executor cancels the path and the pathing searches again. With `allowBreak` and `allowPlace` off a
-  search never returns a movement that needs one of these, so this happens only when the world changes under the path.
-- **Why:** S4 is walking and sprinting only.
+- **Status:** active, in `exec::movements`. Each has a row marked `later` in the ledger. (Until the breaking and placing step, the branches that break, place and use a bucket failed by name too; they are carried out now, see D24 to D28.)
+- **Upstream:** a movement swims along the surface with `allowSwimming` (`holdWaterline`, `preTurnIntoTheBend`), runs the parkour jump, and
+  mines whatever the crosshair is on when the head is in a block.
+- **Ours:** the movement ends as `Failed` with a `MoveFailure` (`Swimming`, `InsideWall`, `Parkour`). The executor cancels the path and the pathing
+  searches again. With `allowSwimming` and `allowParkour` off (upstream's defaults) a search never returns a movement that needs the first or the third;
+  `InsideWall` happens when the player's head is in a block.
+- **Why:** these are outside the first release (docs/PLAN.md).
 - **Changes chosen paths:** no.
-- **Decided by:** the owner (the S4 cut).
+- **Decided by:** the owner (the S4 cut, and the task for the breaking and placing step).
 
 ### D17. The aim
 
@@ -255,8 +254,8 @@ Fields: upstream, ours, why, changes chosen paths, decided by, expectation in th
 
 ### D19. Smaller differences
 
-- `MovementFall.willPlaceBucket` is `hasWaterBucket && drop > maxFallHeightNoWater` and not a second run of `dynamicFallCost` (a ladder halfway down the fall is ignored).
-- `Movement.prepared` does not wait for falling-block entities (`pauseMiningForFallingBlocks`): the world view has no entities.
+- `MovementFall.willPlaceBucket` runs `dynamicFallCost` again, as upstream (an earlier version of the port used `hasWaterBucket && drop > maxFallHeightNoWater`, which placed water on a fall past a ladder where the search had planned no bucket; found by the review of the breaking and placing step and fixed, `exec/review_tests.rs` R1).
+- `Movement.prepared` waits for falling-block entities (`pauseMiningForFallingBlocks`) through `WorldView::falling_block_near`, which says none unless the glue answers it (D31).
 - `Movement.update` sets `flying = false` and the auto jump off: these are `Intent::cancel_flying` and `disable_auto_jump`.
 - `PathingBehavior.pathStart` and the rest are as upstream. The search's `previous` path for favoring is a clone of the current path.
 - The order of a tick differs from Baritone's: Baritone ticks before the player moves; Horizon's `native_tick` runs after the move,
@@ -309,6 +308,134 @@ Fields: upstream, ours, why, changes chosen paths, decided by, expectation in th
 - **Decided by:** nobody needed. A search now also cannot index past the block table: the glue reads an id the table lacks as air
   (`world::known_state`, not upstream), which removes the one panic source found.
 
+### D24. The hotbar is an interface, and tools are chosen by state
+
+- **Status:** active, in `inventory.rs`.
+- **Upstream:** `ToolSet` reads `player.getInventory()` and picks the best slot for a `Block` (`b.defaultBlockState()`), with a cache by block.
+  `InventoryBehavior` also moves stacks from the main inventory to the hotbar (`allowInventory`) and has a branch for the builder
+  (`selectThrowawayForLocation` with `placeAt` from the builder process).
+- **Ours:** the glue answers `Inventory` (the slot in hand, the nine stacks and the off hand as `SlotInfo`, and `speed_vs_state`, which is
+  `ToolSet.calculateSpeedVsBlock` for one stack and one state). The choice (`get_best_slot`, ties, swords, `itemSaver`, silk touch, the
+  material cost) is upstream's, over a state id read from the world; upstream reads the default state of the block, which has the same hardness and
+  tool rules but could differ for a block whose destroy speed depends on a property (none in vanilla). `allowInventory` is stored and printed but not
+  carried out, there is no cache (the glue keeps the table of strengths), and there is no builder, so `selectThrowawayForLocation` is the loop over
+  `acceptableThrowawayItems` only.
+- **Changes chosen paths:** no. The costs read `Tables::tool_strength`, which the glue makes with `get_str_vs_block`.
+- **Decided by:** the task for this step.
+
+### D25. Aiming works on whole cubes
+
+- **Status:** active, in `raytrace.rs` and `exec/helper.rs`.
+- **Upstream:** `RayTraceUtils.rayTraceTowards` asks `Level.clip` for the first outline shape a ray meets, `RotationUtils.reachable` tries the middle of the block's
+  collision shape and then the middle of each face of it (`VecUtils.calculateBlockCenter`), and `Mth.sin` and `Mth.cos` read tables.
+- **Ours:** the engine has no shapes, only the flags of a state. A ray stops at a block that is not air, not a fluid block, and either a full cube or not walkable;
+  it meets the whole cube. The middle of a block is the middle of the cube, and the faces are the faces of the cube. The look vector uses `f32::sin` and `f32::cos`.
+  The first face tried by upstream's `reachable` is the top: its table of side offsets is named down, up, north, south, west, east but is applied as `1 - offset`,
+  so "down" is the top. That order is kept. The ray starts at the eye of a sneaking player (1.27) when the movement will sneak.
+- **Why:** shapes would need a new column of the block table, and `facts-compare` checks that table state by state.
+- **Changes what the game does:** an aim at a slab, a stair or a flower can be judged reachable when the real shape is not hit, or the other way round. The game
+  decides what is hit: the glue reports it in `PlayerView::looking_at` and the movements press the button only when it is the block they want, or when the view is
+  already really close to the aim they asked for (upstream's own fallback). A face that is wrongly judged costs a few ticks, not a wrong block.
+- **Changes chosen paths:** no.
+- **Decided by:** the task for this step.
+
+### D26. Clicks are intent fields, and wait for the slot
+
+- **Status:** active, in `process/pathing.rs` (`build_intent`) and `exec/state.rs`.
+- **Upstream:** `InputOverrideHandler` forces `CLICK_LEFT` and `CLICK_RIGHT` and `BlockBreakHelper` and `BlockPlaceHelper` act on `objectMouseOver` in
+  the same tick that `selected` changes. Left wins over right.
+- **Ours:** `Intent::attack` (hold the left button), `Intent::use_item` (press the right button) and `Intent::select_slot`. Left wins over right. A
+  click is not sent on a tick in which the slot to hold is not the slot in hand: it waits one tick, so the game has the new slot when it clicks (the server
+  is told of the slot in `remote_send_state`, which may run after the input step; see docs/PLAN.md). The glue stops a dig when `attack` goes from
+  true to false and when the mod lets go of the player.
+- **Changes chosen paths:** no. A change of tool costs one tick.
+- **Decided by:** the task for this step.
+
+### D27. A branch of `Movement.prepared` that cannot be reached
+
+- **Status:** active, in `exec::movements::prepared_base`.
+- **Upstream:** after the loop, `if (somethingInTheWay)` sets the status to unreachable. Inside the loop, both ways out of the `if (!canWalkThrough)` return, so
+  the flag is never true after the loop.
+- **Ours:** the flag is not kept. The unreachable status is used for the case of D28.
+- **Changes chosen paths:** no.
+
+### D28. Nothing is broken or placed that the settings forbid
+
+- **Status:** active, in `exec::movements` (`prepared_base`, the traverse, the pillar) and `exec::helper::attempt_to_place_a_block`.
+- **Upstream:** the movement breaks or places whatever it needs. The settings act through the cost, which `PathExecutor.onTick` checks every tick before it
+  updates the movement, and cancels the path when it is infinite and `safeToCancel`. While the movement is not safe to cancel (a bridge block half placed, a fall) the
+  check does not cancel and the movement goes on to break or place all the same. `attemptToPlaceABlock` also goes on to click when there is no throwaway block, with
+  whatever is in the hand, and the clicks "something is in the way" of the traverse and the pillar break whatever the crosshair is on.
+- **Ours:** a block in the way of `prepared` is broken only if the movement's own cost would pay for it (`Ctx::mining_duration_at` is finite: `allowBreak` or
+  `allowBreakAnyway`, not `blocksToDisallowBreaking`, no liquid beside it, a tool that digs it). Otherwise the movement ends as `Unreachable` and nothing is clicked.
+  `attemptToPlaceABlock` and the pillar end the movement as `Unreachable` when `allowPlace` is off (`ExecSettings::allow_place`), and a placement with no throwaway block
+  in the hotbar is `Unreachable` too. The incidental left clicks (the traverse's "something is in the way", the pillar's block at the feet) need `allowBreak` and are not pressed while the crosshair is on a block that
+  must never be broken (`blocksToDisallowBreaking`, ice, an infested block; `may_click_left`, review finding R4). When the crosshair is on nothing or on another block they are pressed as upstream.
+  The pick-up of the water after a bucket fall is not placing and is done whenever an empty bucket is in the hotbar, as upstream.
+- **Why:** the owner's task: the executor never attacks or places when the settings forbid it. Unit tests pin each guard (`exec/break_place_tests.rs`); a fixed-seed test in `sim.rs` over random worlds with edits pins that the right button is never pressed with `allowPlace` off (it fails if the guard is removed). The same test did not fail with the break guard removed, because the cost check cancels first in those worlds, so the break guard rests on its unit test.
+- **Changes chosen paths:** no. It changes what a running path does in the few ticks in which upstream would have broken a block that the settings forbid.
+- **Decided by:** the task for this step.
+
+### D29. The settings and the `set` command
+
+- **Status:** active, in `set.rs`.
+- **Ours:** one table of the settings of this port, with upstream's names, types and defaults (checked against `Settings.java` for each and against `Config::upstream_defaults` and
+  `ExecSettings::default` for all). Not carried: the settings of processes that do not exist, the chat prefix and notifications. `freeLook`, `renderPath` and `allowInventory` are stored
+  but read by nobody in the engine. Names are matched without regard to case. Values are printed as Java prints them (`2.0`, `1.0E7`, a block without `minecraft:`, an item with it) and read as
+  `SettingsUtil` reads them, except: a number is read with Rust's parser after trimming and a trailing `d` or `f` (no hexadecimal floats), "modified" means "not equal to the default" where
+  upstream compares object identity, and the command's errors read `Expected a valid setting` without the position of the argument. `set save` and `set load` ask the glue for the file
+  (`SetEffect`); `Settings::to_file_text` and `apply_file_text` are the file's text.
+- **Changes chosen paths:** only as the user's settings do.
+- **Decided by:** the task for this step.
+
+### D30. The commands `goal`, `path`, `eta` and the completion
+
+- **Status:** active, in `command.rs` and `process/pathing.rs`.
+- **Ours:** `goal` (a goal, or `reset`, `clear`, `none`), `path` and `eta` are upstream's with its texts; `goal` with arguments that are not numbers falls back to the player's own position
+  as `RelativeGoal` does. `eta` refuses with "No process in control" unless the goal process was asked in the last tick (`Pathing::in_control`); like upstream's `mostRecentInControl`
+  that is still true on the tick in which the player arrived, so `eta` then prints its times. `PathingBehavior.estimatedTicksToGoal` is `Pathing::estimated_ticks_to_goal` (it resets as upstream
+  when the player is in the goal). `%.0f` is rounded half away from zero as Java does. Completion offers the command names, `~`, the words of `goal`, and for `set` what `SetCommand.tabComplete` offers;
+  `goto` does not offer block names, because `goto <block>` is not ported.
+- **Changes chosen paths:** no.
+- **Decided by:** the task for this step.
+
+### D31. Falling blocks need the glue
+
+- **Status:** active, in `world.rs` (the box test `falling_box_hits`) and `mod/runtime.rs` (`Live::falling_block_near`).
+- **Ours:** `Movement.prepared` asks `WorldView::falling_block_near` before it mines, as upstream asks the entities (`getEntitiesOfClass(FallingBlockEntity, AABB(0,0,0,1,1.1,1).move(pos))`).
+  The default says none. The game thread's `Live` world answers it from the falling blocks the game holds (`game.falling`: a box 0.98 wide and tall, tested strictly on all three axes). Before the fix of the
+  review (S4b), `pauseMiningForFallingBlocks` had no effect in the game. It is a unit-tested box test; no sand or gravel was mined in the game.
+- **Still different:** when a falling block lands in the cell of the player's head while a movement runs, the movement ends as `InsideWall` (D16) and the path is cancelled and searched again, where upstream
+  mines the block out of the way.
+- **Changes chosen paths:** no.
+
+### D32. The glue: buttons, slot, settings file, completion
+
+- **Status:** active, in `mod/runtime.rs` and the hooks it uses.
+- **Upstream:** `InputOverrideHandler` forces `CLICK_LEFT` and `CLICK_RIGHT` and Minecraft's own tick acts on them; the settings are one object saved to `settings.txt` in the game folder; `#`-commands complete through
+  `TabCompleteEvent`.
+- **Ours:** the buttons are set in the start of the game's input step (a pinned `HEAD`) and the chat is swapped for `Playing` for that call (`RETURN` puts it back), because that step does nothing with the chat open. A button the mod held and
+  no longer wants is let go of once, and the let-go stays pending until an input step on the `Playing` screen (or the chat swapped for it) has delivered it (`buttons.rs`; an earlier version lost it on a second
+  stop before the next step or on the inventory screen). `RETURN` puts the chat back only if the step left the screen as `Playing`. The slot is set with `game.selected` and is not put back when the path ends, as upstream. `settings.txt` is in the mod's own folder (`horizon-mods/.horizon-mod-data/baritone_rs/`) of the game folder, read
+  on first use and written after each change. Completion is a pinned `RETURN` on the command tree's suggestions, with a module added to `horizon-command` to hand the function across crates. The table of block facts is made again when a `Sig`
+  changes (settings, hotbar items and enchantments, throwaway, bucket, food above 6, potion), not each tick; upstream builds a new `CalculationContext` per search and a `ToolSet` per use, and the table here is the same snapshot taken
+  when something changed. `canSprint` is `allowSprint` and food above 6, as upstream. `frostWalker` and `waterSpeedMultiplier` stay 0 and 1.0 (not carried from the boots, as in the walking-only version; U8 explains the second).
+  The settings `freeLook` and `renderPath` are stored; the path is always drawn and the camera is always the mod's while a path runs.
+  The `trace` command and the word `trace` in completion are not upstream's. `/b trace` prints the exact position of the player every tick, whatever `censorCoordinates` says; it is opt-in and off at each start.
+  `/b` and `/baritone` are claimed from servers: a server's own command of that name is not sent while the mod is loaded, also when the mod is switched off, and the chat box completes them from the mod. Other commands pass untouched.
+  The test triggers (`BARITONE_RS_L3_SPEC`, `BARITONE_RS_SCENARIO_DIR`) run only in a single-player world whose name starts with `l3-`; `tools/l3/run.py` refuses a name that does not, and a name that already exists.
+  Mod chat lines are also written to the game log, so coordinates in "Going to" are logged unless `censorCoordinates` is on. The note buffer for the test triggers is filled only while a trigger variable is set.
+- **Changes chosen paths:** no. A boot with Depth Strider or Frost Walker is not seen, so a player wearing them gets the costs of one who does not.
+- **Decided by:** the task for this step.
+
+### D33. Smaller differences in `set` and `eta`
+
+- **Status:** active, in `set.rs` and `command.rs`.
+- **Ours:** `set load <file>` completes no file names (upstream lists the files of the settings folder). `set reset <letters>` completes the setting names that start with them; upstream completes nothing there, because
+  its provider looks at the word being typed. `%.0f` in `eta` rounds with `floor(x + 0.5)`, which differs from Java for the one double just below 0.5 and cannot show in a time. A line of `settings.txt` is judged by upstream's
+  pattern `^([^ ]+) +(.+)` (see `apply_file_text`): a leading space or a name with no value is "Invalid syntax in setting file", anything else that does not parse is "Unable to parse line".
+- **Changes chosen paths:** no.
+
 ### Upstream behaviour kept, found in S3 (reported, not fixed)
 
 The port does what upstream does here; a change would change paths, so it is the owner's call.
@@ -337,6 +464,22 @@ The port does what upstream does here; a change would change paths, so it is the
   so a player without boots is priced as faster in water than one with Depth Strider I (m = 0.33). The search takes water it should avoid. In the game (S4
   scenarios 5 and 10) moves through deep water took about 2.2 times their estimate. A value of 0 would match the 9.091 constant. Fixing it changes
   paths, so it is the owner's call.
+
+### Upstream behaviour kept, found in the breaking and placing step (reported, not fixed)
+
+- **U9. `attemptToPlaceABlock` aims at the lower quarter of the face.** `faceY = (placeAt.y + against.y + 0.5) * 0.5` is the point a quarter of a block above the lower edge of the
+  two blocks, not the middle of the face. It works for the faces it is used with. Kept.
+- **U10. `RotationUtils.reachable` tries the top of the block first of the faces.** See D25.
+- **U11. The traverse's "something is in the way" click breaks whatever the crosshair is on,** and the place and break buttons are decided by the crosshair of the previous frame in
+  Baritone and of the previous tick here. Kept, with the guard of D28 (`allowBreak`, and no click while the crosshair is on a block that must never be broken).
+- **U12. Diagonals never break.** `MovementDiagonal.prepared` is always true, and the cost lets a diagonal through only if one corner is free and the destination can be walked through,
+  so `toBreak` of a diagonal is empty for any path a search returns.
+- **U13. `ToolSet.getMaterialCost` always answers -1 for a tool.** It tests the stack against `ItemTags.WOODEN_TOOL_MATERIALS` and the other five, which hold the repair materials (`wooden_tool_materials` is `#minecraft:planks`, `iron_tool_materials` is the iron ingot; read in the 26.3 tag files, and 1.21.4's tags have the same names), not the tools.
+  A stone pickaxe and a diamond pickaxe are never told apart by material, so a tie in speed goes to the first slot (and to silk touch). The glue computes it the same way, with the same tags, so it is -1 for a tool here too. Fixing it
+  would change which of two equal tools is used, so it is the owner's call.
+- **U14. The pillar breaks the block at its feet with the throwaway block in hand.** `MovementPillar` selects the throwaway block (`selectThrowawayForLocation`) and then clicks the block at the feet
+  when it is neither air nor replaceable, with no `switchToBestToolFor`. It matters only for a block that the cost lets through but is neither walkable nor replaceable (a torch, a carpet, a sign): it is dug by hand.
+  Kept (`exec/review_tests.rs` R3).
 
 ## Where upstream's two branches disagree
 

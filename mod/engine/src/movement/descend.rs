@@ -51,7 +51,7 @@ pub fn cost<W: WorldView>(ctx: &Ctx<'_, W>, x: i32, y: i32, z: i32, dest_x: i32,
 }
 
 /// `MovementDescend.dynamicFallCost`: cost of a fall of more than one block. `allowFallIntoLava` is false outside the elytra code.
-fn dynamic_fall_cost<W: WorldView>(ctx: &Ctx<'_, W>, y: i32, dest_x: i32, dest_z: i32, front_break: f64, below: Bs<'_>, res: &mut MoveResult) -> bool {
+pub(crate) fn dynamic_fall_cost<W: WorldView>(ctx: &Ctx<'_, W>, y: i32, dest_x: i32, dest_z: i32, front_break: f64, below: Bs<'_>, res: &mut MoveResult) -> bool {
     if front_break != 0.0 && ctx.get(dest_x, y + 2, dest_z).falling {
         return false;
     }

@@ -35,17 +35,67 @@ class SpecTests(unittest.TestCase):
         for s in scenarios.all_scenarios():
             if not s["prep"]:
                 continue
-            m = re.match(r"forceload add (-?\d+) (-?\d+) (-?\d+) (-?\d+)", s["prep"][1])
+            m = re.match(r"forceload add (-?\d+) (-?\d+) (-?\d+) (-?\d+)", s["prep"][2])
             self.assertTrue(m, s["name"])
             fx0, fz0, fx1, fz1 = map(int, m.groups())
             self.assertLessEqual(((fx1 >> 4) - (fx0 >> 4) + 1) * ((fz1 >> 4) - (fz0 >> 4) + 1), 256)
-            for line in s["prep"][2:]:
+            for line in s["prep"][3:]:
                 nums = list(map(int, re.findall(r"(?<![\w.])-?\d+(?![\w.])", line.split("minecraft:")[0])[:6]))
                 if line.startswith("fill"):
                     self.assertTrue(fx0 <= nums[0] and nums[3] <= fx1 and fz0 <= nums[2] and nums[5] <= fz1, f"{s['name']}: {line}")
 
+    def test_the_new_scenarios_give_items_and_start_with_an_empty_hotbar(self):
+        for s in scenarios.new_scenarios():
+            if s["name"].startswith(("b08", "b09", "b02")):
+                continue
+            self.assertEqual(s["prep"][0], "clear @p", s["name"])
+            self.assertTrue(any(l.startswith("give @p") for l in s["prep"]), s["name"])
+
+    def test_a_setting_is_set_before_the_command_and_put_back_after(self):
+        off = [s for s in scenarios.new_scenarios() if s["name"] == "b06_wall_allowbreakoff_chat0"][0]
+        self.assertIn({"t": 3, "set": "b set allowBreak false"}, off["events"])
+        self.assertEqual(off["after"], ["b set allowBreak true"])
+
     def test_the_far_scenario_can_be_left_out(self):
         self.assertFalse(any(s["name"].startswith("s10") for s in scenarios.all_scenarios(include_far=False)))
+
+
+class BlockJudgeTests(unittest.TestCase):
+    def meta(self, changes, start="0:cobblestone x64 d0", end="0:cobblestone x61 d0"):
+        return {"all_changes": changes, "hotbar_start": start, "hotbar_end": end, "slot_start": 6, "slot_end": 0}
+
+    def judged(self, changes, plans, chk, **kw):
+        res = {"checks": {}, "notes": []}
+        run.judge_blocks(res, chk, self.meta(changes, **kw), plans)
+        return res
+
+    CHK = {"plan": {"break": 0, "place": 2}, "stack_delta": {"cobblestone": -3}}
+
+    def test_a_planned_placement_passes(self):
+        plans = [{"break": set(), "place": {(1, 200, 0), (2, 200, 0), (3, 200, 0)}}]
+        ch = [f"{x},200,0: minecraft:air -> minecraft:cobblestone" for x in (1, 2, 3)]
+        r = self.judged(ch, plans, {"plan": {"break": 0, "place": 3}, "stack_delta": {"cobblestone": -3}})
+        self.assertTrue(all(r["checks"].values()), r["checks"])
+        self.assertFalse(r["slot_restored_after_the_path"])
+
+    def test_a_block_nobody_planned_and_a_wrong_count_fail(self):
+        plans = [{"break": set(), "place": {(1, 200, 0)}}]
+        ch = ["1,200,0: minecraft:air -> minecraft:cobblestone", "5,200,0: minecraft:stone -> minecraft:air"]
+        r = self.judged(ch, plans, self.CHK, end="0:cobblestone x63 d0")
+        failed = [k for k, v in r["checks"].items() if not v]
+        self.assertIn("every broken block was in a plan's toBreak", failed)
+        self.assertIn("placed exactly 2 blocks", failed)
+        self.assertIn("cobblestone count changed by -3", failed)
+
+    def test_a_planned_cell_that_was_not_done_fails(self):
+        plans = [{"break": {(4, 201, 0)}, "place": set()}]
+        r = self.judged([], plans, {"plan": {"break": 1, "place": 0}})
+        self.assertFalse(r["checks"]["every toBreak cell of the last path was broken"])
+
+    def test_water_is_only_allowed_when_the_scenario_says_so(self):
+        ch = ["1,200,0: minecraft:air -> minecraft:water"]
+        self.assertFalse(all(self.judged(ch, [], {"plan": {"break": 0, "place": 0}})["checks"].values()))
+        self.assertTrue(all(self.judged(ch, [], {"plan": {"break": 0, "place": 0}, "water_ok": True})["checks"].values()))
 
 
 class JudgeTests(unittest.TestCase):
@@ -105,6 +155,23 @@ class OwnershipTests(unittest.TestCase):
             for p in procs:
                 p.kill()
                 p.wait()
+
+
+class WorldNameTests(unittest.TestCase):
+    def test_only_a_new_l3_world_is_accepted(self):
+        with tempfile.TemporaryDirectory() as d:
+            saved = run.SAVES
+            run.SAVES = d
+            try:
+                os.makedirs(os.path.join(d, "l3-old"))
+                os.makedirs(os.path.join(d, "New World"))
+                self.assertIsNone(run.check_world_name("l3-fresh"))
+                self.assertIn("already exists", run.check_world_name("l3-old"))
+                self.assertIn("must start with l3-", run.check_world_name("New World"))
+                self.assertIn("must start with l3-", run.check_world_name("l3-../x"))
+                self.assertIn("must start with l3-", run.check_world_name(""))
+            finally:
+                run.SAVES = saved
 
 
 if __name__ == "__main__":

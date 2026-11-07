@@ -9,8 +9,14 @@
 // - the lists of blocks to break and place that upstream recalculates each tick (`recalcBP`): they only feed the renderer and the
 //   builder. `blocks_to_break` and `blocks_to_place` answer on demand.
 // - `shouldPause` needs the best partial path of the running search, which the game thread cannot read. See `Progress`.
+pub mod helper;
 pub mod movements;
 pub mod state;
+
+#[cfg(test)]
+mod break_place_tests;
+#[cfg(test)]
+mod review_tests;
 
 use crate::look::Vec3;
 use crate::movement::helper::{avoid_walking_into, Ctx};
@@ -104,7 +110,7 @@ impl PathExecutor {
     }
 
     /// `PathExecutor.toBreak`: the cells the movements from the current one on would have to break. With `allowBreak` off this is
-    /// empty for any path a search returns; a block that appears later makes the movement fail instead.
+    /// empty for any path a search returns; a block that appears later ends the movement as unreachable.
     pub fn blocks_to_break<W: WorldView>(&self, ctx: &Ctx<'_, W>) -> Vec<Pos> {
         let from = self.path_position.max(0) as usize;
         self.movements.iter().skip(from).flat_map(|m| to_break(m, ctx)).collect()
@@ -726,7 +732,7 @@ mod tests {
 
     fn tick(ex: &mut PathExecutor, t: &Tables, w: &TestWorld, player: &PlayerView, set: &ExecSettings, c: &mut Controls) -> bool {
         let ctx = t.ctx(w, BORDER);
-        let env = Env { ctx: &ctx, p: player, set, path_start: player.feet() };
+        let env = Env::new(&ctx, player, set, player.feet());
         ex.on_tick(&env, c, &Progress::default())
     }
 
@@ -876,7 +882,7 @@ mod tests {
     }
 
     #[test]
-    fn a_missing_floor_a_pillar_without_a_ladder_and_a_parkour_fail_by_name() {
+    fn a_missing_floor_and_a_pillar_without_a_block_to_place_are_unreachable_and_a_parkour_fails_by_name() {
         use crate::exec::movements::{update, MoveRuntime};
         use crate::movement::step::{Movement, MovementKind};
         let t = tables();
@@ -885,36 +891,35 @@ mod tests {
         let set = ExecSettings::default();
         let mut c = Controls::default();
         let player = at(1.5, 3.5);
-        let env = Env { ctx: &ctx, p: &player, set: &set, path_start: player.feet() };
-        // a traverse onto a position with no floor
+        let env = Env::new(&ctx, &player, &set, player.feet());
+        // a traverse onto a position with no floor, and nothing to place with: upstream's attemptToPlaceABlock sets UNREACHABLE
         let mv = Movement::new(MovementKind::Traverse, Pos::new(1, 1, 3), Pos::new(2, 1, 3));
         let mut w2 = TestWorld::flat(10, 10);
         w2.set(2, 0, 3, AIR);
         let ctx2 = t.ctx(&w2, BORDER);
-        let env2 = Env { ctx: &ctx2, p: &player, set: &set, path_start: player.feet() };
+        let env2 = Env::new(&ctx2, &player, &set, player.feet());
         let mut rt = MoveRuntime::new(&mv);
-        assert_eq!(update(&mv, &mut rt, &env2, &mut c), MoveStatus::Failed);
-        assert_eq!(rt.state.failure, Some(MoveFailure::NeedsPlacing(Pos::new(2, 0, 3))));
+        assert_eq!(update(&mv, &mut rt, &env2, &mut c), MoveStatus::Unreachable);
         assert_eq!(c.keys, Keys::default());
         // a pillar on plain ground
         let mv = Movement::new(MovementKind::Pillar, Pos::new(1, 1, 3), Pos::new(1, 2, 3));
         let mut rt = MoveRuntime::new(&mv);
-        assert_eq!(update(&mv, &mut rt, &env, &mut c), MoveStatus::Failed);
-        assert_eq!(rt.state.failure, Some(MoveFailure::NeedsPlacing(Pos::new(1, 1, 3))));
+        assert_eq!(update(&mv, &mut rt, &env, &mut c), MoveStatus::Unreachable);
         // parkour
         let mv = Movement::new(MovementKind::Parkour { direction: Direction::East, dist: 3, ascend: false }, Pos::new(1, 1, 3), Pos::new(4, 1, 3));
         let mut rt = MoveRuntime::new(&mv);
         assert_eq!(update(&mv, &mut rt, &env, &mut c), MoveStatus::Failed);
         assert_eq!(rt.state.failure, Some(MoveFailure::Parkour));
-        // a movement whose cell holds a block that would be broken: the walk-through check fails it by name
+        // a movement whose cell holds a block in the way, with breaking off: nothing is aimed or clicked, and the movement is unreachable
         let mut w3 = TestWorld::flat(10, 10);
         w3.set(2, 1, 3, STONE);
         let ctx3 = t.ctx(&w3, BORDER);
-        let env3 = Env { ctx: &ctx3, p: &player, set: &set, path_start: player.feet() };
+        let env3 = Env::new(&ctx3, &player, &set, player.feet());
         let mv = Movement::new(MovementKind::Traverse, Pos::new(1, 1, 3), Pos::new(2, 1, 3));
         let mut rt = MoveRuntime::new(&mv);
-        assert_eq!(update(&mv, &mut rt, &env3, &mut c), MoveStatus::Failed);
-        assert_eq!(rt.state.failure, Some(MoveFailure::NeedsBreaking(Pos::new(2, 1, 3))));
+        let mut c = Controls::default();
+        assert_eq!(update(&mv, &mut rt, &env3, &mut c), MoveStatus::Unreachable);
+        assert!(c.look.is_none() && c.select.is_none() && c.keys == Keys::default());
     }
 
     /// States for the door tests: air, stone, a closed-or-open wooden door facing east, a fence gate.
@@ -960,7 +965,7 @@ mod tests {
         let set = ExecSettings { can_use_blocks: can_use, ..Default::default() };
         let player = at(2.7, 3.5);
         let mut c = Controls::default();
-        let env = Env { ctx: &ctx, p: &player, set: &set, path_start: player.feet() };
+        let env = Env::new(&ctx, &player, &set, player.feet());
         ex.on_tick(&env, &mut c, &Progress::default());
         (ex, c)
     }

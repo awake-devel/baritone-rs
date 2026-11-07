@@ -17,10 +17,25 @@ pub trait WorldView {
     fn is_open(&self, _x: i32, _y: i32, _z: i32) -> bool {
         true
     }
+    /// Whether a falling block (an entity) is in the cell above or at this position, where a movement would mine
+    /// (`Movement.prepared`: `getEntitiesOfClass(FallingBlockEntity.class, AABB(0, 0, 0, 1, 1.1, 1).move(pos))`). The default says none.
+    fn falling_block_near(&self, _x: i32, _y: i32, _z: i32) -> bool {
+        false
+    }
     /// The lowest Y of the world.
     fn min_y(&self) -> i32;
     /// The world's height in blocks.
     fn height(&self) -> i32;
+}
+
+/// Whether a falling block with its feet at `f` (a box 0.98 wide and tall, centred on the feet) intersects
+/// `AABB(0, 0, 0, 1, 1.1, 1).move(x, y, z)`, as `Level.getEntitiesOfClass` tests it: strictly, on all three axes
+/// (`Movement.prepared`). The size is the game's `f32` 0.98.
+pub fn falling_box_hits(f: [f64; 3], x: i32, y: i32, z: i32) -> bool {
+    const SIZE: f64 = 0.98_f32 as f64;
+    const HALF: f64 = SIZE / 2.0;
+    let (bx, by, bz) = (f64::from(x), f64::from(y), f64::from(z));
+    f[0] - HALF < bx + 1.0 && f[0] + HALF > bx && f[1] < by + 1.1 && f[1] + SIZE > by && f[2] - HALF < bz + 1.0 && f[2] + HALF > bz
 }
 
 /// A state id the block table has, or `air` if it has none. Not upstream: Java's tables are as long as the game's registry, and the
@@ -64,7 +79,23 @@ impl WorldView for GridWorld<'_> {
 
 #[cfg(test)]
 mod tests {
-    use super::known_state;
+    use super::{falling_box_hits, known_state};
+
+    #[test]
+    fn a_falling_block_in_or_just_above_the_cell_pauses_mining() {
+        // in the cell, one cell above (the box reaches 1.1 up), and far away
+        assert!(falling_box_hits([5.5, 10.0, 5.5], 5, 10, 5));
+        assert!(falling_box_hits([5.5, 11.05, 5.5], 5, 10, 5));
+        assert!(!falling_box_hits([5.5, 11.1, 5.5], 5, 10, 5));
+        assert!(!falling_box_hits([5.5, 20.0, 5.5], 5, 10, 5));
+        assert!(!falling_box_hits([7.5, 10.0, 5.5], 5, 10, 5));
+        // beside the cell: out of reach at 4.5 (right edge 4.99), inside at 4.6
+        assert!(!falling_box_hits([4.5, 10.0, 5.5], 5, 10, 5));
+        assert!(falling_box_hits([4.6, 10.0, 5.5], 5, 10, 5));
+        // below the cell: the block's top (y + 0.98) must pass the cell's floor
+        assert!(!falling_box_hits([5.5, 8.99, 5.5], 5, 10, 5));
+        assert!(falling_box_hits([5.5, 9.1, 5.5], 5, 10, 5));
+    }
 
     #[test]
     fn an_id_the_table_lacks_reads_as_air() {

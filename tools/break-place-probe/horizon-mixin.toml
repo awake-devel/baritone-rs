@@ -1,0 +1,67 @@
+# LGPL-3.0-or-later, like the rest of baritone-rs. Not ported from Baritone.
+# Test bundle for baritone-rs: answers, in the real game, whether a mod can switch the hotbar slot, break a block, place a
+# block (against a floor and while jumping), and use a water bucket, with the chat closed and open, and whether it can compute
+# the mining speed the game itself uses. It runs a fixed scenario by itself once the environment variable BARITONE_BP_DIR names
+# a folder, and writes there. Pinned like input-probe: it reads and writes private `Game` fields (screen, selected, left, right,
+# yaw, pitch, world) and hooks the private `remote_handle_input`.
+[mod]
+id = "baritone_bp_probe"
+version = "0.0.0"
+priority = 100
+
+[compatibility]
+horizon_revision = "66f3981f522b24c250b21523a70080965b940424"
+
+[[module]]
+id = "runtime"
+file = "crates/horizon-client/src/game.rs"
+name = "baritone_bp"
+source = "runtime.rs"
+
+[[injection]]
+id = "tick"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_tick"
+helper = "tick.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+]
+
+[[injection]]
+id = "movement"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_movement_input"
+helper = "movement.rs"
+bindings = [
+  { name = "jump", ty = "&mut bool", value = "&mut *jump" },
+]
+
+# The game's own input step (MultiPlayerGameMode.tick + handleKeybinds). It only runs with Screen::Playing; the probe makes
+# the screen Playing for exactly this call, with the chat's screen put back at its end.
+[[injection]]
+id = "input_head"
+kind = "HEAD"
+target = "horizon_client::game::remote::Game<'_>::remote_handle_input"
+helper = "input_head.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+]
+
+[[injection]]
+id = "input_return"
+kind = "RETURN"
+target = "horizon_client::game::remote::Game<'_>::remote_handle_input"
+helper = "input_return.rs"
+bindings = [
+  { name = "value", ty = "()", value = "$value" },
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+]
+
+[[injection]]
+id = "list"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_mods"
+helper = "list.rs"
+bindings = [
+  { name = "mods", ty = "&mut Vec<crate::game::native_hooks::NativeMod>", value = "&mut *mods" },
+]

@@ -276,6 +276,30 @@ No input is sent to the desktop. The world is created by `play --world`, which n
 focused, a real key pressed by someone sitting at the machine goes into the open chat (this happened once in the first
 run, with the probe not yet typing: a single `t` reached the server as a chat message).
 
+## break-place-probe
+
+A native mod that answers, in the real game, whether a mod can switch the hotbar slot, break a block, place a block (against a
+floor, and under its own feet while jumping) and use a water bucket, with the chat closed and open
+([PLAN.md](../docs/PLAN.md#breaking-and-placing)). Like `input-probe` it runs by itself: with `BARITONE_BP_DIR` set to a folder it
+waits for the player to be in a world, builds a stone platform, switches to survival, and runs 18 trials (each from the same
+start, with an empty inventory and then an iron pickaxe, 64 stone and a water bucket), asking the single-player server about the
+result every tick through the owner console. It writes `probe.csv` (one row per tick: feet height, slot, held item, buttons, the
+three watched blocks as the client sees them), `probe-console.txt` (every command and its answer, with milliseconds since the
+trial started) and `summary.txt` (`RESULT` lines with the client and server ticks, `TOOL` lines with the game's own mining
+numbers). `runtime.rs` holds the trials and is plain `std` Rust, so `rustc --edition 2024 --crate-type lib runtime.rs` checks it.
+It hooks the private `remote_handle_input` (a `HEAD` and a `RETURN`), so it pins the Horizon revision. The trials ending in
+`_noswap` are the controls: the same buttons with the chat open and the screen left alone, which must do nothing.
+
+```sh
+L=~/Applications/horizon/horizon-launcher-linux-x86_64.AppImage
+$L native-build tools/break-place-probe --instance baritone-test --trust-native-code       # 2 to 3.5 minutes
+mkdir -p OUT
+BARITONE_BP_DIR=OUT $L play --instance baritone-test --world SOME-NEW-WORLD-NAME
+# Wait for OUT/summary.txt (about 1.5 minutes after the world opens), then close the game you started by its PID.
+```
+
+It replaces the mod built into the instance, so build `mod/` again afterwards. No input goes to the desktop.
+
 ## The mod and its scenario trigger
 
 `mod/` is the native mod (id `baritone_rs`): the bundle `horizon-mixin.toml`, `runtime.rs` (state, snapshots, the tick, the commands, the
@@ -283,8 +307,13 @@ drawing, and the scenario trigger below), small hook helpers (`tick.rs`, `moveme
 `primitives.rs`, `unload.rs`, `disconnecting.rs`), `engine/` as a `[[crate]]`, and `glue/state_facts.rs`, which is injected as the module
 `baritone_rs_facts` and is also the file `tools/facts-compare` compiles (one file, no copy). It pins Horizon `66f3981`. In the game:
 
-- `/b goto <x> <y> <z>`, `/b goto <x> <z>`, `/b goto <y>` (a `~` makes a number relative to the player; `k` and `m` scale), `/b stop`, `/b help`.
-  `/baritone` is the same. Messages come with the prefix `[baritone-rs]`. It walks and sprints and never breaks or places.
+- `/b goto <x> <y> <z>`, `/b goto <x> <z>`, `/b goto <y>` (a `~` makes a number relative to the player; `k` and `m` scale), `/b goal [<x> <y> <z> | <x> <z> | <y> | clear]` (no argument: the player's feet),
+  `/b path`, `/b eta`, `/b set [list | modified | reset <name|all> | toggle <name> | save | load | <name> [value]]`, `/b stop`, `/b help`, `/b trace`. `/baritone` is the same, and so are `cancel` for `stop` and `setting`/`settings` for `set`.
+  Messages come with the prefix `[baritone-rs]` and, where upstream has a text, are upstream's. It walks, sprints, breaks and places blocks (`allowBreak` and `allowPlace` are on by default, as upstream's);
+  parkour and swimming stay off. Settings are upstream's names, types and defaults (about 80), saved at once to `horizon-mods/.horizon-mod-data/baritone_rs/settings.txt` in the game folder. Tab in the chat box completes
+  the command names, the settings, their values and, for `goto` and `goal`, `~` and the coordinates of the block the crosshair is on.
+- Breaking and placing use the game's own input step, so the mod hooks `remote_handle_input` (a private function: the mod is pinned to a Horizon revision), and completion hooks `Dispatcher::client_suggestions_asking`
+  (also private, and in another crate: the mod adds a small module to `horizon-command` to hand its function across). The hotbar is read each tick; the tool in the hand is chosen as upstream's `ToolSet` does and is not put back.
 - With no goal given since the game started, the mod does nothing: no thread, no table, no key.
 - The first `/b goto` makes the block table from `mob-data.json` and Horizon's block facts (about 0.1 s). If `mob-data.json` is missing or does not
   match the game, the mod says so in chat and does not path.
@@ -300,7 +329,7 @@ $L native-build mod --instance baritone-test --trust-native-code
 ```
 
 **Scenario trigger (test only).** With the environment variable `BARITONE_RS_SCENARIO_DIR` set to a folder, the mod runs six fixed walks by
-itself once a single-player world is open, and writes there. Without the variable the scenario code returns at once. It sends no input to the desktop. It builds a stone platform (980..1050, 99, 980..1050) through the
+itself once a single-player world named `l3-...` is open (the mod refuses any other world), and writes there. Without the variable the scenario code returns at once. It sends no input to the desktop. It builds a stone platform (980..1050, 99, 980..1050) through the
 single-player server's console, trying again until the chunks are loaded, then runs, each from (1000.5, 100, 1000.5):
 `smoke` (`b goto 1030 100 1000`), `diagonal` (`b goto ~20 ~ ~20`), `xz` (`b goto 1030 1010`), `stop` (`b stop` after 30 ticks of walking),
 `dimension` (a teleport to the Nether after 30 ticks) and `death` (`kill @p` after 30 ticks). The commands go through `on_command`, the code
@@ -311,11 +340,15 @@ forced, whether a path or a search runs, dead, dimension).
 ```sh
 mkdir -p OUT
 # pauseOnLostFocus:false in the instance's options.txt, as for the input probe.
-BARITONE_RS_SCENARIO_DIR=OUT $L play --instance baritone-test --world SOME-NEW-WORLD-NAME
+BARITONE_RS_SCENARIO_DIR=OUT $L play --instance baritone-test --world l3-SOME-NEW-NAME
 # The last line of OUT/scenario-result.txt is "finished" (about 1.5 minutes after launch). Close the game you started, by its PID.
 ```
 
 A real typed command, the real keyboard and a connection that really ends are not exercised by this.
+
+**By hand through the control socket.** For a game you started with `play ... --arg --control`, the version's `horizon-ctl` drives it without touching the desktop: `command "give @p minecraft:iron_pickaxe"` and `fill`/`tp` for the setup,
+`chat "/b goto 1010 100 1000"` for the mod's commands (this reaches `native_command` at `66f3981`), `key t tap` to open the chat and `type "/b set allowB"` to type in it, `screen` (`chat_input`, `chat_suggestions`) and
+`screenshot PATH` to see the suggestion list, `state` and `block X Y Z` to see where the player is and what changed, `inventory`. `key ctrl down`, `key a tap`, `key ctrl up`, `key backspace tap` clears the chat box (`type` has no replace).
 
 ## L3 scenarios
 
@@ -339,6 +372,14 @@ for each search), `.snapshots.txt` (the time of each world snapshot and the numb
 lines) and `judgement.json`, which also holds the estimated cost against the actual ticks per movement kind. `--report` writes the metadata
 only (no paths or names). Scenarios 5 and 10 use natural terrain around the spawn of the new world, so their result depends on the seed
 the world got.
+
+Breaking and placing (scenarios `b01` to `b09`, S4): items come from the console (`clear @p`, `give @p ...`), `slot` selects a hotbar slot at the
+start, `settings` runs `b set NAME VALUE` before the command and puts the setting back at the end (`after`). The old scenarios whose point is to
+walk (`s02`, `s06`, `s07`) set `allowBreak false`, because upstream's default (true) now lets the path dig. Each segment line in `.segments.txt`
+carries the `to_break` and `to_place` cells that upstream's `toBreak`/`toPlace` give for the world at that moment, and the result file lists every
+changed cell of the watch box. `run.py` checks that every change was planned, that every cell of the last path's plan was done, the exact counts,
+that nothing else changed (water only where the scenario allows it), the stack counts and the tool damage, and the estimate against the actual
+ticks (0.4x to 2.5x, plus 30). The slot at the end is reported, not judged: upstream never puts it back (docs/deviations.md D32).
 
 ## gate.py, check_public_tree.py, run_compare.py
 

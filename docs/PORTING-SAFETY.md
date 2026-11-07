@@ -301,88 +301,122 @@ errors from 1 h 51 min (479 errors, 6 workers) to 34 minutes, and the cost error
 on the cost errors. Verdicts are saved next to the golden file and reused only on byte-identical inputs, so a gate that repeats
 them on unchanged code takes about a minute for that step.
 
-### S4 result (walking and sprinting goto)
+### S4 result (walking, sprinting, breaking and placing goto)
 
-The owner cut this first version down to `/b goto`, `/b stop` and `/b help`, walking and sprinting only. Breaking, placing, parkour,
-swimming, a water bucket and settings are still to do, so S4 as a whole is not finished.
+S4 as the owner cut it for the first release: `/b goto`, `/b goal`, `/b path`, `/b stop`, `/b eta`, `/b set` (about 80 settings with upstream's names, types and defaults, saved at once to the mod's
+folder), `/b help`, `/b trace`, and tab completion of the subcommands and their arguments. The path walks, sprints, **breaks and places blocks**, with the chat closed or open. Parkour and swimming stay
+off, as upstream's defaults (`allowParkour`, `allowSwimming`), and their branches fail by name (D16). Every other setting keeps upstream's default, among them `allowBreak` and `allowPlace` (true),
+`allowWaterBucketFall` (true) and `maxFallHeightBucket` (20). The work came in two parts: walking and sprinting, then breaking, placing and the commands.
 
-**The gate passed, with nothing skipped.** S4 changed no search or cost answer: all 29,446 searches and 22,312,446 rule results still match Java, all
-1,786,150 block facts match, and the injected-error counts are unchanged (415 of 491 in the search, 773 of 836 in the rules). The gate does not run the game, so the
-in-game result below comes from its own report. The ledger has 763 rows: port 325, redesign 131, drop 77, later 185 and missing 45.
+**The gate.** The gate passed for the first part (walking only), with nothing skipped: 29,446 searches and 22,312,446 rule results matched Java, all 1,786,150 block facts matched, and the injected-error counts were
+415 of 491 in the search and 773 of 836 in the rules. It then passed again on the finished S4 (2026-11-07): 29,446 searches with 0 mismatches and
+identical repeats, the rule comparison with identical repeats, 773 of 836 injected rule errors caught (63 listed) and 415 of 491 search errors caught (76 listed),
+nothing not applied. The block facts and the 26.3 rule reports were reused, because their inputs had not changed. Its first run on S4 stopped at one injected
+error whose text anchor no longer matched (a new function sat between the fluid check and `avoidBreaking`); only the anchor in `mutate.py` was changed. The ledger
+(`tools/ledger.py --upstream upstream/baritone-1.21.4 check`) passes with 763 rows: port 350, redesign 140, drop 82, later 156 and missing 35.
 
-**In the game (L3).** All 20 runs of the final run passed, in single player on Horizon `66f3981`, in a new world. Earlier full runs
-failed on test problems, not on the mod: chat lines were not captured, and water at y = 200 in a cold biome froze by itself, so the watch box
-now leaves out that pit. Report: `reports/l3-66f3981.json`. Ticks run from the command to arrival. Estimated and actual ticks are summed
-over the movements executed.
+**What breaking and placing do.** A movement breaks what is in its `toBreak` and places what is in its `toPlace`, in upstream's order, as `Movement.prepared` and the movement subclasses do.
 
-| Scenario | Runs (chat closed / open) | Ticks | Estimated / actual | Longest search |
-|---|---|---|---|---|
-| Flat, 50 blocks | pass / pass | 180 | 178.2 / 178 | 0.6 ms |
-| Around an L wall | pass / pass | 121 | 119.2 / 119 | 2.3 ms |
-| 8 steps up, then 8 diagonal blocks | pass / pass | 139 | 119.2 / 137 | 1.1 ms |
-| Drops of 1, 2 and 3 | pass / pass | 77 | 79.9 / 75 | 0.2 ms |
-| Natural terrain, 300 blocks | pass / not run | 2129 | 1329.7 / 2125 | 137.7 ms |
-| Sealed room | pass / pass | gave up at 144 | 71.3 / 71 | 4.0 ms (73 searches) |
-| Wall placed in the way | pass / pass | 165 | 162.1 / 162 | 1.0 ms |
-| `/b stop` | pass / pass | still after 7 | none | 0.5 ms |
-| Ladder and 1-deep water | pass / pass | 144 | 144.2 / 142 | 3.2 ms |
-| Floor of bottom slabs | pass / pass | 117 | 115.8 / 115 | 1.4 ms |
-| 1500 blocks, unloaded chunks | pass / not run | 9825 | 6587.3 / 9821 | 135.8 ms (10 searches) |
+- *Breaking.* The tool is chosen as upstream's `ToolSet` does (the fastest hotbar slot for the block, silk touch and `itemSaver` as it reads them, an empty-handed fallback) and is not put back
+  when the path ends (D32). The aim is `RotationUtils.reachable` (D25). The left button is held in the game's own input step (`mod/input_head.rs`, `input_return.rs`; with the chat open the screen
+  is swapped for `Playing` for that one call, since the step otherwise only aborts a dig), and let go of exactly once when the executor no longer wants it. The break time is the game's: `destroy_progress`, plus
+  the delay of about five ticks between two blocks (docs/PLAN.md).
+- *Placing.* `attemptToPlaceABlock` picks the face (north, south, east, west, down), aims at the point of that face, selects a throwaway block from `acceptableThrowawayItems`, and presses the right
+  button once when the crosshair is on the face. Bridging, the backing-up bridge, the pillar and the ascend over a placed block use it. A water-bucket fall (`MovementFall`) holds the bucket, looks straight down,
+  places the water when the crosshair is on the landing block, and picks it up again.
+- *Settings that forbid.* Nothing is broken or placed that the settings forbid, also while a movement is not safe to cancel (D28). `allowBreak`, `allowPlace` and the block lists are honoured.
+- *Commands.* `goto` (coordinates with `~`, `k`/`m`), `goal` (set, `clear`, `reset`), `path` (start from the goal), `stop`, `eta` (upstream's texts and rounding), `set` (list, modified, reset, toggle, save, load, view,
+  set), `help`, `trace`. Tab completes the command names, the settings and their values, and `~` and the crosshair block's coordinates for `goto` and `goal` (D30).
 
-Every arriving run ended within 1 block of its goal, and no player died. Blocks changed was 0 in every watched box, which covers the built areas
-only, so the natural walks are not checked for it. The flat walk sprinted on every driven tick. The mod's own work per tick had a median of about
-18 µs and a maximum of 1.6 ms, and the world snapshot took at most 1.2 ms for 637 chunks. No search came near its time limit, so these
-numbers say nothing yet about speed against Java.
+**Walking, in the game (L3).** Single player on Horizon `66f3981`, in a new world named `l3-...`, chat closed and open. Ticks are the sum over the movements executed. The "longest search" of
+this run is longer than in the first part's run (the flat walk's one search took 8 ms where the first run had 0.6 ms, and the 1500-block run's longest took 1.9 s against 136 ms). No search or cost code
+changed, but the settings did: the first part searched with `allowBreak` off, so every movement that needed a block removed cost `COST_INF` at once; now
+`allowBreak` is on, as upstream's default, and the search prices digging through the terrain too, which means far more nodes and a tool lookup per block. That
+reading is from the diff, not measured (the load on the machine during the run was not recorded either), and these numbers say nothing about speed against Java.
 
-**On a server (6b6t.org, the lobby only).** The owner's first try failed: every first move timed out. A per-tick trace (`/b trace`) showed the
-cause, a port bug. Upstream's `playerFeet` answers the block above when the feet are in a slab, and the port had left that rule out. On the
-lobby's floor of bottom slabs, every step was planned as an ascend from inside the slab, and the ascend's slab rule then never jumped. With the
-rule ported, `/b goto 200 200` arrived from the same floor in about 11 seconds. The slab-floor scenario was added for it, but it was not run on
-the build before the fix, so it has not been shown to catch the bug.
+| Scenario | Chat closed / open | Estimated / actual ticks | Longest search |
+|---|---|---|---|
+| Flat, 50 blocks | pass / pass | 178.2 / 178 | 8.6 ms |
+| Around an L wall | pass / pass | 119.2 / 119 | 7.8 ms |
+| 8 steps up, then 8 diagonal blocks | pass / pass | 119.2 / 137 | 8.4 ms |
+| Drops of 1, 2 and 3 | pass / pass | 79.9 / 75 | 3.0 ms |
+| Natural terrain, 300 blocks | pass / not run | 1344.7 / 2076 | 500.8 ms (2 searches) |
+| Sealed room | pass / pass | 71.3 / 71, gave up | 57.9 ms (72 and 73 searches) |
+| Wall placed in the way | pass / pass | 162.1 / 161 | 2.5 ms |
+| `/b stop` | pass / pass | still after 7 ticks | 2.7 ms |
+| Ladder and 1-deep water | pass / pass | 144.2 / 142 | 7.1 ms |
+| Floor of bottom slabs | pass / pass | 115.8 / 115 | 6.4 ms |
+| 1500 blocks, unloaded chunks | pass / not run | 6567.2 / 9986 | 1.9 s (10 searches) |
 
-**The input hook (`tools/input-probe`).** With the chat or the inventory open, forward walks at 4.32 blocks/s and sprint holds at 5.61. The integrated
-server accepted it, with no rubber banding.
+Estimates against the game, as in the first part: on land the costs hold (Traverse 1.05 and Diagonal 0.95 on the natural walk), and moves touching deep water take about 2.2 times their estimate
+(130 Traverse moves: 602 estimated, 1331 actual), which is U8 and the owner's call. Ascend ran 1.16 times its estimate in the first part's natural walk and the steps scenario took 137 ticks against 119; this is
+not explained yet.
 
-**Estimates against the game.** On land the costs hold: Traverse 1.01 to 1.04 and Diagonal 0.96 to 0.97 of the estimate on the natural walks. Two
-do not:
+**Breaking and placing, in the game (L3 `b01` to `b09`).** Each scenario was run with the chat closed and open and passed both times. The checks per run: every changed cell of the watch box was in a
+segment's `toBreak` or `toPlace`, every cell of the last path's plan was done, nothing else changed; the broken and placed counts, the stack counts and the tool's durability are exact; no death and no health
+loss; actual ticks within 0.4 to 2.5 times the estimate (plus 30), a bound of my choosing. Estimated / actual movement ticks, chat closed / chat open:
 
-- Moves touching deep water took about 2.2 times their estimate (578 Traverse moves in the 1500-block run: 2678 estimated, 5902 actual). The cause is
-  upstream, not the port: see U8 in [deviations.md](deviations.md). Without Depth Strider, Java prices water like land, and so does the port. Fixing it
-  changes paths, so it is the owner's call.
-- Ascend ran 1.16 times its estimate on natural terrain, and the steps scenario took 137 ticks against 119. This is not explained yet.
+| Scenario | What happened | Estimated / actual ticks |
+|---|---|---|
+| `b01` stone wall, iron pickaxe | 1 block broken (the top block of the 2-high wall), 1 durability lost, then an ascend | 61.1 / 62 and 67 |
+| `b02` dirt wall, bare hand | 1 block broken | 65.0 / 75, 68.6 / 74 |
+| `b03` 3-wide bridge | 3 cobblestone placed | 80.0 / 63 and 63 |
+| `b04` pillar, ledge variant | 5 placed, then an ascend | 51.0 / 58 and 58 |
+| `b04` pillar, shaft variant | 6 placed | 49.0 / 50 and 50 |
+| `b05` dig down 5 | 5 broken, 5 durability lost | 75.6 / 76 and 76 |
+| `b06` wall, `allowBreak` on | 2 broken | 62.8 / 71 and 71 |
+| `b06` wall, `allowBreak` off | routed around, 0 changes | 86.0 / 85 and 85 |
+| `b07` 12-block drop with a water bucket | full health, bucket back in the hotbar, no water left | 47.9 / 49 and 49 |
+| `b08` `/b stop` at tick 70 of a 150-tick hand dig | the block was still there 230 ticks later | not applicable |
+| `b09` stone by hand (the control of `b08`) | 1 block broken | 189.3 / 189 and 189 |
 
-**Unit and property tests.** A stop always gives a neutral intent, a stale or cancelled result never installs a path, no movement runs with a block
-in its way, and the executor survives any world edit and any player view. They use fixed-seed random runs and a simple simulator, which is not
-evidence of real physics.
+Notes. Every judged run in the final suite passed: 42 of 42 (20 walking, 22 breaking and placing), in one run in a new world, with one game started and closed by its PID; the report is
+`reports/l3-66f3981.json`. The first guesses for `b01`, `b02` and the pillar were wrong, because upstream's plan breaks only the top block of a 2-high wall and ends the pillar with an ascend; the scenarios were
+corrected, not the checks loosened, and `b04` has two variants for it. `s02`, `s06` and `s07` set `allowBreak false` for their run, because under upstream's default the path would dig through their walls and they exist to test
+walking; the setting is put back afterwards. The bucket fall is allowed by upstream's defaults. `b08` infers that the dig stopped from the block surviving; it does not read the server's dig state.
+The hotbar slot is not restored after the path (upstream never does either, D32), so `run.py` reports start and end slot without judging them (`b01` starts on slot 5 and ends on slot 0, where the pickaxe is).
 
-**Reviews.** Two independent reviews, of the executor against upstream and of safety, found no difference that changes a path. Fixed after them:
+**The probe (`tools/break-place-probe`).** Before the glue, a separate test mod measured in the real game what a mod can do: switch the slot, break (dirt by hand 16 ticks, stone with an iron pickaxe 14, stone by hand
+157), place against a floor and under the feet while jumping, and use a water bucket, with the chat closed and open. It found that with the chat open the game's input step does nothing but abort a dig, so the mod swaps the screen
+for that one call; the controls (the same buttons without the swap) did nothing. Details and the break-time formula are in docs/PLAN.md ("Breaking and placing").
 
-- The mouse sensitivity setting was never read, so aim could be off the player's own mouse grid (D17).
-- A search that panics would retry every tick without a word, as upstream does. It now stops the goto and says so (D23).
-- A block id missing from the table could panic. It now reads as air.
-- `tools/l3/run.py` could close a game it did not start.
-- `/b` typed while the mod was off went on to the server.
-- A failed thread start would have crashed the game.
+**Reviews and fixes.** In the first part, two independent reviews (the executor against upstream, and safety) found no difference that changes a path; fixed after them: the mouse sensitivity was never read (D17), a panicking search
+retried silently (D23), a block id missing from the table could panic, `tools/l3/run.py` could close a game it did not start, `/b` typed while the mod was off went on to the server, a failed thread start would have crashed the game.
+In the second part, an independent review of the break and place code against upstream (with scratch tests that fail where the port differs) and a safety review of the glue found the following. Fixed, each with a test:
 
-Still open from the reviews: the logs of searches and snapshots grow slowly because only the test code empties them, the test triggers do not check that
-the open world is a test world when their variable is set, and "Arrived." can print while the player is still falling.
+- `MovementFall.willPlaceBucket` was approximated by `hasWaterBucket && drop > maxFallHeightNoWater`; on a ladder shaft the executor placed water where the search had planned none. It now runs `dynamicFallCost` as upstream
+  (`exec/review_tests.rs` R1).
+- The executor's `canPlaceAgainst` had no world-border check, where upstream's `BlockStateInterface` has one (R2).
+- The incidental left clicks (the traverse's "something is in the way", the pillar's block at the feet) ignored `blocksToDisallowBreaking`; they are now not pressed while the crosshair is on a block that must never be broken (D28, R4).
+  Upstream presses them whatever is under the crosshair (U11).
+- `pauseMiningForFallingBlocks` had no effect in the game, because the glue never answered `falling_block_near`; it now does, from the game's falling blocks (D31; unit-tested box test, not tried with sand in the game).
+- A mouse button could stay held after `/b stop` when the stop ran twice before the next input step, or when the step did not run (inventory screen): the let-go now stays pending until a step delivered it (`engine/src/buttons.rs`, five tests).
+  The input hook's `RETURN` now puts the chat back only if the step left the screen as `Playing`.
+- `set reset` alone now prints upstream's "Not enough arguments" error after the three explanation lines, and a line of `settings.txt` is judged by upstream's pattern (D33).
+- A test run could wipe an existing world: `tools/l3/run.py` now refuses a world name that does not start with `l3-` or already exists, and the mod's test triggers (`BARITONE_RS_L3_SPEC`, `BARITONE_RS_SCENARIO_DIR`) refuse any single-player
+  world whose name does not start with `l3-` (`tools/test_l3.py` tests the name check; the mod's refusal was read and built, and was not provoked in a game).
 
-The check S3 left for this stage is done: Rust's copied `Movement` values go stale in the path's copy, but only positions and structure are read from it, and
-the review found no difference in behaviour.
+Recorded, not changed: the pillar digs the block at its feet with the throwaway block in hand (U14, `exec/review_tests.rs` R3, upstream's behaviour), a falling block landing in the head cell ends the movement as `InsideWall` instead of
+mining out (D31), `/b` and `/baritone` are taken from servers, `/b trace` logs exact coordinates whatever `censorCoordinates` says, mod chat lines (with the goal coordinates) go to the game log, `set load` completes no file names, and settings are
+not range-checked (a huge `primaryTimeoutMS` on an unreachable goal makes the search run as long as asked, as upstream; not run). Open from the first part: the logs of searches and snapshots grow slowly outside the test code, and "Arrived." can print while the player is still falling.
 
-Limits of this result:
+**Final checks of this work.** `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace` (200 engine tests), `python3 -m unittest discover -s tools -q` (95 tests), the
+ledger check and `tools/check_public_tree.py` with the deny list all pass. The Java comparisons (L0 to L2) and the gate were **not** rerun.
 
-- Single player only, so no anticheat and no real server lag. That is S5.
-- Commands went straight to the mod's command function, not through the chat box, so a typed `/b goto` has not been run by the tests. Real keys
-  during a path have not been run either, nor has a real disconnect.
-- The natural walks ran with the chat closed only, each on the terrain of its own new world. The executor has not been compared with Java tick by tick: the review compared
-  it by reading.
-- Water and a player with Depth Strider or Frost Walker: `water_mult` and `frost_walker` stay at the defaults of a player without boots (D22).
-- A closed door on the only route makes a loop of failing and searching until someone opens it, because using blocks is off by default (D15).
-- The Nether is only tested as far as stopping when the dimension changes.
+**Limits of this result.**
 
-Measured effort: a workflow of 7 agents took 3 h 39 min and 1.96 million tokens. Its last agent ended before writing this section and left its final
-in-game run going, so the section and the gate were done by hand afterwards.
+- Single player only, so no anticheat, no real server lag and no packet sequencing under latency. That is S5. A server's own break timing was not measured.
+- Commands went straight to the mod's command function, not through the chat box, so a typed `/b goto` was not run by the tests; the tab completion and the chat box were smoke-tested by hand through `horizon-ctl` in the
+  glue step, not by L3. Real keys during a path have not been run, nor a real disconnect.
+- Not covered: creative mode, sneaking, efficiency, haste or fatigue, a tool that breaks mid-dig, falling blocks (sand and gravel) in the game, picking up drops, the Nether beyond stopping when the dimension changes, water with Depth Strider
+  or Frost Walker (D22), and a closed door on the only route (a loop of failing and searching, D15).
+- The natural walks ran with the chat closed only, each on the terrain of its own new world. The executor has not been compared with Java tick by tick; the reviews compared it by reading.
+- The timing bounds (0.4 to 2.5 times the estimate) are my own choice; the actual ratios in the breaking and placing scenarios ran 0.79 to 1.15.
+- The unit and property tests use fixed-seed random runs and a simple simulator, which is not evidence of real physics.
+
+**Left out on purpose.** Parkour and swimming (off by upstream's defaults, branches fail by name, D16); `goto <block>` and the other processes (mine, follow, explore, build, farm, elytra); using doors, buttons and levers beyond what D15 says (`allowInventory`); Depth Strider and Frost Walker from the boots (D22); the stored settings that nothing reads (`freeLook`, `renderPath`, `allowInventory`, D29).
+
+Measured effort: the first part took a workflow of 7 agents, 3 h 39 min and 1.96 million tokens, and its last agent ended before writing this section. The second part was done in several stages by hand and by agents; the effort was not measured.
 
 ## Reports
 

@@ -101,6 +101,19 @@ pub fn clamp_pitch(pitch: f32) -> f32 {
     (-90.0f32).max(90.0f32.min(pitch))
 }
 
+/// `Rotation.yawDistanceFromOffset`: the difference of two yaws, the short way round when they are on opposite sides of the back of the view.
+pub fn yaw_distance_from_offset(yaw: f32, offset_yaw: f32) -> f32 {
+    if ((yaw > 0.0) ^ (offset_yaw > 0.0)) && ((yaw > 90.0 || yaw < -90.0) ^ (offset_yaw > 90.0 || offset_yaw < -90.0)) {
+        if yaw < 0.0 {
+            360.0 + (yaw - offset_yaw)
+        } else {
+            360.0 - (yaw - offset_yaw)
+        }
+    } else {
+        yaw - offset_yaw
+    }
+}
+
 /// `Rotation.normalizeYaw`: Java's `%` on floats is `fmod`, as Rust's.
 pub fn normalize_yaw(yaw: f32) -> f32 {
     let mut new_yaw = yaw % 360.0;

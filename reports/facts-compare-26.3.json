@@ -8,7 +8,7 @@
  },
  "horizon_commit": "66f3981f522b24c250b21523a70080965b940424",
  "injected_errors": "103 errors: 97 caught, 6 missed (0 unlisted), 0 did not build",
- "inputs": "ca74451acda49c5e033f097529884fc4ad9edf106a45f663cfc8cb38d9538e55",
+ "inputs": "0ee30a0240af4e6f8b7b85f38098b116fa8bfd299bcdaa661b3db54305545095",
  "minecraft_version": "26.3",
  "results": {
   "different": 0,

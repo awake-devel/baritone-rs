@@ -839,7 +839,7 @@ M = [
     (HELPER, "if s.liquid_block {\n            if directly_above", "if !s.fluid_empty {\n            if directly_above", "adjacent: liquid block"),
     (HELPER, "return !self.get(x, y - 1, z).liquid_block;", "return self.get(x, y - 1, z).liquid_block;", "adjacent: liquid below inverted"),
     (HELPER, "return !self.get(x, y - 1, z).liquid_block;", "return true;", "adjacent: liquid below ignored"),
-    (HELPER, "        !s.fluid_empty\n    }\n\n    /// `MovementHelper.avoidBreaking", "        false\n    }\n\n    /// `MovementHelper.avoidBreaking", "adjacent: fluid fallthrough"),
+    (HELPER, "        !s.fluid_empty\n    }\n\n    /// `PrecomputedData.neverBreak` at a position", "        false\n    }\n\n    /// `PrecomputedData.neverBreak` at a position", "adjacent: fluid fallthrough"),
     (HELPER, "if !s.fluid_flowing_kind {\n            return false;", "if false {\n            return false;", "flowing: kind"),
     (HELPER, "if s.fluid_amount != 8 {\n            return true;\n        }\n        possibly_flowing", "if false {\n            return true;\n        }\n        possibly_flowing", "flowing: partial amount"),
     (HELPER, "possibly_flowing(&self.get(x + 1, y, z)) || possibly_flowing(&self.get(x - 1, y, z)) || possibly_flowing(&self.get(x, y, z + 1)) || possibly_flowing(&self.get(x, y, z - 1))", "possibly_flowing(&self.get(x - 1, y, z)) || possibly_flowing(&self.get(x, y, z + 1)) || possibly_flowing(&self.get(x, y, z - 1))", "flowing neighbours: drop possibly_flowing(get(x + 1, y, z))"),

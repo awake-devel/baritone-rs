@@ -9,10 +9,11 @@
 use super::custom_goal::{CustomGoalProcess, PathingCommand, PathingCommandType};
 use crate::blocks::State;
 use crate::config::Config;
-use crate::exec::movements::Env;
+use crate::exec::movements::{Env, GameFacts};
 use crate::exec::state::{CancelReason, Controls, Intent, PlayerView};
 use crate::exec::{PathExecutor, Progress};
 use crate::goals::{Goal, GoalSettings};
+use crate::inventory::Inventory;
 use crate::look::AimProcessor;
 use crate::movement::helper::{Border, Ctx, Precomputed};
 use crate::plan;
@@ -115,6 +116,10 @@ pub struct TickEnv<'a, W: WorldView> {
     pub border: Border,
     pub player: &'a PlayerView,
     pub exec: &'a ExecSettings,
+    /// The hotbar: the executor reads the slot in hand, the tools and the blocks to place.
+    pub inv: &'a dyn Inventory,
+    /// Reach, dimension and the aim processor.
+    pub game: GameFacts,
 }
 
 /// What `Pathing::tick` answers.
@@ -256,6 +261,11 @@ impl<R: SearchRunner<S>, S> Pathing<R, S> {
         self.process.set_goal(goal);
     }
 
+    /// Upstream's `ICustomGoalProcess.setGoal(null)`: `/b goal clear`.
+    pub fn clear_goal(&mut self) {
+        self.process.clear_goal();
+    }
+
     /// `ICustomGoalProcess.path`.
     pub fn path(&mut self) {
         self.process.path();
@@ -361,7 +371,41 @@ impl<R: SearchRunner<S>, S> Pathing<R, S> {
         self.safe_to_cancel
     }
 
-    // `PathingBehavior.estimatedTicksToGoal` is left for later: it only feeds the `eta` command.
+    /// Upstream's `PathingControlManager.mostRecentInControl`, for one process: whether the goal process was asked for a command in the last tick.
+    pub fn in_control(&self) -> bool {
+        self.in_control_this_tick
+    }
+
+    /// Upstream's `IPathingBehavior.ticksRemainingInSegment(boolean)`: the cached cost of the movements from the current one (or the next, with
+    /// `include_current_movement` false) to the end of the path, or `None` when no path is followed.
+    pub fn ticks_remaining_in_segment(&self, include_current_movement: bool) -> Option<f64> {
+        let current = self.current.as_ref()?;
+        let start = if include_current_movement { current.position() } else { current.position() + 1 };
+        Some(current.ticks_remaining_from(start))
+    }
+
+    /// `PathingBehavior.estimatedTicksToGoal`: how long the rest of the way takes if the player keeps the speed it has had since the path
+    /// started, from how much closer to the goal (by its heuristic) it got. `None` without a goal or a start, or when no tick has passed or
+    /// the heuristic has not changed. In the goal it answers 0 and starts counting again from here.
+    pub fn estimated_ticks_to_goal(&mut self, feet: Pos, gs: &GoalSettings) -> Option<f64> {
+        let goal = self.goal.as_ref()?;
+        let start_position = self.start_position?;
+        if goal.is_in_goal(feet.x, feet.y, feet.z, gs) {
+            self.ticks_elapsed_so_far = 0;
+            self.start_position = Some(self.expected_segment_start);
+            return Some(0.0);
+        }
+        if self.ticks_elapsed_so_far == 0 {
+            return None;
+        }
+        let current = goal.heuristic(feet.x, feet.y, feet.z, gs);
+        let start = goal.heuristic(start_position.x, start_position.y, start_position.z, gs);
+        if current == start {
+            // can't check above because current and start can be equal even if currentPos and startPosition are not
+            return None;
+        }
+        Some((current - goal.heuristic_inside(gs)).abs() * f64::from(self.ticks_elapsed_so_far) / (start - current).abs())
+    }
 
     // ------------------------------------------------------------ the tick
 
@@ -382,7 +426,7 @@ impl<R: SearchRunner<S>, S> Pathing<R, S> {
         self.ticks_elapsed_so_far = self.ticks_elapsed_so_far.wrapping_add(1);
         self.dispatch_events();
         self.post_tick(&mut tk);
-        let intent = self.build_intent(env.player, env.exec.mouse_sensitivity);
+        let intent = self.build_intent(env.player, env.exec.mouse_sensitivity, env.inv.selected());
         TickOutput { intent, events: std::mem::take(&mut self.out_events) }
     }
 
@@ -401,8 +445,9 @@ impl<R: SearchRunner<S>, S> Pathing<R, S> {
 
     /// The intent after the tick: what `InputOverrideHandler`, `PlayerMovementInput`, `LookBehavior` and `onPlayerSprintState` make of the
     /// state of the executor.
-    fn build_intent(&mut self, player: &PlayerView, mouse_sensitivity: f64) -> Intent {
+    fn build_intent(&mut self, player: &PlayerView, mouse_sensitivity: f64, held_slot: usize) -> Intent {
         let k = self.controls.keys;
+        let select = self.controls.select.take();
         // `InputOverrideHandler.inControl`
         let in_control = k.forward || k.back || k.left || k.right || k.sneak || k.jump || self.is_pathing();
         let look = self.controls.look.take();
@@ -412,6 +457,11 @@ impl<R: SearchRunner<S>, S> Pathing<R, S> {
         // upstream reads the player's own mouse setting each time (`LookBehavior`, `options.sensitivity()`)
         self.aim.sensitivity = mouse_sensitivity;
         let rotation = look.map(|t| self.aim.peek_rotation(player.rotations(), t));
+        // A click waits for the tick after the slot changes, so that the game has the new slot in its hand before it clicks (deviations.md
+        // D26). The left button wins over the right one (`InputOverrideHandler.onTick`).
+        let changing_slot = select.is_some_and(|s| s != held_slot);
+        let attack = k.click_left && !changing_slot;
+        let click_right = k.click_right && !k.click_left && !changing_slot;
         Intent {
             active: in_control,
             rotation,
@@ -423,7 +473,10 @@ impl<R: SearchRunner<S>, S> Pathing<R, S> {
             sneak: k.sneak,
             // `PathingBehavior.onPlayerSprintState`
             sprint: self.current.as_ref().is_some_and(|c| c.is_sprinting()),
-            use_block: if k.click_right { self.controls.use_pos } else { None },
+            use_block: if click_right { self.controls.use_pos } else { None },
+            select_slot: select,
+            attack,
+            use_item: click_right && self.controls.use_pos.is_none(),
             cancel_flying: self.current.is_some(),
             disable_auto_jump: self.current.is_some(),
         }
@@ -682,7 +735,7 @@ impl<R: SearchRunner<S>, S> Pathing<R, S> {
         }
         let path_start = self.expected_segment_start;
         let progress = Progress { searching: self.in_progress.is_some(), best_positions: None };
-        let senv = Env { ctx: tk.ctx, p: player, set: tk.env.exec, path_start };
+        let senv = Env { ctx: tk.ctx, p: player, set: tk.env.exec, path_start, inv: tk.env.inv, game: tk.env.game };
         let Some(current) = self.current.as_mut() else {
             return;
         };

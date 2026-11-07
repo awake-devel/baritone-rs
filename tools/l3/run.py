@@ -32,6 +32,7 @@ import scenarios  # noqa: E402
 
 LAUNCHER = os.path.expanduser("~/Applications/horizon/horizon-launcher-linux-x86_64.AppImage")
 INSTANCE = "baritone-test"
+SAVES = os.path.expanduser(f"~/.local/share/horizon/instances/{INSTANCE}/saves")
 HORIZON_REVISION = "66f3981"
 
 
@@ -55,6 +56,16 @@ def started_by(spec_path):
         if f"BARITONE_RS_L3_SPEC={spec_path}".encode() in env:
             mine.append(pid)
     return mine
+
+
+def check_world_name(world):
+    """The scenarios clear the inventory and fill large boxes, so they may only run in a world made for them: a name starting with `l3-` that
+    does not exist yet (the mod refuses any other name too). Returns an error text, or None."""
+    if not world.startswith("l3-") or "/" in world or world in (".", ".."):
+        return f"the world name must start with l3- and hold no slash (got {world!r}); nothing was started"
+    if os.path.exists(os.path.join(SAVES, world)):
+        return f"the world {world!r} already exists; the scenarios wipe what is around them, so give a new name; nothing was started"
+    return None
 
 
 def preflight():
@@ -222,6 +233,98 @@ def timing(out, name, rows, command_tick):
     }
 
 
+
+# ---------------------------------------------------------------- blocks: the plan against what was done
+
+AIR = ("minecraft:air", "minecraft:cave_air", "minecraft:void_air")
+
+
+def is_air(n):
+    return n in AIR
+
+
+def is_water(n):
+    return n in ("minecraft:water", "minecraft:flowing_water")
+
+
+def parse_cells(text):
+    return {tuple(int(v) for v in c.split(",")) for c in text.split(";") if c}
+
+
+def read_plan(path):
+    """Per segment line of <name>.segments.txt: the cells to break and to place that the path meant when it was made."""
+    plans = []
+    if os.path.exists(path):
+        for line in open(path):
+            d = {}
+            for part in line.split():
+                if "=" in part and not part.startswith("movements_list"):
+                    k, v = part.split("=", 1)
+                    d[k] = v
+            if "to_break" in d or "to_place" in d:
+                plans.append({"break": parse_cells(d.get("to_break", "")), "place": parse_cells(d.get("to_place", ""))})
+    return plans
+
+
+def read_changes(meta):
+    """The changed cells of the watch box: (x, y, z) -> (before, after)."""
+    out = {}
+    for line in meta.get("all_changes") or []:
+        pos, change = line.split(": ", 1)
+        before, after = change.split(" -> ")
+        out[tuple(int(v) for v in pos.split(","))] = (before, after)
+    return out
+
+
+def hotbar_items(text):
+    """'0:iron_pickaxe x1 d3; 1:cobblestone x64 d0' -> {item: (count, damage)} (the first stack of each item)."""
+    out = {}
+    for part in (text or "").split("; "):
+        if not part:
+            continue
+        slot, rest = part.split(":", 1)
+        item, count, dmg = rest.split(" ")
+        out.setdefault(item, (int(count[1:]), int(dmg[1:])))
+    return out
+
+
+def judge_blocks(res, chk, meta, plans):
+    """Checks of a scenario that is allowed to change blocks (chk has "plan"): every change was planned, every planned cell was
+    done, the counts are the expected ones, nothing else changed. Water cells are transient (a bucket's water), counted apart."""
+    ok = res["checks"]
+    changes = read_changes(meta)
+    broken = {c for c, (b, a) in changes.items() if not is_air(b) and not is_water(b) and (is_air(a) or is_water(a))}
+    placed = {c for c, (b, a) in changes.items() if (is_air(b) or is_water(b)) and not is_air(a) and not is_water(a)}
+    water = {c for c, (b, a) in changes.items() if c not in broken and c not in placed and (is_water(b) or is_water(a))}
+    other = set(changes) - broken - placed - water
+    res["blocks"] = {"broken": len(broken), "placed": len(placed), "water_cells": len(water), "other": sorted(other)[:8], "segments": len(plans)}
+    union_break = set().union(*[p["break"] for p in plans]) if plans else set()
+    union_place = set().union(*[p["place"] for p in plans]) if plans else set()
+    ok["every broken block was in a plan's toBreak"] = broken <= union_break
+    ok["every placed block was in a plan's toPlace"] = placed <= union_place
+    if plans:
+        # The last path was made from what was left to do, so all of it was done. An earlier one may have been replaced.
+        ok["every toBreak cell of the last path was broken"] = plans[-1]["break"] <= broken
+        ok["every toPlace cell of the last path was placed"] = plans[-1]["place"] <= placed
+    want = chk["plan"]
+    ok[f"broke exactly {want['break']} blocks"] = len(broken) == want["break"]
+    ok[f"placed exactly {want['place']} blocks"] = len(placed) == want["place"]
+    ok["no other block changed" + (" (but water)" if chk.get("water_ok") else "")] = not other and (chk.get("water_ok") or not water)
+    if "water_ok" in chk and water:
+        res["notes"].append(f"{len(water)} water cells differ from the start at the end (a bucket's water, still flowing or settled)")
+    start, end = hotbar_items(meta.get("hotbar_start")), hotbar_items(meta.get("hotbar_end"))
+    res["hotbar_start"], res["hotbar_end"] = meta.get("hotbar_start"), meta.get("hotbar_end")
+    for item, delta in (chk.get("stack_delta") or {}).items():
+        ok[f"{item} count changed by {delta}"] = item in start and item in end and end[item][0] - start[item][0] == delta
+    for item, dmg in (chk.get("tool_damage") or {}).items():
+        ok[f"{item} lost {dmg} durability"] = item in start and item in end and end[item][1] - start[item][1] == dmg
+    for item in chk.get("hotbar_end_has") or []:
+        ok[f"{item} in the hotbar at the end"] = item in end
+    # The slot: upstream never puts it back (docs/deviations.md D32), so this is reported, not judged.
+    res["slot_start"], res["slot_end"] = meta.get("slot_start"), meta.get("slot_end")
+    res["slot_restored_after_the_path"] = meta.get("slot_start") == meta.get("slot_end")
+
+
 # ---------------------------------------------------------------- the pass criteria
 
 def judge(out, sc, meta):
@@ -294,6 +397,11 @@ def judge(out, sc, meta):
             res["searches_after_the_block_appeared"] = len(late)
             ok["recalculated after the block appeared"] = len(late) >= 1
         res["per_movement"] = per_movement(rows)
+        if "plan" in chk:
+            judge_blocks(res, chk, meta, read_plan(os.path.join(out, name + ".segments.txt")))
+            pm = res["per_movement"]
+            res["estimated_vs_actual_ticks"] = {"estimated": pm["estimated_ticks_total"], "actual": pm["actual_ticks_total"], "ratio": pm["ratio_actual_over_estimated"]}
+            ok["actual ticks within 0.4x to 2.5x of the estimate (+30)"] = pm["estimated_ticks_total"] > 0 and 0.4 * pm["estimated_ticks_total"] - 30 <= pm["actual_ticks_total"] <= 2.5 * pm["estimated_ticks_total"] + 30
         if cmd is not None:
             res["first_driven_tick_after_command"] = next((int(r["t"]) - cmd for r in rows if r["forced"] == "1"), None)
         if kind == "arrive_relative" and not all(ok.values()) and chk.get("reported_ok"):
@@ -309,6 +417,15 @@ def judge(out, sc, meta):
         total = sum(speed(rows[i], rows[i + 1]) for i in range(len(rows) - 1))
         res["distance_walked"] = round(total, 1)
         res["per_movement"] = per_movement(rows)
+    elif kind == "stop_dig":
+        ts = chk["stop_tick"]
+        byt = {int(r["t"]): r for r in rows}
+        ok["keys released at the stop tick"] = byt[ts]["forced"] == "0"
+        ok["no keys and no path from the stop tick on"] = all(r["forced"] == "0" and r["pathing"] == "0" for r in rows if int(r["t"]) >= ts)
+        # A dig that went on would have finished 150 ticks after it began: the run lasts well beyond that. blocks_changed == 0 is checked above.
+        res["ticks_after_the_stop"] = len(rows) - ts
+        ok["the run went on at least 200 ticks past the stop"] = len(rows) - ts >= 200
+        ok["the mod did not move the player after the stop"] = math.hypot(fnum(byt[ts], "x") - fnum(rows[-1], "x"), fnum(byt[ts], "z") - fnum(rows[-1], "z")) < 0.5
     elif kind == "stop":
         ts = chk["stop_tick"]
         byt = {int(r["t"]): r for r in rows}
@@ -359,7 +476,7 @@ def main():
     ap.add_argument("--out", required=True, help="folder for the recorded files")
     ap.add_argument("--only", nargs="*", help="run only the scenarios whose name starts with one of these")
     ap.add_argument("--no-far", action="store_true", help="leave out the 1500-block scenario")
-    ap.add_argument("--world", help="name of the new world (default: l3-<time>)")
+    ap.add_argument("--world", help="name of the new world: must start with l3- and must not exist (default: l3-<time>)")
     ap.add_argument("--judge-only", action="store_true")
     ap.add_argument("--timeout", type=int, default=3600, help="seconds to wait for the whole run")
     ap.add_argument("--report", help="write the metadata-only summary here")
@@ -379,6 +496,9 @@ def main():
         with open(spec_path, "w") as f:
             json.dump(spec, f, indent=1)
         world = args.world or "l3-" + datetime.datetime.now().strftime("%m%d-%H%M%S")
+        problem = check_world_name(world)
+        if problem:
+            sys.exit(problem)
         print(f"playing {len(scs)} scenarios in a new world", flush=True)
         status = play(spec_path, out, world, args.timeout)
         print("game:", status, flush=True)
@@ -391,7 +511,7 @@ def main():
         failed = [k for k, v in r["checks"].items() if not v]
         print(f"{r['status'].upper():8} {r['scenario']:34} ticks={r.get('ticks')} {('failed: ' + '; '.join(failed)) if failed else ''} {' '.join(r['notes'])[:160]}")
     if args.report:
-        keep = ("scenario", "chat", "status", "ticks", "ticks_from_command_to_arrival", "command_tick", "arrived_tick", "distance_to_goal_xz", "min_health", "successful_searches")
+        keep = ("scenario", "chat", "status", "ticks", "blocks", "estimated_vs_actual_ticks", "slot_start", "slot_end", "slot_restored_after_the_path", "hotbar_start", "hotbar_end", "ticks_from_command_to_arrival", "command_tick", "arrived_tick", "distance_to_goal_xz", "min_health", "successful_searches")
         slim = [{k: r[k] for k in keep if k in r} | {"failed_checks": [k for k, v in r["checks"].items() if not v]} for r in results]
         rep = {"horizon_revision": HORIZON_REVISION, "instance": INSTANCE, "run": status, "scenarios": slim, "overall_timing": summary["overall_timing"]}
         with open(args.report, "w") as f:

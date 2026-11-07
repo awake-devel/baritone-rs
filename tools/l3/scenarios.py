@@ -35,11 +35,12 @@ def floor(x0, z0, x1, z1, y=SKY, block="minecraft:stone"):
 
 
 class Area:
-    """A box of the world that a scenario builds in. Everything is in absolute block coordinates."""
+    """A box of the world that a scenario builds in. Everything is in absolute block coordinates. The inventory is emptied first."""
 
     def __init__(self, x0, z0, x1, z1, y0=CLEAR_FROM, y1=CLEAR_TO):
         self.box = (x0, y0, z0, x1, y1, z1)
         self.lines = [
+            "clear @p",
             "forceload remove all",
             f"forceload add {x0 - 16} {z0 - 16} {x1 + 16} {z1 + 16}",
         ]
@@ -55,8 +56,20 @@ def tp(x, y, z):
     return f"execute in minecraft:overworld run tp @p {x} {y} {z} 0 0"
 
 
-def scenario(name, chat, area, start, events, end, stop_when, check, watch=None, wait_loaded=None):
+def setting_commands(settings):
+    """`b set NAME VALUE` lines for a dict of settings, and the lines that put them back (every setting used here defaults to true)."""
+    on = [f"b set {k} {str(v).lower()}" for k, v in settings.items()]
+    off = [f"b set {k} true" for k in settings]
+    return on, off
+
+
+def scenario(name, chat, area, start, events, end, stop_when, check, watch=None, wait_loaded=None, slot=None, settings=None):
+    """`slot`: the hotbar slot selected when the scenario starts. `settings`: {name: bool} set by `b set` before the command and put back at the end."""
+    on, off = setting_commands(settings or {})
+    events = [{"t": 3, "set": c} for c in on] + list(events)
     return {
+        "slot": slot,
+        "after": off,
         "name": name,
         "chat": chat,
         "prep": area.lines if area else [],
@@ -78,6 +91,11 @@ def with_chat(chat, events):
 def around(box, pad=2):
     x0, y0, z0, x1, y1, z1 = box
     return (x0 - pad, y0, z0 - pad, x1 + pad, y1, z1 + pad)
+
+
+def kit(*items):
+    """Console lines that empty the inventory and give items (they land in the hotbar slots 0, 1, 2, ... in this order)."""
+    return ["clear @p"] + [f"give @p minecraft:{i}" + (" 64" if i == "cobblestone" else "") for i in items]
 
 
 def s01_flat(chat, x0=3000, z0=3000):
@@ -104,7 +122,7 @@ def s02_wall(chat, x0=3200, z0=3000):
         with_chat(chat, [{"t": 10, "command": f"b goto {goal[0]} {goal[1]} {goal[2]}"}]),
         end=700, stop_when="arrived",
         check={"kind": "arrive", "goal": goal, "limit_ticks": 450, "blocks_changed": 0},
-        watch=(x0, SKY - 2, z0 - 12, x0 + 50, SKY + 8, z0 + 24))
+        watch=(x0, SKY - 2, z0 - 12, x0 + 50, SKY + 8, z0 + 24), settings={"allowBreak": False})
 
 
 def s03_steps_and_diagonals(chat, x0=3400, z0=3000):
@@ -161,7 +179,7 @@ def s06_sealed(chat, x0=3800, z0=3000):
         with_chat(chat, [{"t": 10, "command": f"b goto {goal[0]} {goal[1]} {goal[2]}"}]),
         end=1800, stop_when="idle",
         check={"kind": "unreachable", "limit_ticks": 1500, "blocks_changed": 0},
-        watch=(x0, SKY - 2, z0, x0 + 40, SKY + 8, z0 + 12))
+        watch=(x0, SKY - 2, z0, x0 + 40, SKY + 8, z0 + 12), settings={"allowBreak": False})
 
 
 def s07_block_in_the_way(chat, x0=4000, z0=3000):
@@ -178,7 +196,7 @@ def s07_block_in_the_way(chat, x0=4000, z0=3000):
         ]),
         end=700, stop_when="arrived",
         check={"kind": "arrive", "goal": goal, "limit_ticks": 450, "blocks_changed": 0, "min_searches_after": [60, 1]},
-        watch=(x0, SKY - 2, z0, x0 + 50, SKY + 8, z0 + 8))
+        watch=(x0, SKY - 2, z0, x0 + 50, SKY + 8, z0 + 8), settings={"allowBreak": False})
 
 
 def s08_stop(chat, x0=4200, z0=3000):
@@ -242,6 +260,161 @@ def s11_slab_floor(chat, x0=4600, z0=3000):
         watch=(x0, SKY - 4, z0, x0 + 40, SKY + 12, z0 + 12))
 
 
+# ---------------------------------------------------------------- breaking and placing (S4)
+
+def plan_check(**kw):
+    """The check of a scenario that changes blocks: what the plan said, what was done. See run.py `judge`."""
+    return dict(kind="arrive", **kw)
+
+
+def b01_break_stone(chat, x0=4800, z0=3000):
+    """A wall of stone, two high, across the whole floor: the only way is through. Iron pickaxe in slot 0, slot 5 (empty) selected.
+    The plan breaks the top block only and goes over the lower one (an ascend and a descend), which is cheaper than two breaks."""
+    a = Area(x0, z0, x0 + 40, z0 + 8)
+    a.add(*floor(x0, z0, x0 + 40, z0 + 8))
+    a.add(f"fill {x0 + 20} {SKY + 1} {z0} {x0 + 20} {SKY + 2} {z0 + 8} minecraft:stone")
+    a.add(*kit("iron_pickaxe"))
+    goal = (x0 + 26, SKY + 1, z0 + 4)
+    return scenario(
+        f"b01_break_stone_chat{int(chat)}", chat, a, (x0 + 14.5, SKY + 1, z0 + 4.5),
+        with_chat(chat, [{"t": 10, "command": f"b goto {goal[0]} {goal[1]} {goal[2]}"}]),
+        end=700, stop_when="arrived",
+        check=plan_check(goal=goal, limit_ticks=450, plan={"break": 1, "place": 0}, tool_damage={"iron_pickaxe": 1}, no_health_loss=True),
+        watch=(x0 + 12, SKY - 2, z0 - 1, x0 + 30, SKY + 6, z0 + 9), slot=5)
+
+
+def b02_break_dirt_by_hand(chat, x0=5000, z0=3000):
+    """The same with dirt and an empty inventory: about 16 ticks a block by hand. One block to break, as above."""
+    a = Area(x0, z0, x0 + 40, z0 + 8)
+    a.add(*floor(x0, z0, x0 + 40, z0 + 8, block="minecraft:dirt"))
+    a.add(f"fill {x0 + 20} {SKY + 1} {z0} {x0 + 20} {SKY + 2} {z0 + 8} minecraft:dirt")
+    goal = (x0 + 26, SKY + 1, z0 + 4)
+    return scenario(
+        f"b02_break_dirt_hand_chat{int(chat)}", chat, a, (x0 + 14.5, SKY + 1, z0 + 4.5),
+        with_chat(chat, [{"t": 10, "command": f"b goto {goal[0]} {goal[1]} {goal[2]}"}]),
+        end=900, stop_when="arrived",
+        check=plan_check(goal=goal, limit_ticks=600, plan={"break": 1, "place": 0}, no_health_loss=True),
+        watch=(x0 + 12, SKY - 2, z0 - 1, x0 + 30, SKY + 6, z0 + 9), slot=3)
+
+
+def b03_bridge(chat, x0=5200, z0=3000):
+    """A gap three wide in a floor five wide, over the void: three cobblestone blocks are the only way across."""
+    a = Area(x0, z0, x0 + 30, z0 + 4)
+    a.add(*floor(x0, z0, x0 + 9, z0 + 4))
+    a.add(*floor(x0 + 13, z0, x0 + 30, z0 + 4))
+    a.add(*kit("cobblestone"))
+    goal = (x0 + 18, SKY + 1, z0 + 2)
+    return scenario(
+        f"b03_bridge_chat{int(chat)}", chat, a, (x0 + 5.5, SKY + 1, z0 + 2.5),
+        with_chat(chat, [{"t": 10, "command": f"b goto {goal[0]} {goal[1]} {goal[2]}"}]),
+        end=800, stop_when="arrived",
+        check=plan_check(goal=goal, limit_ticks=500, plan={"break": 0, "place": 3}, stack_delta={"cobblestone": -3}, no_health_loss=True),
+        watch=(x0 + 3, SKY - 3, z0 - 1, x0 + 22, SKY + 6, z0 + 5), slot=6)
+
+
+def b04_pillar(chat, x0=5400, z0=3000, ledge=True):
+    """A shaft one block wide in a block of stone. ledge: the stone is six high and the goal on top, so five blocks go in the
+    shaft and the sixth step up is an ascend onto the stone (a rise of six). Otherwise the stone is seven high and the goal is inside the
+    shaft at the top: six blocks go in, a pillar of six."""
+    a = Area(x0, z0, x0 + 14, z0 + 14)
+    a.add(*floor(x0, z0, x0 + 14, z0 + 14))
+    cx, cz = x0 + 6, z0 + 6
+    top = SKY + (6 if ledge else 7)
+    a.add(f"fill {cx - 2} {SKY + 1} {cz - 2} {cx + 2} {top} {cz + 2} minecraft:stone")
+    a.add(f"fill {cx} {SKY + 1} {cz} {cx} {top} {cz} minecraft:air")
+    a.add(*kit("cobblestone"))
+    goal = (cx + 2, SKY + 7, cz) if ledge else (cx, SKY + 7, cz)
+    n = 5 if ledge else 6
+    return scenario(
+        f"b04_pillar_{'ledge' if ledge else 'shaft'}_chat{int(chat)}", chat, a, (cx + 0.5, SKY + 1, cz + 0.5),
+        with_chat(chat, [{"t": 10, "command": f"b goto {goal[0]} {goal[1]} {goal[2]}"}]),
+        end=900, stop_when="arrived",
+        check=plan_check(goal=goal, limit_ticks=600, plan={"break": 0, "place": n}, stack_delta={"cobblestone": -n}, no_health_loss=True),
+        watch=(cx - 3, SKY, cz - 3, cx + 3, SKY + 10, cz + 3), slot=4)
+
+
+def b05_dig_down(chat, x0=5600, z0=3000):
+    """A mass of stone nine wide and ten deep, the goal five blocks below the surface inside it: five blocks to break, straight down."""
+    a = Area(x0, z0, x0 + 8, z0 + 8)
+    a.add(f"fill {x0} {SKY - 10} {z0} {x0 + 8} {SKY} {z0 + 8} minecraft:stone")
+    a.add(*kit("iron_pickaxe"))
+    goal = (x0 + 4, SKY + 1 - 5, z0 + 4)
+    return scenario(
+        f"b05_dig_down5_chat{int(chat)}", chat, a, (x0 + 4.5, SKY + 1, z0 + 4.5),
+        with_chat(chat, [{"t": 10, "command": f"b goto {goal[0]} {goal[1]} {goal[2]}"}]),
+        end=900, stop_when="arrived",
+        check=plan_check(goal=goal, limit_ticks=600, plan={"break": 5, "place": 0}, tool_damage={"iron_pickaxe": 5}, no_health_loss=True),
+        watch=(x0, SKY - 10, z0, x0 + 8, SKY + 3, z0 + 8), slot=7)
+
+
+def b06_wall_break_allowed_vs_not(chat, allow, x0=5800, z0=3000):
+    """A wall three high that ends 4 blocks before the edge of the floor, goal behind it. With allowBreak on the plan goes through
+    (two blocks); with it off, around and nothing changes. The pickaxe is in the hotbar in both."""
+    a = Area(x0, z0, x0 + 40, z0 + 16)
+    a.add(*floor(x0, z0, x0 + 40, z0 + 16))
+    a.add(f"fill {x0 + 20} {SKY + 1} {z0} {x0 + 20} {SKY + 3} {z0 + 12} minecraft:stone")
+    a.add(*kit("iron_pickaxe"))
+    goal = (x0 + 26, SKY + 1, z0 + 4)
+    plan = {"break": 2, "place": 0} if allow else {"break": 0, "place": 0}
+    return scenario(
+        f"b06_wall_allowbreak{'on' if allow else 'off'}_chat{int(chat)}", chat, a, (x0 + 14.5, SKY + 1, z0 + 4.5),
+        with_chat(chat, [{"t": 10, "command": f"b goto {goal[0]} {goal[1]} {goal[2]}"}]),
+        end=900, stop_when="arrived",
+        check=plan_check(goal=goal, limit_ticks=600, plan=plan, no_health_loss=True),
+        watch=(x0 + 12, SKY - 2, z0 - 1, x0 + 32, SKY + 6, z0 + 17), slot=2, settings=None if allow else {"allowBreak": False})
+
+
+def b07_bucket_fall(chat, x0=6000, z0=3000):
+    """A drop of twelve blocks, more than maxFallHeightNoWater (3) and less than maxFallHeightBucket (20): only with the water bucket."""
+    a = Area(x0, z0, x0 + 24, z0 + 12)
+    a.add(*floor(x0, z0, x0 + 24, z0 + 12))
+    a.add(*floor(x0, z0, x0 + 5, z0 + 12, y=SKY + 12))
+    a.add(*kit("water_bucket"))
+    goal = (x0 + 9, SKY + 1, z0 + 6)
+    return scenario(
+        f"b07_bucket_fall12_chat{int(chat)}", chat, a, (x0 + 2.5, SKY + 13, z0 + 6.5),
+        with_chat(chat, [{"t": 10, "command": f"b goto {goal[0]} {goal[1]} {goal[2]}"}]),
+        end=700, stop_when="arrived",
+        check=plan_check(goal=goal, limit_ticks=400, plan={"break": 0, "place": 0}, water_ok=True, hotbar_end_has=["water_bucket"], no_health_loss=True),
+        watch=(x0, SKY - 2, z0, x0 + 24, SKY + 14, z0 + 12), slot=3)
+
+
+def b08_stop_dig(chat, x0=6200, z0=3000):
+    """Stone by hand takes 150 ticks a block. `b stop` at tick 70 (the dig is under way): the block must still be there 230 ticks later."""
+    a = Area(x0, z0, x0 + 40, z0 + 8)
+    a.add(*floor(x0, z0, x0 + 40, z0 + 8))
+    a.add(f"fill {x0 + 20} {SKY + 1} {z0} {x0 + 20} {SKY + 2} {z0 + 8} minecraft:stone")
+    goal = (x0 + 26, SKY + 1, z0 + 4)
+    return scenario(
+        f"b08_stop_dig_chat{int(chat)}", chat, a, (x0 + 18.5, SKY + 1, z0 + 4.5),
+        with_chat(chat, [{"t": 10, "command": f"b goto {goal[0]} {goal[1]} {goal[2]}"}, {"t": 70, "command": "b stop"}]),
+        end=300, stop_when="never",
+        check={"kind": "stop_dig", "stop_tick": 70, "blocks_changed": 0},
+        watch=(x0 + 16, SKY - 2, z0 - 1, x0 + 30, SKY + 6, z0 + 9), slot=0)
+
+
+def b09_dig_stone_by_hand(chat, x0=6400, z0=3000):
+    """The control of b08: the same wall and no `b stop`. It must break the block by hand (about 150 ticks) and arrive."""
+    a = Area(x0, z0, x0 + 40, z0 + 8)
+    a.add(*floor(x0, z0, x0 + 40, z0 + 8))
+    a.add(f"fill {x0 + 20} {SKY + 1} {z0} {x0 + 20} {SKY + 2} {z0 + 8} minecraft:stone")
+    goal = (x0 + 26, SKY + 1, z0 + 4)
+    return scenario(
+        f"b09_dig_stone_hand_chat{int(chat)}", chat, a, (x0 + 18.5, SKY + 1, z0 + 4.5),
+        with_chat(chat, [{"t": 10, "command": f"b goto {goal[0]} {goal[1]} {goal[2]}"}]),
+        end=700, stop_when="arrived",
+        check=plan_check(goal=goal, limit_ticks=450, plan={"break": 1, "place": 0}, no_health_loss=True),
+        watch=(x0 + 16, SKY - 2, z0 - 1, x0 + 30, SKY + 6, z0 + 9), slot=0)
+
+
+def new_scenarios():
+    out = []
+    for chat in (False, True):
+        out += [b01_break_stone(chat), b02_break_dirt_by_hand(chat), b03_bridge(chat), b04_pillar(chat), b04_pillar(chat, x0=6600, ledge=False), b05_dig_down(chat),
+                b06_wall_break_allowed_vs_not(chat, True), b06_wall_break_allowed_vs_not(chat, False), b07_bucket_fall(chat), b08_stop_dig(chat), b09_dig_stone_by_hand(chat)]
+    return out
+
+
 def all_scenarios(include_far=True):
     # The natural-terrain ones come first, at the spawn, before any world building moves the player away.
     out = [s05_natural_300(False)]
@@ -252,4 +425,5 @@ def all_scenarios(include_far=True):
     for chat in (False, True):
         out += [s07_block_in_the_way(chat), s09_ladder_and_water(chat), s08_stop(chat), s11_slab_floor(chat)]
     out += [s06_sealed(False), s06_sealed(True)]
+    out += new_scenarios()
     return out

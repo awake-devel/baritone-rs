@@ -387,6 +387,14 @@ impl<'a, W: WorldView> Ctx<'a, W> {
         self.border.can_place_at(x, z) && self.pre.flags[self.get(x, y, z).id].place_against
     }
 
+    /// `MovementHelper.canPlaceAgainst(BlockStateInterface,int,int,int)`: the executor's variant: the world border of the
+    /// `BlockStateInterface` (this context's border), then the block half: normal cube, glass or stained glass.
+    /// `MovementHelper.canPlaceAgainst(BlockStateInterface,int,int,int,BlockState)`: the same with the state given.
+    /// `MovementHelper.canPlaceAgainst(IPlayerContext,BlockPos)`: the same for the player's world.
+    pub fn can_place_against_bsi(&self, x: i32, y: i32, z: i32) -> bool {
+        self.border.can_place_at(x, z) && self.pre.flags[self.get(x, y, z).id].place_against
+    }
+
     /// `MovementHelper.avoidAdjacentBreaking`: do not break a block next to falling blocks or liquid.
     fn avoid_adjacent_breaking(&self, x: i32, y: i32, z: i32, directly_above: bool) -> bool {
         let s = self.get(x, y, z);
@@ -403,6 +411,11 @@ impl<'a, W: WorldView> Ctx<'a, W> {
             return !self.get(x, y - 1, z).liquid_block;
         }
         !s.fluid_empty
+    }
+
+    /// `PrecomputedData.neverBreak` at a position: the block is in `blocksToDisallowBreaking`, or is ice or infested.
+    pub fn never_break_at(&self, x: i32, y: i32, z: i32) -> bool {
+        self.pre.flags[self.get(x, y, z).id].never_break
     }
 
     /// `MovementHelper.avoidBreaking(CalculationContext,int,int,int,BlockState)`: border, never-break flag, then the five neighbours.

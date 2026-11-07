@@ -296,7 +296,7 @@ InputOverrideHandler	clearAllKeys	port	1b8e87c	d0e2c41528c77b15
 InputOverrideHandler	getBlockBreakHelper	drop	1b8e87c	abc272a91324687c		The block break and place helpers are later.
 InputOverrideHandler	inControl	redesign	1b8e87c	a4534235ac06f46c		`Intent::active`, made in `Pathing::build_intent`.
 InputOverrideHandler	isInputForcedDown	redesign	1b8e87c	8251719ec0b517bf		`Keys`, plain flags.
-InputOverrideHandler	onTick	redesign	1b8e87c	b0e4908457c6b7df		`Pathing::build_intent`. Breaking and placing are later.
+InputOverrideHandler	onTick	redesign	1b8e87c	b0e4908457c6b7df		`Pathing::build_intent`: the left button wins over the right one, and a click waits for the tick after a slot change (D26).
 InputOverrideHandler	setInputForceState	redesign	1b8e87c	126fc0a3d8ffe822		`Keys`, plain flags.
 LinkedListOpenSet	insert	drop	1b8e87c	e260b2a42a79b253		Not used by the pathfinder; upstream keeps it for its open set test.
 LinkedListOpenSet	isEmpty	drop	1b8e87c	8c346ecac3df27a6		Not used by the pathfinder; upstream keeps it for its open set test.
@@ -371,7 +371,7 @@ Movement	override	port	1b8e87c	2f38c18661421e09	search-compare	`Movement::overri
 Movement	pitchForSwimVelocity	later	1b8e87c	a715f1f1804de095		Swimming: `allowSwimming` is off by default. With it on, a movement in water fails with `MoveFailure::Swimming`.
 Movement	playerInValidPosition	port	1b8e87c	070d9969b2bd0bc2		Executor: S4.
 Movement	preTurnIntoTheBend	later	1b8e87c	578c25c1d8d69b73		Swimming: `allowSwimming` is off by default. With it on, a movement in water fails with `MoveFailure::Swimming`.
-Movement	prepared	port	1b8e87c	eae3867ba73b8b38		`exec/movements.rs`. Mining the block in the way is a failure (`NeedsBreaking`). The wait for a falling block entity is left out: the world view has no entities.
+Movement	prepared	port	1b8e87c	eae3867ba73b8b38		`exec/movements.rs`. Breaks the first block in the way: tool, aim, left button. Waits for a falling block through `WorldView::falling_block_near`. A block the settings do not let it break ends the movement as unreachable instead (D28).
 Movement	recalculateCost	port	1b8e87c	e7ec743f307f538d		
 Movement	reset	port	1b8e87c	20247ab911639e9e		`MoveRuntime::reset`.
 Movement	resetBlockCache	drop	1b8e87c	c7740c02ac6ef5b3		`to_break` and `to_place` are computed when asked. Nothing is cached.
@@ -382,7 +382,7 @@ Movement	toBreak	port	1b8e87c	3d1cc95adf1aa01d		Executor: S4.
 Movement	toBreakAll	port	1b8e87c	b9d13341c6f54c6d		Executor: S4.
 Movement	toPlace	port	1b8e87c	55e066d696ecc2ac		Executor: S4.
 Movement	toWalkInto	port	1b8e87c	b4ce8638adae76f0		`exec/movements.rs`: empty except for the diagonal.
-Movement	update	port	1b8e87c	3ddb04be9cc19623		`exec/movements.rs`. Swimming (`allowSwimming`) and the click when the head is in a block are failures by name.
+Movement	update	port	1b8e87c	3ddb04be9cc19623		`exec/movements.rs`. Swimming (`allowSwimming`) and the click when the head is in a block are failures by name. The slot to hold goes to `Controls::select`.
 Movement	updateState	port	1b8e87c	88bc25824f1ae844		`exec/movements.rs`: `base_update_state`.
 MovementAscend	<init>	redesign	1b8e87c	f97db35233e1a72e		`Movement::new`. toBreak and toPlace are executor work.
 MovementAscend	calculateCost	port	1b8e87c	57e33d60a46f1c69		
@@ -391,7 +391,7 @@ MovementAscend	cost	port	1b8e87c	a1de32bdeb227a53	cost-compare
 MovementAscend	headBonkClear	port	1b8e87c	e630635a510b9e7c		Executor: S4.
 MovementAscend	reset	port	1b8e87c	23ce7033958c272b		Executor: S4.
 MovementAscend	safeToCancel	port	1b8e87c	9344a6eed892eca9		Executor: S4.
-MovementAscend	updateState	port	1b8e87c	2831fdcdc5c33ef1		The branch that places the block to jump onto fails with `NeedsPlacing`.
+MovementAscend	updateState	port	1b8e87c	2831fdcdc5c33ef1		Places the block to jump onto: sneaks, presses use once crouching, backs up after 10 ticks.
 MovementDescend	<init>	redesign	1b8e87c	09599d7ac7244418		`Movement::new`. toBreak and toPlace are executor work.
 MovementDescend	calculateCost	port	1b8e87c	37df4709e7715a6d		
 MovementDescend	calculateValidPositions	port	1b8e87c	288833ad4ab1d4a2		`exec/movements.rs`: `valid_positions`.
@@ -428,21 +428,21 @@ MovementFall	calculateCost	port	1b8e87c	ac2b756bbcecb7be
 MovementFall	calculateValidPositions	port	1b8e87c	050b67d207870d0e		`exec/movements.rs`: `valid_positions`.
 MovementFall	prepared	port	1b8e87c	3d3b4ce15f7917c6		Executor: S4.
 MovementFall	safeToCancel	port	1b8e87c	f5a789f9c1ee179e		Executor: S4.
-MovementFall	updateState	port	1b8e87c	9093b11d6694c793		Without a water bucket. A fall that needs one fails with `NeedsBucket`; picking the water up again is not done.
+MovementFall	updateState	port	1b8e87c	9093b11d6694c793		With the water bucket: holds it, looks down, clicks when the crosshair is on the landing block, and picks the water up with an empty bucket. Unreachable without the bucket in the hotbar or in the Nether.
 MovementFall	willPlaceBucket	redesign	1b8e87c	e0506533818050c7		`will_place_bucket` checks `hasWaterBucket` and the drop height instead of running `dynamicFallCost` again.
-MovementHelper	attemptToPlaceABlock	later	1b8e87c	4473a56a0d0bdd8a		Placing and breaking are later.
+MovementHelper	attemptToPlaceABlock	port	1b8e87c	4473a56a0d0bdd8a		`exec/helper.rs`. Aims with the sneaking eye, from the engine's own ray trace (D25), and reads the crosshair from `PlayerView::looking_at`. Nothing is placed when `allowPlace` is off (D28).
 MovementHelper	avoidAdjacentBreaking	port	1b8e87c	b94c152b1b81a19c	cost-compare	
-MovementHelper	avoidBreaking(BlockStateInterface,int,int,int,BlockState)	later	1b8e87c	479795bcf839b293		Executor side: S4.
+MovementHelper	avoidBreaking(BlockStateInterface,int,int,int,BlockState)	later	1b8e87c	479795bcf839b293		Used by the processes (mine, builder), not by a path.
 MovementHelper	avoidBreaking(CalculationContext,int,int,int,BlockState)	port	1b8e87c	0ce5ceb6141fe423	cost-compare	
 MovementHelper	avoidWalkingInto	port	1b8e87c	c354c0aaab9e69eb	cost-compare	
-MovementHelper	canPlaceAgainst(BlockStateInterface,BlockPos)	later	1b8e87c	f2afc190e7704e93		Executor side: S4.
-MovementHelper	canPlaceAgainst(BlockStateInterface,int,int,int)	later	1b8e87c	339ad97fb1a6a644		Executor side: S4.
-MovementHelper	canPlaceAgainst(BlockStateInterface,int,int,int,BlockState)	later	1b8e87c	743d6d5271c09aec		Executor side: S4.
+MovementHelper	canPlaceAgainst(BlockStateInterface,BlockPos)	drop	1b8e87c	f2afc190e7704e93		No caller in a path: `can_place_against_bsi` takes the coordinates.
+MovementHelper	canPlaceAgainst(BlockStateInterface,int,int,int)	port	1b8e87c	339ad97fb1a6a644		`Ctx::can_place_against_bsi`: the block half, no world border.
+MovementHelper	canPlaceAgainst(BlockStateInterface,int,int,int,BlockState)	port	1b8e87c	743d6d5271c09aec		`Ctx::can_place_against_bsi`: the block half, no world border.
 MovementHelper	canPlaceAgainst(CalculationContext,int,int,int)	port	1b8e87c	79ac5ce2cc2a775c	cost-compare	
 MovementHelper	canPlaceAgainst(CalculationContext,int,int,int,BlockState)	port	1b8e87c	c3c387cf81629fa9	cost-compare	
-MovementHelper	canPlaceAgainst(IPlayerContext,BlockPos)	later	1b8e87c	db5b25392a2792b4		Executor side: S4.
+MovementHelper	canPlaceAgainst(IPlayerContext,BlockPos)	port	1b8e87c	db5b25392a2792b4		`Ctx::can_place_against_bsi`: the block half, no world border.
 MovementHelper	canUseFrostWalker(CalculationContext,BlockState)	port	1b8e87c	73fe151347609958	cost-compare	
-MovementHelper	canUseFrostWalker(IPlayerContext,BlockPos)	later	1b8e87c	66bdc4ff0fe33c97		Executor side: S4.
+MovementHelper	canUseFrostWalker(IPlayerContext,BlockPos)	redesign	1b8e87c	66bdc4ff0fe33c97		The traverse uses `Ctx::can_use_frost_walker` with the state read from the world. The frost walker level stays 0 (D22).
 MovementHelper	canWalkOn(BlockStateInterface,int,int,int)	redesign	1b8e87c	0b18522bab903a7b		`Env::can_walk_on`: the same flags and position check as the search's.
 MovementHelper	canWalkOn(BlockStateInterface,int,int,int,BlockState)	redesign	1b8e87c	fad245bb6ebc0361		`Env::can_walk_on`: the same flags and position check as the search's.
 MovementHelper	canWalkOn(CalculationContext,int,int,int)	port	1b8e87c	5b388d5a012b8c4b	cost-compare	
@@ -482,19 +482,19 @@ MovementHelper	isWater(BlockState)	port	1b8e87c	6c4510c91c7c8d22	cost-compare
 MovementHelper	isWater(IPlayerContext,BlockPos)	redesign	1b8e87c	ff7e93ab9663aa37		`Env::is_water`.
 MovementHelper	isWaterloggedSolidTop	port	1b8e87c	15fad80f9e89a8e8	cost-compare	
 MovementHelper	moveTowards	port	1b8e87c	f71bab2a745f74d7		Executor side: S4.
-MovementHelper	moveTowardsWithSlightRotation	later	1b8e87c	1813bf5430988acc		Used by the branch of the traverse that places a bridge block: placing is later.
-MovementHelper	moveTowardsWithoutRotation(IPlayerContext,MovementState,BlockPos)	later	1b8e87c	14e13264cd7131ba		Used by the branch of the traverse that places a bridge block: placing is later.
-MovementHelper	moveTowardsWithoutRotation(IPlayerContext,MovementState,float)	later	1b8e87c	4683692d05d274b0		Used by the branch of the traverse that places a bridge block: placing is later.
+MovementHelper	moveTowardsWithSlightRotation	port	1b8e87c	1813bf5430988acc		`exec/helper.rs`.
+MovementHelper	moveTowardsWithoutRotation(IPlayerContext,MovementState,BlockPos)	port	1b8e87c	14e13264cd7131ba		`exec/helper.rs`.
+MovementHelper	moveTowardsWithoutRotation(IPlayerContext,MovementState,float)	port	1b8e87c	4683692d05d274b0		`exec/helper.rs`.
 MovementHelper	mustBeSolidToWalkOn	port	1b8e87c	4158dd03d47cb9fd	cost-compare	
 MovementHelper	openDoors	port	1b8e87c	22a8f6aedc2cd83e		The click is `Intent::use_block` (with `can_use_blocks`), else `NeedsUseBlock`. The aim is the middle of the block.
 MovementHelper	possiblyFlowing	port	1b8e87c	135e5ad22ff9a802	cost-compare	
 MovementHelper	steppingOnBlocks	port	1b8e87c	2549cdcfe6accd89		Executor side: S4.
-MovementHelper	switchToBestToolFor(IPlayerContext,BlockState)	later	1b8e87c	266b18edf4cca6d2		Placing and breaking are later.
-MovementHelper	switchToBestToolFor(IPlayerContext,BlockState,ToolSet,boolean)	later	1b8e87c	2f3e6afe62ce4008		Placing and breaking are later.
-MovementOption	<init>	later	1b8e87c	cfbdc94076590828		Only `moveTowardsWithoutRotation` uses it (strafing without turning).
-MovementOption	distanceToSq	later	1b8e87c	437268da75c04db2		Only `moveTowardsWithoutRotation` uses it (strafing without turning).
-MovementOption	getOptions	later	1b8e87c	649d97d0309f5794		Only `moveTowardsWithoutRotation` uses it (strafing without turning).
-MovementOption	setInputs	later	1b8e87c	b658097e055d29b0		Only `moveTowardsWithoutRotation` uses it (strafing without turning).
+MovementHelper	switchToBestToolFor(IPlayerContext,BlockState)	port	1b8e87c	266b18edf4cca6d2		`inventory.rs`: the slot to select, which the executor puts in the intent.
+MovementHelper	switchToBestToolFor(IPlayerContext,BlockState,ToolSet,boolean)	port	1b8e87c	2f3e6afe62ce4008		`inventory.rs`: the slot to select, which the executor puts in the intent.
+MovementOption	<init>	redesign	1b8e87c	cfbdc94076590828		`MovementOption` in `exec/helper.rs`: two keys and a motion.
+MovementOption	distanceToSq	port	1b8e87c	437268da75c04db2		`exec/helper.rs`.
+MovementOption	getOptions	port	1b8e87c	649d97d0309f5794		`exec/helper.rs`.
+MovementOption	setInputs	port	1b8e87c	b658097e055d29b0		`exec/helper.rs`: `set_inputs`.
 MovementParkour	<init>	redesign	1b8e87c	2644f3c489c09eac		`Movement::new`. toBreak and toPlace are executor work.
 MovementParkour	calculateCost	port	1b8e87c	a815eed498afb743		
 MovementParkour	calculateValidPositions	later	1b8e87c	1c83db9b93285e8e		Executor: S4.
@@ -509,7 +509,7 @@ MovementPillar	calculateCost	port	1b8e87c	b98f2f7234fd0837
 MovementPillar	calculateValidPositions	port	1b8e87c	383246429d6b166b		`exec/movements.rs`: `valid_positions`.
 MovementPillar	cost	port	1b8e87c	a08876128e928e32	cost-compare	
 MovementPillar	prepared	port	1b8e87c	d9a71a7a9bf934bf		Executor: S4.
-MovementPillar	updateState	port	1b8e87c	7b1bb2c43de52022		Ladders, vines and a column of water. A pillar that places blocks fails with `NeedsPlacing`.
+MovementPillar	updateState	port	1b8e87c	7b1bb2c43de52022		Ladders, vines and a column of water; otherwise places a block under the feet at the top of each jump.
 MovementState	getInputStates	redesign	1b8e87c	534df4a29ab14ac4		`MoveState`, with `Keys`.
 MovementState	getStatus	redesign	1b8e87c	a64adb9f149fc076		`MoveState`, with `Keys`.
 MovementState	getTarget	redesign	1b8e87c	88d07451c6f41ee4		`MoveState`, with `Keys`.
@@ -527,7 +527,7 @@ MovementTraverse	cost	port	1b8e87c	d3f6b3b49021d2c3	cost-compare
 MovementTraverse	prepared	port	1b8e87c	cca0bb7772344049		Executor: S4.
 MovementTraverse	reset	port	1b8e87c	e415f81bea730766		Executor: S4.
 MovementTraverse	safeToCancel	port	1b8e87c	3ed0a190a240e5f9		Executor: S4.
-MovementTraverse	updateState	port	1b8e87c	71cb6aeb8d77e9f1		The branch that places the bridge block fails with `NeedsPlacing`. A closed door or gate is `use_block`, or `NeedsUseBlock`.
+MovementTraverse	updateState	port	1b8e87c	71cb6aeb8d77e9f1		Breaks (walking on while it does), bridges (sneak, place against the block it left, back up) and opens doors and gates (`use_block`, or `NeedsUseBlock` when the glue cannot).
 Moves	<init>(int,int,int)	redesign	1b8e87c	44231cfdfba4e7ef	cost-compare	The enum has offset and flag functions instead of fields.
 Moves	<init>(int,int,int,boolean,boolean)	redesign	1b8e87c	7cb2b27c96e607f1	cost-compare	The enum has offset and flag functions instead of fields.
 Moves	apply	port	1b8e87c	779e80c6d2db7615	cost-compare	
@@ -630,7 +630,7 @@ PathingBehavior	cancelEverything	port	1b8e87c	30be79508cd2554b
 PathingBehavior	cancelSegmentIfSafe	port	1b8e87c	406515e90009f269		
 PathingBehavior	createPathfinder	port	1b8e87c	56d442b09a94dd16	search-compare	`plan::create_pathfinder`. The player's feet and the avoidances come from the caller.
 PathingBehavior	dispatchEvents	port	1b8e87c	e6e30bc7e7421d57		
-PathingBehavior	estimatedTicksToGoal	later	1b8e87c	cbece6ffa3889b35		Only the `eta` command uses it.
+PathingBehavior	estimatedTicksToGoal	port	1b8e87c	cbece6ffa3889b35		`Pathing::estimated_ticks_to_goal`. The `eta` command uses it.
 PathingBehavior	findPathInNewThread	redesign	1b8e87c	404bd8c609c300fc		The thread, the locks and the events are S4. `plan::timeouts` is the choice of timeouts and `plan::next_segment_search` is the search it builds for the next segment.
 PathingBehavior	forceCancel	port	1b8e87c	b852772908eaa216		`/b stop` calls it: see deviations.md.
 PathingBehavior	getCurrent	port	1b8e87c	4da2c572ebdccf5d		
@@ -701,24 +701,24 @@ Rotation	normalizeYaw	port	1b8e87c	fa27b296ed03d911
 Rotation	subtract	port	1b8e87c	3cb9783af9f8a8f7		
 Rotation	toString	drop	1b8e87c	3a0cc320ac57c2ac		Debug output.
 Rotation	withPitch	port	1b8e87c	66018b9e8e60c470		
-Rotation	yawDistanceFromOffset	later	1b8e87c	90220b4148a3e8dc		Used by the placing and swimming code only.
+Rotation	yawDistanceFromOffset	port	1b8e87c	90220b4148a3e8dc		`look.rs`.
 Rotation	yawIsReallyClose	port	1b8e87c	e90d30a37890117e		
 RotationUtils	<init>	drop	1b8e87c	36077678c486ad78		A private constructor; a deprecated alias.
-RotationUtils	calcLookDirectionFromRotation	later	1b8e87c	b04a9b02d62d6971		Used by ray traces and the builder.
+RotationUtils	calcLookDirectionFromRotation	port	1b8e87c	b04a9b02d62d6971		`raytrace.rs`: `f32::sin` and `f32::cos`, not Minecraft's table (D17).
 RotationUtils	calcRotationFromCoords	later	1b8e87c	3a425de58089c600		Used by ray traces and the builder.
 RotationUtils	calcRotationFromVec3d(Vec3,Vec3)	port	1b8e87c	fe3298016362aaae		`Mth.atan2` is `f64::atan2`: see deviations.md.
 RotationUtils	calcRotationFromVec3d(Vec3,Vec3,Rotation)	port	1b8e87c	f68f94a0b5c990e1		`Mth.atan2` is `f64::atan2`: see deviations.md.
 RotationUtils	calcVec3dFromRotation	drop	1b8e87c	56997428b29674d6		A private constructor; a deprecated alias.
-RotationUtils	reachable(IPlayerContext,BlockPos)	later	1b8e87c	e95aa3643787341d		Needs ray traces against block shapes: placing, breaking and gates (a gate is aimed at the middle of the block).
-RotationUtils	reachable(IPlayerContext,BlockPos,boolean)	later	1b8e87c	4a681466bd388b78		Needs ray traces against block shapes: placing, breaking and gates (a gate is aimed at the middle of the block).
-RotationUtils	reachable(IPlayerContext,BlockPos,double)	later	1b8e87c	8c0c03cbc1442564		Needs ray traces against block shapes: placing, breaking and gates (a gate is aimed at the middle of the block).
-RotationUtils	reachable(IPlayerContext,BlockPos,double,boolean)	later	1b8e87c	2dbf02276c25282d		Needs ray traces against block shapes: placing, breaking and gates (a gate is aimed at the middle of the block).
-RotationUtils	reachable(LocalPlayer,BlockPos,double)	later	1b8e87c	0a7830c7a0bb1652		Needs ray traces against block shapes: placing, breaking and gates (a gate is aimed at the middle of the block).
-RotationUtils	reachable(LocalPlayer,BlockPos,double,boolean)	later	1b8e87c	a8d82f267e1b1a95		Needs ray traces against block shapes: placing, breaking and gates (a gate is aimed at the middle of the block).
-RotationUtils	reachableCenter(Entity,BlockPos,double,boolean)	later	1b8e87c	37acdc09d5820cc9		Needs ray traces against block shapes: placing, breaking and gates (a gate is aimed at the middle of the block).
-RotationUtils	reachableCenter(IPlayerContext,BlockPos,double,boolean)	later	1b8e87c	aba58535496166b3		Needs ray traces against block shapes: placing, breaking and gates (a gate is aimed at the middle of the block).
-RotationUtils	reachableOffset(Entity,BlockPos,Vec3,double,boolean)	later	1b8e87c	5d85324da81c2d57		Needs ray traces against block shapes: placing, breaking and gates (a gate is aimed at the middle of the block).
-RotationUtils	reachableOffset(IPlayerContext,BlockPos,Vec3,double,boolean)	later	1b8e87c	ee2dc4974a34300d		Needs ray traces against block shapes: placing, breaking and gates (a gate is aimed at the middle of the block).
+RotationUtils	reachable(IPlayerContext,BlockPos)	redesign	1b8e87c	e95aa3643787341d		`exec/helper.rs` `reachable`, with the reach and `wouldSneak` given.
+RotationUtils	reachable(IPlayerContext,BlockPos,boolean)	redesign	1b8e87c	4a681466bd388b78		`exec/helper.rs` `reachable`, with the reach given.
+RotationUtils	reachable(IPlayerContext,BlockPos,double)	redesign	1b8e87c	8c0c03cbc1442564		`exec/helper.rs` `reachable`, with `wouldSneak` false.
+RotationUtils	reachable(IPlayerContext,BlockPos,double,boolean)	port	1b8e87c	2dbf02276c25282d		`exec/helper.rs`. The shape is always the whole block (D25).
+RotationUtils	reachable(LocalPlayer,BlockPos,double)	drop	1b8e87c	0a7830c7a0bb1652		Deprecated duplicate of the `IPlayerContext` form.
+RotationUtils	reachable(LocalPlayer,BlockPos,double,boolean)	drop	1b8e87c	a8d82f267e1b1a95		Deprecated duplicate of the `IPlayerContext` form.
+RotationUtils	reachableCenter(Entity,BlockPos,double,boolean)	drop	1b8e87c	37acdc09d5820cc9		Deprecated duplicate of the `IPlayerContext` form.
+RotationUtils	reachableCenter(IPlayerContext,BlockPos,double,boolean)	port	1b8e87c	aba58535496166b3		`exec/helper.rs`. The middle of the block, since there are no shapes (D25).
+RotationUtils	reachableOffset(Entity,BlockPos,Vec3,double,boolean)	drop	1b8e87c	5d85324da81c2d57		Deprecated duplicate of the `IPlayerContext` form.
+RotationUtils	reachableOffset(IPlayerContext,BlockPos,Vec3,double,boolean)	port	1b8e87c	ee2dc4974a34300d		`exec/helper.rs`. The ray is the engine's (D25).
 RotationUtils	wrapAnglesToRelative	port	1b8e87c	aaa99af04071ea00		`Mth.atan2` is `f64::atan2`: see deviations.md.
 SplicedPath	<init>	redesign	1b8e87c	55f3ac4536f20a1f		Built inside `Path::try_splice`, and checked there.
 SplicedPath	getGoal	port	1b8e87c	50a9d398a5a822ff	search-compare	
@@ -746,18 +746,18 @@ SprintJump	steer	later	1b8e87c	eb5045280cfd2dfb		`sprintJumping` is off by defau
 SprintJump	stepUpAhead	later	1b8e87c	cbb2e7473e476f41		`sprintJumping` is off by default. Not ported.
 SprintJump	throttle	later	1b8e87c	4314dcbde7632256		`sprintJumping` is off by default. Not ported.
 SprintJump	works	later	1b8e87c	7db1ad0aae16ce0b		`sprintJumping` is off by default. Not ported.
-ToolSet	<init>	missing	1b8e87c	1e4736c522ac87ed		
-ToolSet	avoidanceMultiplier	missing	1b8e87c	45f94a52c4da7c3e		
-ToolSet	calculateSpeedVsBlock	missing	1b8e87c	5921a4268a0e4b5a		
-ToolSet	getBestDestructionTime	missing	1b8e87c	0a79ab762202934a		
-ToolSet	getBestSlot(Block,boolean)	missing	1b8e87c	817bb086d5a79c01		
-ToolSet	getBestSlot(Block,boolean,boolean)	missing	1b8e87c	ad29b1d7bf9ee7d2		
-ToolSet	getMaterialCost	missing	1b8e87c	fea5f1eb4b931a6e		
-ToolSet	getStrVsBlock	missing	1b8e87c	df21270199437a50		
-ToolSet	hasSilkTouch	missing	1b8e87c	3385d7eca846d40a		
-ToolSet	potionAmplifier	missing	1b8e87c	ecb35bc4bfa60ce2		
+ToolSet	<init>	redesign	1b8e87c	1e4736c522ac87ed		`get_str_vs_block` in `inventory.rs` picks what the constructor's lambda picks. The hotbar is the glue's `Inventory`, not a player.
+ToolSet	avoidanceMultiplier	port	1b8e87c	45f94a52c4da7c3e		`inventory.rs`. Block names are registry paths.
+ToolSet	calculateSpeedVsBlock	port	1b8e87c	5921a4268a0e4b5a		`inventory.rs`: the formula, with the game's numbers given (item destroy speed, efficiency, hardness, whether the tool is the right one). The glue answers `Inventory::speed_vs_state` with it. Not run against Java: the table of cases in the unit tests is worked out by hand.
+ToolSet	getBestDestructionTime	port	1b8e87c	0a79ab762202934a		`inventory.rs`.
+ToolSet	getBestSlot(Block,boolean)	port	1b8e87c	817bb086d5a79c01		`inventory.rs`, with `pathing_calculation` false. It takes a state id, not a block (see D24).
+ToolSet	getBestSlot(Block,boolean,boolean)	port	1b8e87c	ad29b1d7bf9ee7d2		`inventory.rs`. It takes a state id, not a block (see D24).
+ToolSet	getMaterialCost	redesign	1b8e87c	fea5f1eb4b931a6e		`SlotInfo::material_cost`, which the glue fills from the item tags.
+ToolSet	getStrVsBlock	port	1b8e87c	df21270199437a50		`inventory.rs`. The glue puts it in `Tables::tool_strength`. There is no cache by block: the glue keeps one.
+ToolSet	hasSilkTouch	redesign	1b8e87c	3385d7eca846d40a		`SlotInfo::silk_touch`, which the glue fills from the enchantments.
+ToolSet	potionAmplifier	port	1b8e87c	ecb35bc4bfa60ce2		`inventory.rs`: the two effect levels are arguments, the glue reads them from the player.
 VecUtils	<init>	drop	1b8e87c	b753e0fcad03f7a0		A private constructor.
-VecUtils	calculateBlockCenter	later	1b8e87c	2d91124d67d60989		Needs collision shapes. Doors and gates are aimed at the middle of the block.
+VecUtils	calculateBlockCenter	redesign	1b8e87c	2d91124d67d60989		`block_pos_center`: the middle of the whole block, since there are no collision shapes (D25).
 VecUtils	distanceToCenter	port	1b8e87c	7a84293414eddb5d		
 VecUtils	entityDistanceToCenter	redesign	1b8e87c	a19306296a36b9eb		`distance_to_center` with the player's position.
 VecUtils	entityFlatDistanceToCenter	redesign	1b8e87c	877e6850cca4e05d		`distance_to_center` with the player's position.

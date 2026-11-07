@@ -64,6 +64,18 @@ impl CustomGoalProcess {
         }
     }
 
+    /// `CustomGoalProcess.setGoal` with a null goal (`goal clear`): the process holds no goal, and is active as for any goal that is set.
+    pub fn clear_goal(&mut self) {
+        self.goal = None;
+        self.most_recent_goal = None;
+        if self.state == State::None {
+            self.state = State::GoalSet;
+        }
+        if self.state == State::Executing {
+            self.state = State::PathRequested;
+        }
+    }
+
     /// `CustomGoalProcess.path`:
     /// `CustomGoalProcess.path`.
     pub fn path(&mut self) {

@@ -1,10 +1,12 @@
 # baritone-rs: a Rust port of the Baritone pathfinder as a native Horizon mod.
 # LGPL-3.0-or-later, like the rest of this repository. Ported from cabaletta/baritone, see ../CREDITS.md.
 #
-# The first version walks and sprints to a goal: `/b goto`, `/b stop`, and the path drawn in the world. It never breaks or places.
+# Walks, sprints, breaks and places along a path: `/b goto`, `goal`, `path`, `eta`, `set`, `stop`, and the path drawn in the world.
 #
-# The mod reads private `Game` fields (the player, the world, the view angles, the screen, the border and the resources),
-# so it pins the Horizon revision it was written against. The hooks are the stable `native_*` ones.
+# The mod reads private `Game` fields (the player, the hotbar, the world, the view angles, the screen, the border and the resources),
+# so it pins the Horizon revision it was written against. Most hooks are the stable `native_*` ones. Two private functions are hooked
+# as well, both pinned: the game's input step (`remote_handle_input`, for the mouse buttons with the chat open) and the command tree's
+# completion (`Dispatcher::client_suggestions_asking`, for the words after `/b`).
 [mod]
 id = "baritone_rs"
 version = "0.0.0"
@@ -31,6 +33,14 @@ id = "runtime"
 file = "crates/horizon-client/src/game.rs"
 name = "baritone_rs"
 source = "runtime.rs"
+
+# The seam for completing the words after `/b`: added to the command crate, called by the hook "suggest" below.
+[[module]]
+id = "suggest_seam"
+file = "crates/horizon-command/src/lib.rs"
+name = "baritone_rs_suggest"
+source = "glue/suggest.rs"
+visibility = "pub"
 
 [[injection]]
 id = "tick"
@@ -109,4 +119,39 @@ target = "horizon_client::game::native_hooks::Game<'_>::native_client_disconnect
 helper = "disconnecting.rs"
 bindings = [
   { name = "game", ty = "&crate::game::Game<'_>", value = "self" },
+]
+
+# The game's input step runs inside `tick_remote_level`, before the player moves. It turns `game.left` and `game.right` into mining and use, but
+# only with `Screen::Playing`. These two hooks set the buttons for the executor and, with the chat open, show it `Playing` for that one call.
+[[injection]]
+id = "input_head"
+kind = "HEAD"
+target = "horizon_client::game::remote::Game<'_>::remote_handle_input"
+helper = "input_head.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+]
+
+[[injection]]
+id = "input_return"
+kind = "RETURN"
+target = "horizon_client::game::remote::Game<'_>::remote_handle_input"
+helper = "input_return.rs"
+bindings = [
+  { name = "value", ty = "()", value = "$value" },
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+]
+
+# The chat box's completion at the cursor. The command tree has nothing past `/b `; the mod's function offers the commands, the settings and the
+# coordinates (the block under the crosshair comes from the registries the chat already fills).
+[[injection]]
+id = "suggest"
+kind = "RETURN"
+target = "horizon_command::Dispatcher::client_suggestions_asking"
+helper = "suggest.rs"
+bindings = [
+  { name = "value", ty = "(Range, Vec<Suggestion>, bool)", value = "$value" },
+  { name = "parse", ty = "&ParseResults", value = "parse" },
+  { name = "cursor", ty = "usize", value = "cursor" },
+  { name = "reg", ty = "&Registries", value = "reg" },
 ]

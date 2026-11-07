@@ -3,6 +3,7 @@
 // PlayerMovementInput.java. LGPL-3.0-or-later, see lib.rs.
 use crate::look::{Rotation, Vec3};
 use crate::pos::Pos;
+use crate::raytrace::BlockHit;
 
 /// The player, as the executor needs to see it. The glue fills it before each tick. Positions are the player's feet, in blocks.
 /// Nothing here is a Horizon type.
@@ -31,12 +32,16 @@ pub struct PlayerView {
     pub eye_height: f64,
     /// The block at the raw feet position (the height plus 0.1251) is a slab of any type: `playerFeet` then answers the block above.
     pub feet_in_slab: bool,
+    /// Upstream's `objectMouseOver` when it is a block: what the crosshair is on now, as the game says (`IPlayerContext.getSelectedBlock`
+    /// and `isLookingAt`). `None` when the glue does not know or the crosshair is on nothing. Breaking and placing click when this is the
+    /// block they want, or when the view is already really close to the aim they asked for.
+    pub looking_at: Option<BlockHit>,
 }
 
 impl PlayerView {
     /// A player standing still on the ground at a position, looking south, with a full stomach.
     pub fn standing(x: f64, y: f64, z: f64) -> PlayerView {
-        PlayerView { x, y, z, vx: 0.0, vy: 0.0, vz: 0.0, yaw: 0.0, pitch: 0.0, on_ground: true, in_water: false, swimming: false, crouching: false, horizontal_collision: false, in_wall: false, food_level: 20, eye_height: 1.62, feet_in_slab: false }
+        PlayerView { x, y, z, vx: 0.0, vy: 0.0, vz: 0.0, yaw: 0.0, pitch: 0.0, on_ground: true, in_water: false, swimming: false, crouching: false, horizontal_collision: false, in_wall: false, food_level: 20, eye_height: 1.62, feet_in_slab: false, looking_at: None }
     }
 
     /// Upstream's `IPlayerContext.playerFeet`: the block the feet are in. 0.1251 is added to the height so soul sand and farmland count as the block above them,
@@ -90,17 +95,11 @@ impl MoveStatus {
 /// Each has a row marked `later` in docs/port-ledger.tsv.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MoveFailure {
-    /// A block in the way would have to be broken (`prepared` mines it upstream). `allowBreak` is off.
-    NeedsBreaking(Pos),
-    /// A block would have to be placed: a bridge block, a support to jump onto, or a pillar. Placing is off.
-    NeedsPlacing(Pos),
-    /// A fall that upstream lands with a water bucket.
-    NeedsBucket,
     /// A closed wooden door or fence gate must be opened, and `ExecSettings::can_use_blocks` is false.
     NeedsUseBlock(Pos),
     /// `allowSwimming` is on: the swimming rules (`holdWaterline`, `preTurnIntoTheBend`) are not ported.
     Swimming,
-    /// The head is inside a block: upstream mines whatever is selected.
+    /// The head is inside a block: upstream mines whatever the crosshair is on, which needs the crosshair. Not ported.
     InsideWall,
     /// A parkour movement: `allowParkour` is off by default and its executor is not ported.
     Parkour,
@@ -136,7 +135,7 @@ pub struct Target {
     pub force: bool,
 }
 
-/// The forced inputs of `InputOverrideHandler`: the keys the executor holds down. `click_left` is never set in this version.
+/// The forced inputs of `InputOverrideHandler`: the keys the executor holds down. `click_left` breaks, `click_right` uses an item or a block.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Keys {
     pub forward: bool,
@@ -146,6 +145,7 @@ pub struct Keys {
     pub jump: bool,
     pub sneak: bool,
     pub sprint: bool,
+    pub click_left: bool,
     pub click_right: bool,
 }
 
@@ -157,14 +157,16 @@ pub struct MoveState {
     /// Kept between ticks, as upstream's `currentState`: a movement that sets no target uses the last one.
     pub target: Option<Target>,
     pub keys: Keys,
-    /// The block a `click_right` is for.
+    /// The block a `click_right` is for, when it is a door or a gate (`Intent::use_block`). A click that places or fills a bucket has none.
     pub use_pos: Option<Pos>,
+    /// The hotbar slot the movement wants in the hand this tick: a tool to break with, a block to place, a bucket. Not kept between ticks.
+    pub select: Option<usize>,
     pub failure: Option<MoveFailure>,
 }
 
 impl MoveState {
     pub fn new() -> MoveState {
-        MoveState { status: MoveStatus::Prepping, target: None, keys: Keys::default(), use_pos: None, failure: None }
+        MoveState { status: MoveStatus::Prepping, target: None, keys: Keys::default(), use_pos: None, select: None, failure: None }
     }
 }
 
@@ -181,6 +183,9 @@ pub struct Controls {
     /// `LookBehavior.target`, set by a movement and consumed by `Pathing::tick` when it builds the intent.
     pub look: Option<Rotation>,
     pub use_pos: Option<Pos>,
+    /// The hotbar slot a movement asked for this tick; consumed by `Pathing::tick` when it builds the intent. A slot stays selected
+    /// until another is asked for, as in the game.
+    pub select: Option<usize>,
 }
 
 impl Controls {
@@ -198,7 +203,11 @@ impl Controls {
 /// the player's own movement keys, jump and sneak are not read at all, and the fields below are the only input. When `active`
 /// is false nothing is overridden and the player's own keys apply.
 ///
-/// An intent never asks to break or place. `use_block` is the one use of the right click, on a door or fence gate.
+/// Breaking and placing are `attack` and `use_item`: the glue holds the left button for as long as `attack` is true, and presses the
+/// right button on the ticks `use_item` is true. Both act on the block the glue's crosshair is on after the view of the same intent is
+/// applied; the engine aims with `rotation`. Neither is ever set on the tick a different slot is asked for in `select_slot`, so the
+/// game has the new slot in the hand before it clicks. The right button is not held when the left one is (`InputOverrideHandler`).
+/// `use_block` is the right click on a door or fence gate, with its own aim.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Intent {
     /// A path is being followed (upstream's `isPathing`, or a forced movement key).
@@ -216,6 +225,14 @@ pub struct Intent {
     pub sprint: bool,
     /// Right click on this block: a closed door or fence gate. Only when `ExecSettings::can_use_blocks` is on.
     pub use_block: Option<Pos>,
+    /// The hotbar slot to put in the hand (`Inventory.selected`), 0 to 8. `None`: leave the hand as it is. The slot stays until another is asked for.
+    pub select_slot: Option<usize>,
+    /// The left button is down: break the block the crosshair is on. When the glue sees this go from true to false, or the mod lets go
+    /// of the player (`/b stop`), it stops the dig (upstream: `BlockBreakHelper.stopBreakingBlock`).
+    pub attack: bool,
+    /// The right button is pressed this tick: place the held block against the block the crosshair is on, or use the held bucket. The
+    /// game repeats a held button every 4 ticks; the movements that place press it until the block is there.
+    pub use_item: bool,
     /// `Movement.update` sets `abilities.flying = false` while a path runs.
     pub cancel_flying: bool,
     /// `PathingBehavior.onPlayerUpdate` turns the game's auto jump off while a path runs.

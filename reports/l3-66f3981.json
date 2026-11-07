@@ -7,10 +7,10 @@
    "scenario": "s05_natural300_chat0",
    "chat": false,
    "status": "pass",
-   "ticks": 2150,
-   "ticks_from_command_to_arrival": 2129,
+   "ticks": 2109,
+   "ticks_from_command_to_arrival": 2088,
    "command_tick": 10,
-   "arrived_tick": 2139,
+   "arrived_tick": 2098,
    "distance_to_goal_xz": 0.1,
    "min_health": 20.0,
    "successful_searches": 2,
@@ -20,11 +20,11 @@
    "scenario": "s10_far1500_chat0",
    "chat": false,
    "status": "pass",
-   "ticks": 9846,
-   "ticks_from_command_to_arrival": 9825,
+   "ticks": 10019,
+   "ticks_from_command_to_arrival": 9998,
    "command_tick": 10,
-   "arrived_tick": 9835,
-   "distance_to_goal_xz": 0.05,
+   "arrived_tick": 10008,
+   "distance_to_goal_xz": 0.17,
    "min_health": 20.0,
    "successful_searches": 10,
    "failed_checks": []
@@ -137,11 +137,11 @@
    "scenario": "s07_block_chat0",
    "chat": false,
    "status": "pass",
-   "ticks": 186,
-   "ticks_from_command_to_arrival": 165,
+   "ticks": 185,
+   "ticks_from_command_to_arrival": 164,
    "command_tick": 10,
-   "arrived_tick": 175,
-   "distance_to_goal_xz": 0.27,
+   "arrived_tick": 174,
+   "distance_to_goal_xz": 0.3,
    "min_health": 20.0,
    "successful_searches": 2,
    "failed_checks": []
@@ -250,28 +250,648 @@
    "arrived_tick": null,
    "min_health": 20.0,
    "failed_checks": []
+  },
+  {
+   "scenario": "b01_break_stone_chat0",
+   "chat": false,
+   "status": "pass",
+   "ticks": 85,
+   "blocks": {
+    "broken": 1,
+    "placed": 0,
+    "water_cells": 0,
+    "other": [],
+    "segments": 1
+   },
+   "estimated_vs_actual_ticks": {
+    "estimated": 61.09,
+    "actual": 62,
+    "ratio": 1.015
+   },
+   "slot_start": 5,
+   "slot_end": 0,
+   "slot_restored_after_the_path": false,
+   "hotbar_start": "0:iron_pickaxe x1 d0",
+   "hotbar_end": "0:iron_pickaxe x1 d1; 1:cobblestone x1 d0",
+   "ticks_from_command_to_arrival": 64,
+   "command_tick": 10,
+   "arrived_tick": 74,
+   "distance_to_goal_xz": 0.09,
+   "min_health": 20.0,
+   "successful_searches": 1,
+   "failed_checks": []
+  },
+  {
+   "scenario": "b02_break_dirt_hand_chat0",
+   "chat": false,
+   "status": "pass",
+   "ticks": 98,
+   "blocks": {
+    "broken": 1,
+    "placed": 0,
+    "water_cells": 0,
+    "other": [],
+    "segments": 1
+   },
+   "estimated_vs_actual_ticks": {
+    "estimated": 65.03,
+    "actual": 75,
+    "ratio": 1.153
+   },
+   "slot_start": 3,
+   "slot_end": 0,
+   "slot_restored_after_the_path": false,
+   "hotbar_start": "",
+   "hotbar_end": "0:dirt x1 d0",
+   "ticks_from_command_to_arrival": 77,
+   "command_tick": 10,
+   "arrived_tick": 87,
+   "distance_to_goal_xz": 0.01,
+   "min_health": 20.0,
+   "successful_searches": 1,
+   "failed_checks": []
+  },
+  {
+   "scenario": "b03_bridge_chat0",
+   "chat": false,
+   "status": "pass",
+   "ticks": 86,
+   "blocks": {
+    "broken": 0,
+    "placed": 3,
+    "water_cells": 0,
+    "other": [],
+    "segments": 1
+   },
+   "estimated_vs_actual_ticks": {
+    "estimated": 80.04,
+    "actual": 63,
+    "ratio": 0.787
+   },
+   "slot_start": 6,
+   "slot_end": 0,
+   "slot_restored_after_the_path": false,
+   "hotbar_start": "0:cobblestone x64 d0",
+   "hotbar_end": "0:cobblestone x61 d0",
+   "ticks_from_command_to_arrival": 65,
+   "command_tick": 10,
+   "arrived_tick": 75,
+   "distance_to_goal_xz": 0.0,
+   "min_health": 20.0,
+   "successful_searches": 1,
+   "failed_checks": []
+  },
+  {
+   "scenario": "b04_pillar_ledge_chat0",
+   "chat": false,
+   "status": "pass",
+   "ticks": 81,
+   "blocks": {
+    "broken": 0,
+    "placed": 5,
+    "water_cells": 0,
+    "other": [],
+    "segments": 1
+   },
+   "estimated_vs_actual_ticks": {
+    "estimated": 51.01,
+    "actual": 58,
+    "ratio": 1.137
+   },
+   "slot_start": 4,
+   "slot_end": 0,
+   "slot_restored_after_the_path": false,
+   "hotbar_start": "0:cobblestone x64 d0",
+   "hotbar_end": "0:cobblestone x59 d0",
+   "ticks_from_command_to_arrival": 60,
+   "command_tick": 10,
+   "arrived_tick": 70,
+   "distance_to_goal_xz": 0.01,
+   "min_health": 20.0,
+   "successful_searches": 1,
+   "failed_checks": []
+  },
+  {
+   "scenario": "b04_pillar_shaft_chat0",
+   "chat": false,
+   "status": "pass",
+   "ticks": 73,
+   "blocks": {
+    "broken": 0,
+    "placed": 6,
+    "water_cells": 0,
+    "other": [],
+    "segments": 1
+   },
+   "estimated_vs_actual_ticks": {
+    "estimated": 48.98,
+    "actual": 50,
+    "ratio": 1.021
+   },
+   "slot_start": 4,
+   "slot_end": 0,
+   "slot_restored_after_the_path": false,
+   "hotbar_start": "0:cobblestone x64 d0",
+   "hotbar_end": "0:cobblestone x58 d0",
+   "ticks_from_command_to_arrival": 52,
+   "command_tick": 10,
+   "arrived_tick": 62,
+   "distance_to_goal_xz": 0.0,
+   "min_health": 20.0,
+   "successful_searches": 1,
+   "failed_checks": []
+  },
+  {
+   "scenario": "b05_dig_down5_chat0",
+   "chat": false,
+   "status": "pass",
+   "ticks": 99,
+   "blocks": {
+    "broken": 5,
+    "placed": 0,
+    "water_cells": 0,
+    "other": [],
+    "segments": 1
+   },
+   "estimated_vs_actual_ticks": {
+    "estimated": 75.57,
+    "actual": 76,
+    "ratio": 1.006
+   },
+   "slot_start": 7,
+   "slot_end": 0,
+   "slot_restored_after_the_path": false,
+   "hotbar_start": "0:iron_pickaxe x1 d0",
+   "hotbar_end": "0:iron_pickaxe x1 d5; 1:cobblestone x5 d0",
+   "ticks_from_command_to_arrival": 78,
+   "command_tick": 10,
+   "arrived_tick": 88,
+   "distance_to_goal_xz": 0.0,
+   "min_health": 20.0,
+   "successful_searches": 1,
+   "failed_checks": []
+  },
+  {
+   "scenario": "b06_wall_allowbreakon_chat0",
+   "chat": false,
+   "status": "pass",
+   "ticks": 94,
+   "blocks": {
+    "broken": 2,
+    "placed": 0,
+    "water_cells": 0,
+    "other": [],
+    "segments": 1
+   },
+   "estimated_vs_actual_ticks": {
+    "estimated": 62.83,
+    "actual": 71,
+    "ratio": 1.13
+   },
+   "slot_start": 2,
+   "slot_end": 0,
+   "slot_restored_after_the_path": false,
+   "hotbar_start": "0:iron_pickaxe x1 d0",
+   "hotbar_end": "0:iron_pickaxe x1 d2; 1:cobblestone x1 d0",
+   "ticks_from_command_to_arrival": 73,
+   "command_tick": 10,
+   "arrived_tick": 83,
+   "distance_to_goal_xz": 0.07,
+   "min_health": 20.0,
+   "successful_searches": 1,
+   "failed_checks": []
+  },
+  {
+   "scenario": "b06_wall_allowbreakoff_chat0",
+   "chat": false,
+   "status": "pass",
+   "ticks": 108,
+   "blocks": {
+    "broken": 0,
+    "placed": 0,
+    "water_cells": 0,
+    "other": [],
+    "segments": 1
+   },
+   "estimated_vs_actual_ticks": {
+    "estimated": 86.04,
+    "actual": 85,
+    "ratio": 0.988
+   },
+   "slot_start": 2,
+   "slot_end": 2,
+   "slot_restored_after_the_path": true,
+   "hotbar_start": "0:iron_pickaxe x1 d0",
+   "hotbar_end": "0:iron_pickaxe x1 d0",
+   "ticks_from_command_to_arrival": 87,
+   "command_tick": 10,
+   "arrived_tick": 97,
+   "distance_to_goal_xz": 0.17,
+   "min_health": 20.0,
+   "successful_searches": 1,
+   "failed_checks": []
+  },
+  {
+   "scenario": "b07_bucket_fall12_chat0",
+   "chat": false,
+   "status": "pass",
+   "ticks": 72,
+   "blocks": {
+    "broken": 0,
+    "placed": 0,
+    "water_cells": 0,
+    "other": [],
+    "segments": 1
+   },
+   "estimated_vs_actual_ticks": {
+    "estimated": 47.89,
+    "actual": 49,
+    "ratio": 1.023
+   },
+   "slot_start": 3,
+   "slot_end": 0,
+   "slot_restored_after_the_path": false,
+   "hotbar_start": "0:water_bucket x1 d0",
+   "hotbar_end": "0:water_bucket x1 d0",
+   "ticks_from_command_to_arrival": 51,
+   "command_tick": 10,
+   "arrived_tick": 61,
+   "distance_to_goal_xz": 0.11,
+   "min_health": 20.0,
+   "successful_searches": 1,
+   "failed_checks": []
+  },
+  {
+   "scenario": "b08_stop_dig_chat0",
+   "chat": false,
+   "status": "pass",
+   "ticks": 301,
+   "command_tick": 10,
+   "arrived_tick": null,
+   "min_health": 20.0,
+   "failed_checks": []
+  },
+  {
+   "scenario": "b09_dig_stone_hand_chat0",
+   "chat": false,
+   "status": "pass",
+   "ticks": 212,
+   "blocks": {
+    "broken": 1,
+    "placed": 0,
+    "water_cells": 0,
+    "other": [],
+    "segments": 1
+   },
+   "estimated_vs_actual_ticks": {
+    "estimated": 189.34,
+    "actual": 189,
+    "ratio": 0.998
+   },
+   "slot_start": 0,
+   "slot_end": 0,
+   "slot_restored_after_the_path": true,
+   "hotbar_start": "",
+   "hotbar_end": "",
+   "ticks_from_command_to_arrival": 191,
+   "command_tick": 10,
+   "arrived_tick": 201,
+   "distance_to_goal_xz": 0.04,
+   "min_health": 20.0,
+   "successful_searches": 1,
+   "failed_checks": []
+  },
+  {
+   "scenario": "b01_break_stone_chat1",
+   "chat": true,
+   "status": "pass",
+   "ticks": 90,
+   "blocks": {
+    "broken": 1,
+    "placed": 0,
+    "water_cells": 0,
+    "other": [],
+    "segments": 1
+   },
+   "estimated_vs_actual_ticks": {
+    "estimated": 61.09,
+    "actual": 67,
+    "ratio": 1.097
+   },
+   "slot_start": 5,
+   "slot_end": 0,
+   "slot_restored_after_the_path": false,
+   "hotbar_start": "0:iron_pickaxe x1 d0",
+   "hotbar_end": "0:iron_pickaxe x1 d1; 1:cobblestone x1 d0",
+   "ticks_from_command_to_arrival": 69,
+   "command_tick": 10,
+   "arrived_tick": 79,
+   "distance_to_goal_xz": 0.09,
+   "min_health": 20.0,
+   "successful_searches": 1,
+   "failed_checks": []
+  },
+  {
+   "scenario": "b02_break_dirt_hand_chat1",
+   "chat": true,
+   "status": "pass",
+   "ticks": 97,
+   "blocks": {
+    "broken": 1,
+    "placed": 0,
+    "water_cells": 0,
+    "other": [],
+    "segments": 1
+   },
+   "estimated_vs_actual_ticks": {
+    "estimated": 68.59,
+    "actual": 74,
+    "ratio": 1.079
+   },
+   "slot_start": 3,
+   "slot_end": 0,
+   "slot_restored_after_the_path": false,
+   "hotbar_start": "",
+   "hotbar_end": "0:dirt x1 d0",
+   "ticks_from_command_to_arrival": 76,
+   "command_tick": 10,
+   "arrived_tick": 86,
+   "distance_to_goal_xz": 0.09,
+   "min_health": 20.0,
+   "successful_searches": 1,
+   "failed_checks": []
+  },
+  {
+   "scenario": "b03_bridge_chat1",
+   "chat": true,
+   "status": "pass",
+   "ticks": 86,
+   "blocks": {
+    "broken": 0,
+    "placed": 3,
+    "water_cells": 0,
+    "other": [],
+    "segments": 1
+   },
+   "estimated_vs_actual_ticks": {
+    "estimated": 80.04,
+    "actual": 63,
+    "ratio": 0.787
+   },
+   "slot_start": 6,
+   "slot_end": 0,
+   "slot_restored_after_the_path": false,
+   "hotbar_start": "0:cobblestone x64 d0",
+   "hotbar_end": "0:cobblestone x61 d0",
+   "ticks_from_command_to_arrival": 65,
+   "command_tick": 10,
+   "arrived_tick": 75,
+   "distance_to_goal_xz": 0.0,
+   "min_health": 20.0,
+   "successful_searches": 1,
+   "failed_checks": []
+  },
+  {
+   "scenario": "b04_pillar_ledge_chat1",
+   "chat": true,
+   "status": "pass",
+   "ticks": 81,
+   "blocks": {
+    "broken": 0,
+    "placed": 5,
+    "water_cells": 0,
+    "other": [],
+    "segments": 1
+   },
+   "estimated_vs_actual_ticks": {
+    "estimated": 51.01,
+    "actual": 58,
+    "ratio": 1.137
+   },
+   "slot_start": 4,
+   "slot_end": 0,
+   "slot_restored_after_the_path": false,
+   "hotbar_start": "0:cobblestone x64 d0",
+   "hotbar_end": "0:cobblestone x59 d0",
+   "ticks_from_command_to_arrival": 60,
+   "command_tick": 10,
+   "arrived_tick": 70,
+   "distance_to_goal_xz": 0.01,
+   "min_health": 20.0,
+   "successful_searches": 1,
+   "failed_checks": []
+  },
+  {
+   "scenario": "b04_pillar_shaft_chat1",
+   "chat": true,
+   "status": "pass",
+   "ticks": 73,
+   "blocks": {
+    "broken": 0,
+    "placed": 6,
+    "water_cells": 0,
+    "other": [],
+    "segments": 1
+   },
+   "estimated_vs_actual_ticks": {
+    "estimated": 48.98,
+    "actual": 50,
+    "ratio": 1.021
+   },
+   "slot_start": 4,
+   "slot_end": 0,
+   "slot_restored_after_the_path": false,
+   "hotbar_start": "0:cobblestone x64 d0",
+   "hotbar_end": "0:cobblestone x58 d0",
+   "ticks_from_command_to_arrival": 52,
+   "command_tick": 10,
+   "arrived_tick": 62,
+   "distance_to_goal_xz": 0.0,
+   "min_health": 20.0,
+   "successful_searches": 1,
+   "failed_checks": []
+  },
+  {
+   "scenario": "b05_dig_down5_chat1",
+   "chat": true,
+   "status": "pass",
+   "ticks": 99,
+   "blocks": {
+    "broken": 5,
+    "placed": 0,
+    "water_cells": 0,
+    "other": [],
+    "segments": 1
+   },
+   "estimated_vs_actual_ticks": {
+    "estimated": 75.57,
+    "actual": 76,
+    "ratio": 1.006
+   },
+   "slot_start": 7,
+   "slot_end": 0,
+   "slot_restored_after_the_path": false,
+   "hotbar_start": "0:iron_pickaxe x1 d0",
+   "hotbar_end": "0:iron_pickaxe x1 d5; 1:cobblestone x5 d0",
+   "ticks_from_command_to_arrival": 78,
+   "command_tick": 10,
+   "arrived_tick": 88,
+   "distance_to_goal_xz": 0.0,
+   "min_health": 20.0,
+   "successful_searches": 1,
+   "failed_checks": []
+  },
+  {
+   "scenario": "b06_wall_allowbreakon_chat1",
+   "chat": true,
+   "status": "pass",
+   "ticks": 94,
+   "blocks": {
+    "broken": 2,
+    "placed": 0,
+    "water_cells": 0,
+    "other": [],
+    "segments": 1
+   },
+   "estimated_vs_actual_ticks": {
+    "estimated": 62.83,
+    "actual": 71,
+    "ratio": 1.13
+   },
+   "slot_start": 2,
+   "slot_end": 0,
+   "slot_restored_after_the_path": false,
+   "hotbar_start": "0:iron_pickaxe x1 d0",
+   "hotbar_end": "0:iron_pickaxe x1 d2; 1:cobblestone x2 d0",
+   "ticks_from_command_to_arrival": 73,
+   "command_tick": 10,
+   "arrived_tick": 83,
+   "distance_to_goal_xz": 0.07,
+   "min_health": 20.0,
+   "successful_searches": 1,
+   "failed_checks": []
+  },
+  {
+   "scenario": "b06_wall_allowbreakoff_chat1",
+   "chat": true,
+   "status": "pass",
+   "ticks": 108,
+   "blocks": {
+    "broken": 0,
+    "placed": 0,
+    "water_cells": 0,
+    "other": [],
+    "segments": 1
+   },
+   "estimated_vs_actual_ticks": {
+    "estimated": 86.04,
+    "actual": 85,
+    "ratio": 0.988
+   },
+   "slot_start": 2,
+   "slot_end": 2,
+   "slot_restored_after_the_path": true,
+   "hotbar_start": "0:iron_pickaxe x1 d0",
+   "hotbar_end": "0:iron_pickaxe x1 d0",
+   "ticks_from_command_to_arrival": 87,
+   "command_tick": 10,
+   "arrived_tick": 97,
+   "distance_to_goal_xz": 0.17,
+   "min_health": 20.0,
+   "successful_searches": 1,
+   "failed_checks": []
+  },
+  {
+   "scenario": "b07_bucket_fall12_chat1",
+   "chat": true,
+   "status": "pass",
+   "ticks": 72,
+   "blocks": {
+    "broken": 0,
+    "placed": 0,
+    "water_cells": 0,
+    "other": [],
+    "segments": 1
+   },
+   "estimated_vs_actual_ticks": {
+    "estimated": 47.89,
+    "actual": 49,
+    "ratio": 1.023
+   },
+   "slot_start": 3,
+   "slot_end": 0,
+   "slot_restored_after_the_path": false,
+   "hotbar_start": "0:water_bucket x1 d0",
+   "hotbar_end": "0:water_bucket x1 d0",
+   "ticks_from_command_to_arrival": 51,
+   "command_tick": 10,
+   "arrived_tick": 61,
+   "distance_to_goal_xz": 0.11,
+   "min_health": 20.0,
+   "successful_searches": 1,
+   "failed_checks": []
+  },
+  {
+   "scenario": "b08_stop_dig_chat1",
+   "chat": true,
+   "status": "pass",
+   "ticks": 301,
+   "command_tick": 10,
+   "arrived_tick": null,
+   "min_health": 20.0,
+   "failed_checks": []
+  },
+  {
+   "scenario": "b09_dig_stone_hand_chat1",
+   "chat": true,
+   "status": "pass",
+   "ticks": 212,
+   "blocks": {
+    "broken": 1,
+    "placed": 0,
+    "water_cells": 0,
+    "other": [],
+    "segments": 1
+   },
+   "estimated_vs_actual_ticks": {
+    "estimated": 189.34,
+    "actual": 189,
+    "ratio": 0.998
+   },
+   "slot_start": 0,
+   "slot_end": 0,
+   "slot_restored_after_the_path": true,
+   "hotbar_start": "",
+   "hotbar_end": "",
+   "ticks_from_command_to_arrival": 191,
+   "command_tick": 10,
+   "arrived_tick": 201,
+   "distance_to_goal_xz": 0.04,
+   "min_health": 20.0,
+   "successful_searches": 1,
+   "failed_checks": []
   }
  ],
  "overall_timing": {
   "search_micros": {
-   "max": 137700.0,
-   "median_of_medians": 929.0,
-   "runs": 20
+   "max": 1908173.0,
+   "median_of_medians": 5933.0,
+   "runs": 42
   },
   "snapshot_micros": {
-   "max": 1172.0,
-   "median_of_medians": 62.5,
-   "runs": 20
+   "max": 1778.0,
+   "median_of_medians": 95.0,
+   "runs": 42
   },
   "snapshot_chunks": {
    "max": 637.0,
    "median_of_medians": 637.0,
-   "runs": 20
+   "runs": 42
   },
   "mod_tick_micros": {
-   "max": 1622.0,
-   "median_of_medians": 18.0,
-   "runs": 20
+   "max": 17424.0,
+   "median_of_medians": 45.2,
+   "runs": 42
   }
  }
 }

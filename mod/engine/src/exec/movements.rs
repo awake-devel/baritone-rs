@@ -3,15 +3,18 @@
 // movements/Movement{Traverse,Ascend,Descend,Diagonal,Fall,Pillar,Downward}.java (updateState, safeToCancel, prepared).
 // LGPL-3.0-or-later, see lib.rs.
 //
-// The rules of each movement as they run with `allowBreak` and `allowPlace` off. A branch that needs breaking, placing, a bucket,
-// swimming or parkour ends the movement as `Failed` with a `MoveFailure`: nothing is skipped silently. Comments of the form
-// "upstream:" say what the branch does there.
+// The rules of each movement, with breaking and placing: `prepared` breaks what is in the way, and the bridge, the ascend and the pillar place
+// blocks. A branch that needs swimming or parkour, or a click on a door the glue cannot make, ends the movement as `Failed` with a
+// `MoveFailure`: nothing is skipped silently. Comments of the form "upstream:" say what the branch does there.
 //
-// A movement does not touch the game. It reads the player (`PlayerView`) and the world (`Ctx`), and writes a `MoveState`.
+// A movement does not touch the game. It reads the player (`PlayerView`), the hotbar (`Inventory`) and the world (`Ctx`), and writes a
+// `MoveState`.
+use super::helper::{attempt_to_place_a_block, is_looking_at, move_towards_with_slight_rotation, reachable, switch_to_best_tool_for, PlaceResult};
 use super::state::*;
 use crate::blocks::{Block, Direction};
 use crate::costs::COST_INF;
-use crate::look::{block_pos_center, calc_rotation_from_vec3d};
+use crate::inventory::{find_hotbar_slot, select_throwaway, Inventory, NoInventory};
+use crate::look::{block_pos_center, calc_rotation_from_vec3d, AimProcessor, Rotation};
 use crate::movement::diagonal::is_blocking_door;
 use crate::movement::helper::{is_bottom_slab, is_climbable, is_liquid, is_water, Bs, Ctx};
 use crate::movement::step::{Movement, MovementKind};
@@ -25,6 +28,10 @@ pub struct MoveRuntime {
     pub state: MoveState,
     /// `MovementDescend.numTicks` and `MovementDownward.numTicks`.
     pub num_ticks: i32,
+    /// `MovementAscend.ticksWithoutPlacement`.
+    pub ticks_without_placement: i32,
+    /// `MovementTraverse.wasTheBridgeBlockAlwaysThere`.
+    pub was_the_bridge_block_always_there: bool,
     /// `MovementDescend.forceSafeMode`.
     pub force_safe_mode: bool,
     /// `Movement.getValidPositions`, computed once.
@@ -33,7 +40,7 @@ pub struct MoveRuntime {
 
 impl MoveRuntime {
     pub fn new(mv: &Movement) -> MoveRuntime {
-        MoveRuntime { state: MoveState::new(), num_ticks: 0, force_safe_mode: false, valid: valid_positions(mv) }
+        MoveRuntime { state: MoveState::new(), num_ticks: 0, ticks_without_placement: 0, was_the_bridge_block_always_there: true, force_safe_mode: false, valid: valid_positions(mv) }
     }
 
     /// `Movement.reset`:
@@ -45,20 +52,46 @@ impl MoveRuntime {
     pub fn reset(&mut self) {
         self.state = MoveState::new();
         self.num_ticks = 0;
+        self.ticks_without_placement = 0;
+        self.was_the_bridge_block_always_there = true;
         self.force_safe_mode = false;
     }
 }
 
-/// What a movement reads: the world through the context, the player, the settings and where a new path would start.
+/// What a movement reads of the game besides the world, the player and the hotbar.
+#[derive(Clone, Copy, Debug)]
+pub struct GameFacts {
+    /// The reach for blocks (upstream's `getBlockReachDistance`): 4.5 in survival, 5 in creative.
+    pub reach: f64,
+    /// The world's dimension is the Nether (`Level.NETHER`): a water bucket evaporates there.
+    pub nether: bool,
+    /// Upstream's aim processor (`LookBehavior.getAimProcessor`): what the game is asked to turn to for an aim.
+    pub aim: AimProcessor,
+}
+
+impl Default for GameFacts {
+    fn default() -> Self {
+        GameFacts { reach: 4.5, nether: false, aim: AimProcessor::new(0.5) }
+    }
+}
+
+/// What a movement reads: the world through the context, the player, the hotbar, the settings and where a new path would start.
 pub struct Env<'a, W: WorldView> {
     pub ctx: &'a Ctx<'a, W>,
     pub p: &'a PlayerView,
     pub set: &'a ExecSettings,
     /// `PathingBehavior.pathStart`, which `Movement.playerInValidPosition` also accepts.
     pub path_start: Pos,
+    pub inv: &'a dyn Inventory,
+    pub game: GameFacts,
 }
 
 impl<'a, W: WorldView> Env<'a, W> {
+    /// An environment with an empty hotbar and the default facts of the game.
+    pub fn new(ctx: &'a Ctx<'a, W>, p: &'a PlayerView, set: &'a ExecSettings, path_start: Pos) -> Env<'a, W> {
+        Env { ctx, p, set, path_start, inv: &NoInventory, game: GameFacts::default() }
+    }
+
     pub fn get(&self, p: Pos) -> Bs<'a> {
         self.ctx.get(p.x, p.y, p.z)
     }
@@ -344,7 +377,7 @@ pub fn to_walk_into<W: WorldView>(mv: &Movement, ctx: &Ctx<'_, W>) -> Vec<Pos> {
 /// `Movement.safeToCancel()`: By kind.
 /// `Movement.safeToCancel(MovementState)`: True unless the kind says otherwise.
 /// `MovementTraverse.safeToCancel`:
-/// `MovementAscend.safeToCancel`: `ticksWithoutPlacement` is always 0: nothing is placed.
+/// `MovementAscend.safeToCancel`: not once a block had to be placed.
 /// `MovementFall.safeToCancel`:
 /// `Movement.safeToCancel()` with each movement's override: whether the path may be cut or stopped now.
 pub fn safe_to_cancel<W: WorldView>(mv: &Movement, rt: &MoveRuntime, env: &Env<'_, W>) -> bool {
@@ -352,8 +385,8 @@ pub fn safe_to_cancel<W: WorldView>(mv: &Movement, rt: &MoveRuntime, env: &Env<'
     match mv.kind {
         // MovementTraverse.safeToCancel: not while on the way over a gap (the block is placed upstream)
         MovementKind::Traverse => !running || env.can_walk_on(mv.dest.below(1)),
-        // MovementAscend.safeToCancel: `ticksWithoutPlacement == 0`, and nothing is ever placed
-        MovementKind::Ascend => true,
+        // MovementAscend.safeToCancel: if we had to place, don't allow pause
+        MovementKind::Ascend => !running || rt.ticks_without_placement == 0,
         MovementKind::Diagonal => diagonal_safe_to_cancel(mv, env),
         // MovementFall.safeToCancel
         MovementKind::Fall => env.p.feet() == mv.src || !running,
@@ -386,24 +419,55 @@ fn diagonal_safe_to_cancel<W: WorldView>(mv: &Movement, env: &Env<'_, W>) -> boo
 
 // ---------------------------------------------------------------- update
 
-enum Prep {
-    Ready,
-    Fail,
+/// Whether an incidental left click (the traverse's "something is in the way", the pillar's block at the feet) may be pressed: `allowBreak` is on, and
+/// the block under the crosshair is not one that must never be broken (docs/deviations.md D28; upstream presses it whatever it is, U11).
+fn may_click_left<W: WorldView>(env: &Env<'_, W>) -> bool {
+    env.ctx.cfg.allow_break && !env.p.looking_at.is_some_and(|h| env.ctx.never_break_at(h.pos.x, h.pos.y, h.pos.z))
 }
 
-/// `Movement.prepared`: whether the cells to break can be walked through. Upstream mines the first one that cannot (and the click is the
-/// movement's work); here that is a failure. It also skips the wait for falling blocks, which needs the entities.
-fn prepared_base<W: WorldView>(mv: &Movement, rt: &mut MoveRuntime, env: &Env<'_, W>) -> Prep {
+/// `Movement.prepared`: breaks what is in the way. It waits for a falling block at the cell, then, for the first cell that cannot be walked
+/// through, asks for the best tool and aims at a face of the block that the ray reaches (and presses the left button once the view is on it);
+/// when no face is reachable it breaks the block anyway, aimed at its middle. True when nothing is in the way. Upstream's final case, a
+/// block in the way with no aim at all, sets the status to unreachable; that branch cannot be reached, since both paths of the loop return
+/// (docs/deviations.md D27).
+fn prepared_base<W: WorldView>(mv: &Movement, rt: &mut MoveRuntime, env: &Env<'_, W>) -> bool {
     if rt.state.status == MoveStatus::Waiting {
-        return Prep::Ready;
+        return true;
     }
-    for p in positions_to_break(mv) {
-        if !env.can_walk_through(p) {
-            fail(&mut rt.state, MoveFailure::NeedsBreaking(p));
-            return Prep::Fail;
+    for block_pos in positions_to_break(mv) {
+        if env.set.pause_mining_for_falling_blocks && env.ctx.world.falling_block_near(block_pos.x, block_pos.y, block_pos.z) {
+            return false;
+        }
+        if !env.can_walk_through(block_pos) {
+            // can't break air, so don't try
+            if env.ctx.mining_duration_at(block_pos.x, block_pos.y, block_pos.z, false) >= COST_INF {
+                // Not upstream (docs/deviations.md D28): the settings do not allow this block to be broken (`allowBreak`, `allowBreakAnyway`,
+                // `blocksToDisallowBreaking`, a liquid next to it, a tool that cannot dig it). Upstream relies on the cost check that cancels
+                // the path, which does not run while the movement is not safe to cancel; then it breaks the block all the same.
+                rt.state.status = MoveStatus::Unreachable;
+                return true;
+            }
+            switch_to_best_tool_for(env, &mut rt.state, block_pos);
+            if let Some(rot_towards_block) = reachable(env, block_pos, env.game.reach, false) {
+                rt.state.target = Some(Target { rotation: rot_towards_block, force: true });
+                if is_looking_at(env.p, block_pos) || env.p.rotations().is_really_close_to(rot_towards_block) {
+                    rt.state.keys.click_left = true;
+                }
+                return false;
+            }
+            // get rekt minecraft
+            // i'm doing it anyway
+            // i dont care if theres snow in the way!!!!!!!
+            // you dont own me!!!!
+            rt.state.target = Some(Target { rotation: calc_rotation_from_vec3d(env.p.head(), block_pos_center(block_pos), env.p.rotations()), force: true });
+            // don't check selectedblock on this one, this is a fallback when we can't see any face directly, it's intended to be breaking the "incorrect" block
+            rt.state.keys.click_left = true;
+            return false;
         }
     }
-    Prep::Ready
+    // (upstream: if `somethingInTheWay`, "we have no target rotation to reach any", the status becomes unreachable. Both ways out of the
+    // `if` above return, so `somethingInTheWay` is always false here.)
+    true
 }
 
 /// `MovementDiagonal.prepared`: Always ready.
@@ -411,15 +475,15 @@ fn prepared_base<W: WorldView>(mv: &Movement, rt: &mut MoveRuntime, env: &Env<'_
 /// `MovementTraverse.prepared`:
 /// `MovementPillar.prepared`:
 /// `prepared` of each movement.
-fn prepared<W: WorldView>(mv: &Movement, rt: &mut MoveRuntime, env: &Env<'_, W>) -> Prep {
+fn prepared<W: WorldView>(mv: &Movement, rt: &mut MoveRuntime, env: &Env<'_, W>) -> bool {
     let feet = env.p.feet();
     match mv.kind {
         // MovementDiagonal.prepared
-        MovementKind::Diagonal => Prep::Ready,
+        MovementKind::Diagonal => true,
         // MovementFall.prepared: only if one of the first three cells needs breaking
         MovementKind::Fall => {
             if rt.state.status == MoveStatus::Waiting {
-                return Prep::Ready;
+                return true;
             }
             let all = positions_to_break(mv);
             for p in all.iter().take(4) {
@@ -427,7 +491,7 @@ fn prepared<W: WorldView>(mv: &Movement, rt: &mut MoveRuntime, env: &Env<'_, W>)
                     return prepared_base(mv, rt, env);
                 }
             }
-            Prep::Ready
+            true
         }
         MovementKind::Traverse => {
             // MovementTraverse.prepared: on a ladder or vine, sneak to stay on it
@@ -442,7 +506,7 @@ fn prepared<W: WorldView>(mv: &Movement, rt: &mut MoveRuntime, env: &Env<'_, W>)
                 rt.state.keys.sneak = true;
             }
             if env.is_water(mv.dest.above(1)) {
-                return Prep::Ready;
+                return true;
             }
             prepared_base(mv, rt, env)
         }
@@ -452,11 +516,10 @@ fn prepared<W: WorldView>(mv: &Movement, rt: &mut MoveRuntime, env: &Env<'_, W>)
 
 /// `Movement.updateState`: prepared, then waiting, then running.
 fn base_update_state<W: WorldView>(mv: &Movement, rt: &mut MoveRuntime, env: &Env<'_, W>) {
-    match prepared(mv, rt, env) {
-        Prep::Fail => return,
-        Prep::Ready => {}
-    }
-    if rt.state.status == MoveStatus::Prepping {
+    if !prepared(mv, rt, env) {
+        rt.state.status = MoveStatus::Prepping;
+        return;
+    } else if rt.state.status == MoveStatus::Prepping {
         rt.state.status = MoveStatus::Waiting;
     }
     if rt.state.status == MoveStatus::Waiting {
@@ -476,6 +539,7 @@ pub fn update<W: WorldView>(mv: &Movement, rt: &mut MoveRuntime, env: &Env<'_, W
     // the keys of the last tick are gone, and the movement sets what it needs now
     rt.state.keys = Keys::default();
     rt.state.use_pos = None;
+    rt.state.select = None;
     update_state(mv, rt, env);
     let feet = env.p.feet();
     if env.is_liquid(feet) || env.p.in_water {
@@ -504,6 +568,9 @@ pub fn update<W: WorldView>(mv: &Movement, rt: &mut MoveRuntime, env: &Env<'_, W
     controls.clear_all_keys();
     controls.keys = rt.state.keys;
     controls.use_pos = rt.state.use_pos;
+    if rt.state.select.is_some() {
+        controls.select = rt.state.select;
+    }
     rt.state.keys = Keys::default();
     // If the current status indicates a completed movement
     if rt.state.status.is_complete() {
@@ -529,8 +596,8 @@ fn update_state<W: WorldView>(mv: &Movement, rt: &mut MoveRuntime, env: &Env<'_,
     }
 }
 
-/// `MovementTraverse.updateState`: The bridging branch (placing) fails by name.
-/// `MovementTraverse.updateState`.
+/// `MovementTraverse.updateState`: breaks the blocks ahead (walking on while it does, if `walkWhileBreaking`), opens doors and gates, walks
+/// on, or bridges: sneaks to the edge, places the block under the destination, and backs up to place it against the block it left.
 fn traverse<W: WorldView>(mv: &Movement, rt: &mut MoveRuntime, env: &Env<'_, W>) {
     let (src, dest) = (mv.src, mv.dest);
     base_update_state(mv, rt, env);
@@ -538,8 +605,41 @@ fn traverse<W: WorldView>(mv: &Movement, rt: &mut MoveRuntime, env: &Env<'_, W>)
     let pb0 = env.get(positions[0]);
     let pb1 = env.get(positions[1]);
     if rt.state.status != MoveStatus::Running {
-        // upstream: with `walkWhileBreaking`, a movement that is mining ahead (PREPPING) walks towards the block meanwhile.
-        // This version never mines, so a movement is never PREPPING.
+        // if the setting is enabled
+        if !env.set.walk_while_breaking {
+            return;
+        }
+        // and if we're prepping (aka mining the block in front)
+        if rt.state.status != MoveStatus::Prepping {
+            return;
+        }
+        // and if it's fine to walk into the blocks in front
+        if crate::movement::helper::avoid_walking_into(&pb0, env.ctx.cfg) {
+            return;
+        }
+        if crate::movement::helper::avoid_walking_into(&pb1, env.ctx.cfg) {
+            return;
+        }
+        // and we aren't already pressed up against the block
+        let dist = (env.p.x - (f64::from(dest.x) + 0.5)).abs().max((env.p.z - (f64::from(dest.z) + 0.5)).abs());
+        if dist < 0.83 {
+            return;
+        }
+        let Some(target) = rt.state.target else {
+            // this can happen rarely when the server lags and doesn't send the falling sand entity until you've already walked through the block and are now mining the next one
+            return;
+        };
+        // combine the yaw to the center of the destination, and the pitch to the specific block we're trying to break
+        // it's safe to do this since the two blocks we break (in a traverse) are right on top of each other and so will have the same yaw
+        let yaw_to_dest = calc_rotation_from_vec3d(env.p.head(), block_pos_center(dest), env.p.rotations()).yaw;
+        let mut pitch_to_break = target.rotation.pitch;
+        if crate::movement::helper::is_block_normal_cube(&pb0) || (pb0.air && (crate::movement::helper::is_block_normal_cube(&pb1) || pb1.air)) {
+            // in the meantime, before we're right up against the block, we can break efficiently at this angle
+            pitch_to_break = 26.0;
+        }
+        rt.state.target = Some(Target { rotation: Rotation::new(yaw_to_dest, pitch_to_break), force: true });
+        rt.state.keys.forward = true;
+        rt.state.keys.sprint = true;
         return;
     }
     let st = &mut rt.state;
@@ -598,8 +698,7 @@ fn traverse<W: WorldView>(mv: &Movement, rt: &mut MoveRuntime, env: &Env<'_, W>)
         let into = add(dest.subtract(src), dest);
         let into_below = env.get(into);
         let into_above = env.get(into.above(1));
-        // wasTheBridgeBlockAlwaysThere is always true: a bridge block is never placed
-        if (!env.is_liquid(feet) || env.set.sprint_in_water) && (!crate::movement::helper::avoid_walking_into(&into_below, env.ctx.cfg) || is_water(&into_below)) && !crate::movement::helper::avoid_walking_into(&into_above, env.ctx.cfg) {
+        if rt.was_the_bridge_block_always_there && (!env.is_liquid(feet) || env.set.sprint_in_water) && (!crate::movement::helper::avoid_walking_into(&into_below, env.ctx.cfg) || is_water(&into_below)) && !crate::movement::helper::avoid_walking_into(&into_above, env.ctx.cfg) {
             st.keys.sprint = true;
         }
         let dest_down = env.get(dest.below(1));
@@ -608,13 +707,84 @@ fn traverse<W: WorldView>(mv: &Movement, rt: &mut MoveRuntime, env: &Env<'_, W>)
         }
         move_towards(env, st, positions[0]);
     } else {
-        // upstream: wasTheBridgeBlockAlwaysThere = false, then sneak, back up and place the block under dest
-        fail(st, MoveFailure::NeedsPlacing(place));
+        rt.was_the_bridge_block_always_there = false;
+        let standing_on = env.get(feet.below(1));
+        if standing_on.block == Block::SoulSand || standing_on.slab {
+            // see issue #118
+            let dist = (f64::from(dest.x) + 0.5 - env.p.x).abs().max((f64::from(dest.z) + 0.5 - env.p.z).abs());
+            if dist < 0.85 {
+                // 0.5 + 0.3 + epsilon
+                move_towards(env, st, dest);
+                st.keys.forward = false;
+                st.keys.back = true;
+                return;
+            }
+        }
+        let dist1 = (env.p.x - (f64::from(dest.x) + 0.5)).abs().max((env.p.z - (f64::from(dest.z) + 0.5)).abs());
+        let assume_safe_walk = env.set.assume_safe_walk;
+        let p = attempt_to_place_a_block(env, st, dest.below(1), false, !assume_safe_walk);
+        if (p == PlaceResult::ReadyToPlace || dist1 < 0.6) && !assume_safe_walk {
+            st.keys.sneak = true;
+        }
+        match p {
+            PlaceResult::ReadyToPlace => {
+                if env.p.crouching || assume_safe_walk {
+                    st.keys.click_right = true;
+                }
+                return;
+            }
+            PlaceResult::Attempting => {
+                if dist1 > 0.83 {
+                    // might need to go forward a bit
+                    let yaw = calc_rotation_from_vec3d(env.p.head(), block_pos_center(dest), env.p.rotations()).yaw;
+                    if st.target.is_some_and(|t| (t.rotation.yaw - yaw).abs() < 0.1) {
+                        // but only if our attempted place is straight ahead
+                        st.keys.forward = true;
+                        return;
+                    }
+                } else if st.target.is_some_and(|t| env.p.rotations().is_really_close_to(t.rotation)) {
+                    // well i guess theres something in the way
+                    st.keys.click_left = may_click_left(env);
+                    return;
+                }
+                return;
+            }
+            PlaceResult::NoOption => {}
+        }
+        if feet == dest {
+            // If we are in the block that we are trying to get to, we are sneaking over air and we need to place a block beneath us against the one we just walked off of
+            // faceX, faceY, faceZ is the middle of the face between from and to
+            let face_x = (f64::from(dest.x) + f64::from(src.x) + 1.0) * 0.5;
+            let face_y = (f64::from(dest.y) + f64::from(src.y) - 1.0) * 0.5;
+            let face_z = (f64::from(dest.z) + f64::from(src.z) + 1.0) * 0.5;
+            let goal_look = src.below(1); // this is the block we were just standing on, and the one we want to place against
+
+            let back_to_face = calc_rotation_from_vec3d(env.p.head(), crate::look::Vec3::new(face_x, face_y, face_z), env.p.rotations());
+            let pitch = back_to_face.pitch;
+            let dist2 = (env.p.x - face_x).abs().max((env.p.z - face_z).abs());
+            if dist2 < 0.29 {
+                // see issue #208
+                let yaw = calc_rotation_from_vec3d(block_pos_center(dest), env.p.head(), env.p.rotations()).yaw;
+                st.target = Some(Target { rotation: Rotation::new(yaw, pitch), force: true });
+                st.keys.back = true;
+            } else {
+                st.target = Some(Target { rotation: back_to_face, force: true });
+            }
+            if is_looking_at(env.p, goal_look) {
+                st.keys.click_right = true; // wait to right click until we are able to place
+                return;
+            }
+            if st.target.is_some_and(|t| env.p.rotations().is_really_close_to(t.rotation)) {
+                st.keys.click_left = may_click_left(env);
+            }
+            return;
+        }
+        move_towards_with_slight_rotation(env, st, dest);
     }
 }
 
-/// `MovementAscend.updateState`: The placing branch fails by name.
-/// `MovementAscend.updateState`.
+/// `MovementAscend.updateState`: jumps onto the block, or places it first: sneaks, places the block under the destination and, after ten
+/// ticks without one, backs up in case the player stands in the way.
 fn ascend<W: WorldView>(mv: &Movement, rt: &mut MoveRuntime, env: &Env<'_, W>) {
     let (src, dest) = (mv.src, mv.dest);
     if env.p.feet().y < src.y {
@@ -639,8 +809,17 @@ fn ascend<W: WorldView>(mv: &Movement, rt: &mut MoveRuntime, env: &Env<'_, W>) {
     let place = dest.below(1);
     let jumping_onto = env.get(place);
     if !env.ctx.can_walk_on(place.x, place.y, place.z, jumping_onto) {
-        // upstream: count the ticks without a placement, place the block under dest, and after 10 ticks back up
-        fail(st, MoveFailure::NeedsPlacing(place));
+        rt.ticks_without_placement += 1;
+        if attempt_to_place_a_block(env, st, dest.below(1), false, true) == PlaceResult::ReadyToPlace {
+            st.keys.sneak = true;
+            if env.p.crouching {
+                st.keys.click_right = true;
+            }
+        }
+        if rt.ticks_without_placement > 10 {
+            // After 10 ticks without placement, we might be standing in the way, move back
+            st.keys.back = true;
+        }
         return;
     }
     move_towards(env, st, dest);
@@ -822,11 +1001,13 @@ fn diagonal_sprint<W: WorldView>(mv: &Movement, env: &Env<'_, W>) -> bool {
     true
 }
 
-/// Whether a fall of this movement lands with a water bucket. Upstream (`MovementFall.willPlaceBucket`) builds a fresh context and
-/// runs `dynamicFallCost`, which answers true on the bucket branch only. That branch needs `hasWaterBucket` and a drop of more than
-/// `maxFallHeightNoWater`; this checks both without the run (ladder resets inside the fall are ignored).
+/// `MovementFall.willPlaceBucket`: runs `dynamicFallCost` on the movement's own source and destination column and answers its result, which is
+/// true on the bucket branch only (a ladder halfway down the fall resets the count, so a fall past one is not a bucket fall).
 fn will_place_bucket<W: WorldView>(mv: &Movement, env: &Env<'_, W>) -> bool {
-    env.ctx.cfg.has_water_bucket && mv.src.y.wrapping_sub(mv.dest.y) > env.ctx.cfg.max_fall_no_water
+    let ctx = env.ctx;
+    let below = ctx.get(mv.dest.x, mv.src.y.wrapping_sub(2), mv.dest.z);
+    let mut res = crate::movement::helper::MoveResult::default();
+    crate::movement::descend::dynamic_fall_cost(ctx, mv.src.y, mv.dest.x, mv.dest.z, 0.0, below, &mut res)
 }
 
 /// `MovementFall.avoid`: the way the ladder below faces, if there is one within 15 blocks under the feet.
@@ -840,8 +1021,8 @@ fn fall_avoid<W: WorldView>(env: &Env<'_, W>) -> Option<Direction> {
     None
 }
 
-/// `MovementFall.updateState`: Without a water bucket: that branch fails by name.
-/// `MovementFall.updateState`, without a water bucket.
+/// `MovementFall.updateState`: falls, and lands in water with a bucket when the fall is longer than `maxFallHeightNoWater`: it holds the water
+/// bucket, looks straight down and clicks when the crosshair is on the landing block, and picks the water up again with an empty bucket.
 fn fall<W: WorldView>(mv: &Movement, rt: &mut MoveRuntime, env: &Env<'_, W>) {
     let (src, dest) = (mv.src, mv.dest);
     base_update_state(mv, rt, env);
@@ -857,24 +1038,42 @@ fn fall<W: WorldView>(mv: &Movement, rt: &mut MoveRuntime, env: &Env<'_, W>) {
         st.keys.sneak = true;
     }
 
+    let mut target_rotation: Option<Rotation> = None;
     let is_water_dest = is_water(&dest_state);
     if !is_water_dest && will_place_bucket(mv, env) && player_feet != dest {
-        // upstream: needs a water bucket in the hotbar (and not the nether), selects it and right clicks the floor
-        fail(st, MoveFailure::NeedsBucket);
-        return;
+        let bucket = find_hotbar_slot(env.inv, "water_bucket");
+        if bucket.is_none() || env.game.nether {
+            st.status = MoveStatus::Unreachable;
+            return;
+        }
+        if env.p.y - (dest.y as f64) < env.game.reach && !env.p.on_ground {
+            st.select = bucket;
+            target_rotation = Some(Rotation::new(to_dest.yaw, 90.0));
+            if is_looking_at(env.p, dest) || is_looking_at(env.p, dest.below(1)) {
+                st.keys.click_right = true;
+            }
+        }
     }
 
     if !open_doors(env, st, src, Pos::new(dest.x, src.y, dest.z)) {
         return;
     }
 
-    st.target = Some(Target { rotation: to_dest, force: false });
+    match target_rotation {
+        Some(r) => st.target = Some(Target { rotation: r, force: true }),
+        None => st.target = Some(Target { rotation: to_dest, force: false }),
+    }
     if player_feet == dest && (env.p.y - (player_feet.y as f64) < 0.094 || is_water_dest) {
         // 0.094 because lilypads
         if is_water_dest {
             // only match water, not flowing water (which we cannot pick up with a bucket)
-            // upstream: with an empty bucket in the hotbar, pick the water up. There is none here.
-            if env.p.vy >= 0.0 {
+            if let Some(empty) = find_hotbar_slot(env.inv, "bucket") {
+                st.select = Some(empty);
+                if env.p.vy >= 0.0 {
+                    st.keys.click_right = true;
+                }
+                return;
+            } else if env.p.vy >= 0.0 {
                 st.status = MoveStatus::Success;
                 return;
             } // don't else return state; we need to stay centered because this water might be flowing under the surface
@@ -906,14 +1105,15 @@ fn fall<W: WorldView>(mv: &Movement, rt: &mut MoveRuntime, env: &Env<'_, W>) {
             (ax, az)
         }
     };
-    // targetRotation is always null here: it is only set on the bucket branch
-    let dest_center_offset = crate::look::Vec3::new(dest_center.x + 0.125 * avoid_x as f64, dest_center.y, dest_center.z + 0.125 * avoid_z as f64);
-    let rot = calc_rotation_from_vec3d(env.p.head(), dest_center_offset, env.p.rotations());
-    st.target = Some(Target { rotation: rot, force: false });
+    if target_rotation.is_none() {
+        let dest_center_offset = crate::look::Vec3::new(dest_center.x + 0.125 * avoid_x as f64, dest_center.y, dest_center.z + 0.125 * avoid_z as f64);
+        let rot = calc_rotation_from_vec3d(env.p.head(), dest_center_offset, env.p.rotations());
+        st.target = Some(Target { rotation: rot, force: false });
+    }
 }
 
-/// `MovementPillar.updateState`: Ladders, vines and water columns. Placing fails by name.
-/// `MovementPillar.updateState`, for ladders, vines and a column of water. A pillar that places a block fails.
+/// `MovementPillar.updateState`: climbs a ladder or vine or a column of water, or places a block under itself: sneaks, jumps, looks down and
+/// presses the right button at the top of each jump (once the player is crouching and the crosshair is on the block under the feet).
 fn pillar<W: WorldView>(mv: &Movement, rt: &mut MoveRuntime, env: &Env<'_, W>) {
     let (src, dest) = (mv.src, mv.dest);
     base_update_state(mv, rt, env);
@@ -940,16 +1140,76 @@ fn pillar<W: WorldView>(mv: &Movement, rt: &mut MoveRuntime, env: &Env<'_, W>) {
         return;
     }
     let ladder = is_climbable(&from_down);
+
+    let rotation = calc_rotation_from_vec3d(env.p.head(), block_pos_center(src), env.p.rotations());
+    if !ladder {
+        st.target = Some(Target { rotation: env.p.rotations().with_pitch(rotation.pitch), force: true });
+    }
+
+    let mut block_is_there = env.can_walk_on(src) || ladder;
     if ladder {
         if env.p.feet() == dest {
             st.status = MoveStatus::Success;
             return;
         }
+
         move_towards(env, st, dest);
         st.keys.jump = true;
-    } else {
-        // upstream: select a throwaway block, sneak, jump, and place a block under the feet at the top of each jump
-        fail(st, MoveFailure::NeedsPlacing(src));
+        return;
+    }
+    // Get ready to place a throwaway block
+    if !env.set.allow_place {
+        st.status = MoveStatus::Unreachable;
+        return;
+    }
+    match select_throwaway(env.inv, &env.set.tool.acceptable_throwaway_items) {
+        Some(slot) => st.select = Some(slot),
+        None => {
+            st.status = MoveStatus::Unreachable;
+            return;
+        }
+    }
+
+    st.keys.sneak = true;
+    // since (lower down) we only right click once player.isSneaking, and that happens the tick after we request to sneak
+
+    let diff_x = env.p.x - (dest.x as f64 + 0.5);
+    let diff_z = env.p.z - (dest.z as f64 + 0.5);
+    let dist = (diff_x * diff_x + diff_z * diff_z).sqrt();
+    let flat_motion = (env.p.vx * env.p.vx + env.p.vz * env.p.vz).sqrt();
+    if dist > 0.17 {
+        //why 0.17? because it seemed like a good number, that's why
+        //[explanation added after baritone port lol] also because it needs to be less than 0.2 because of the 0.3 sneak limit
+        //and 0.17 is reasonably less than 0.2
+
+        // If it's been more than forty ticks of trying to jump and we aren't done yet, go forward, maybe we are stuck
+        st.keys.forward = true;
+
+        // revise our target to both yaw and pitch if we're going to be moving forward
+        st.target = Some(Target { rotation, force: true });
+    } else if flat_motion < 0.05 {
+        // If our Y coordinate is above our goal, stop jumping
+        st.keys.jump = env.p.y < dest.y as f64;
+    }
+
+    if !block_is_there {
+        let fr_state = env.get(src);
+        // TODO: Evaluate usage of getMaterial().isReplaceable()
+        if !(fr_state.air || fr_state.replaceable) {
+            if let Some(rot) = reachable(env, src, env.game.reach, false) {
+                st.target = Some(Target { rotation: rot, force: true });
+            }
+            st.keys.jump = false; // breaking is like 5x slower when you're jumping
+            st.keys.click_left = may_click_left(env);
+            block_is_there = false;
+        } else if env.p.crouching && (is_looking_at(env.p, src.below(1)) || is_looking_at(env.p, src)) && env.p.y > dest.y as f64 + 0.1 {
+            st.keys.click_right = true;
+        }
+    }
+
+    // If we are at our goal and the block below us is placed
+    if env.p.feet() == dest && block_is_there {
+        st.status = MoveStatus::Success;
     }
 }
 
