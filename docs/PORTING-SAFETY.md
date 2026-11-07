@@ -473,6 +473,9 @@ still takes effect one tick after the mod decides it, as before.
 - **Still not run on a server:** breaking and placing. Every account starts on the roof with an empty inventory, and `/kit` answers
   nothing on 6b6t, so there was nothing to place and no tool.
 
+**S5 closed (owner's decision, 2026-11-07)** with one server only (6b6t.org) and with breaking and placing on a server **not run**: they
+rest on the single-player scenarios (L3) alone. Both stay open for a later L4 session.
+
 ## Reports
 
 A comparison writes a small JSON report: the upstream commit, the game version, the Java and Rust versions, hashes of the
