@@ -456,8 +456,22 @@ packet carry the aim and no frame shows it. Ran, single player, one game window 
 view to 270 as before. With `blockFreeLook` on, digging 8 stone blocks through a wall and bridging a 4-block gap with cobblestone both finished with the view still at
 150/10 and the server looking at the blocks (yaw -90/90, pitch 26/80); with it off (upstream's default) the view turned to the block (270/26). L3 on that build: 42 of 42
 scenarios passed. Limits: single player only; the 20 Hz server rotation was sampled through the console at about 8 Hz, not read from packets; `smoothLook`, `antiCheatCompatibility`
-off and the elytra and swimming branches were not run in the game (the first two only in unit tests); a real mouse turn during a path was not tried; the third-person model sees the aim for one tick; the aim
+off and the elytra and swimming branches were not run in the game (the first two only in unit tests); a real mouse turn during a path was not tried here (it ran later on 6b6t, below); the third-person model sees the aim for one tick; the aim
 still takes effect one tick after the mod decides it, as before.
+
+**S5, second session (6b6t.org, 2026-11-07, build with free look, `d0b08a4`).** All runs on the main world's roof at y 319, `freeLook` on
+(the default), commands typed through the control socket, the position sampled every 0.1 s:
+- **500 blocks:** arrived in 89.7 s (5.6 blocks/s, sprinting), no setback. The owner moved the real mouse during this run: the view stayed
+  theirs and the walk went on, so a real mouse turn during a path has now run, on a server.
+- **1500 blocks:** arrived in 333.3 s, no setback. Sprinting stopped when the hunger bar reached 6 (the game forbids sprinting below 7):
+  5.59 blocks/s, then 4.32 blocks/s walking for the rest, as the game requires.
+- **Chat open:** the chat screen stayed open for the whole of a 100-block run (207 of 208 samples), and the player walked 97.9 blocks
+  with no setback before another player killed it 2 blocks from the goal (health 20 to 5 to 0 in half a second, in the air). Moving with
+  the chat open now has a server result too.
+- No kick, no anticheat message, and no setback in any run. Deaths on 6b6t in this and the owner's sessions were other players and
+  the owner's own `/kill`, not the mod.
+- **Still not run on a server:** breaking and placing. Every account starts on the roof with an empty inventory, and `/kit` answers
+  nothing on 6b6t, so there was nothing to place and no tool.
 
 ## Reports
 
