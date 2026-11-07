@@ -5,7 +5,7 @@ A Rust port of [Baritone](https://github.com/cabaletta/baritone), the Minecraft 
 
 ## Status
 
-**A first working version, not released yet.** The search, the movements and `goto` are ported and run in the game:
+**First pre-release, v0.1.0.** The search, the movements and `goto` are ported and run in the game:
 
 - **Pathing:** walking, sprinting, jumping up steps, dropping down, ladders and vines, breaking blocks in the way, bridging,
   pillaring and digging down, with tool choice, throwaway blocks and water bucket falls. Parkour and swimming are off, as in

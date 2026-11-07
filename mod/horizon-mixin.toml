@@ -9,7 +9,7 @@
 # completion (`Dispatcher::client_suggestions_asking`, for the words after `/b`).
 [mod]
 id = "baritone_rs"
-version = "0.0.0"
+version = "0.1.0"
 priority = 100
 
 [compatibility]

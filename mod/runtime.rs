@@ -44,7 +44,7 @@ use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 
 pub const ID: &str = "baritone_rs";
 pub const NAME: &str = "baritone-rs";
-pub const VERSION: &str = "0.0.0";
+pub const VERSION: &str = "0.1.0";
 pub const DESCRIPTION: &str = "Pathfinding. /b goto <x> <y> <z>, /b goal, /b path, /b eta, /b set, /b stop. Walks, sprints, breaks and places blocks. Parkour and swimming are off.";
 
 const PREFIX: &str = "[baritone-rs]";
