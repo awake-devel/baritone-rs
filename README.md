@@ -5,9 +5,29 @@ A Rust port of [Baritone](https://github.com/cabaletta/baritone), the Minecraft 
 
 ## Status
 
-**Nothing is ported yet, and there is no mod to use.** This repository holds the license, the credits, two test tools
-described in [tools/README.md](tools/README.md), the [plan](docs/PLAN.md) and the way the port gets checked,
-[Porting safety](docs/PORTING-SAFETY.md).
+**A first working version, not released yet.** The search, the movements and `goto` are ported and run in the game:
+
+- **Pathing:** walking, sprinting, jumping up steps, dropping down, ladders and vines, breaking blocks in the way, bridging,
+  pillaring and digging down, with tool choice, throwaway blocks and water bucket falls. Parkour and swimming are off, as in
+  upstream's defaults, and not ported yet.
+- **Commands:** `/b goto`, `goal`, `path`, `stop`, `eta`, `set` and `help`, with tab completion of subcommands, settings and values.
+  Settings follow upstream's names and defaults, and `freeLook` keeps the camera yours while Baritone steers.
+- **Not yet:** `goto <block>` and the other processes (mine, follow, explore, build, farm, elytra).
+
+**How it is checked.** Every movement rule gives upstream's answer bit for bit on 22 million cases, whole searches match upstream's
+node by node on 29,446 searches, Horizon's block facts match Java's on all 35,723 block states, and 42 fixed scenarios pass in the
+game. It has also run on a real server (6b6t.org). The method and every result, with their limits, are in
+[Porting safety](docs/PORTING-SAFETY.md); every difference from upstream is listed in [docs/deviations.md](docs/deviations.md).
+
+**Speed.** On the same worlds, starts and goals, the port finds the same paths as upstream's Java search about **1.4 times faster**
+(median over 51 searches on 20 seeds; per seed 1.05 to 1.84 times), and within the same time limit it explores 1.2 to 1.6 times
+more nodes. One machine and synthetic worlds: see [docs/BENCHMARK.md](docs/BENCHMARK.md) for the method and the limits.
+
+**Using it.** The mod is a Horizon native mod built with horizon-mixins. It follows Horizon Nightly `66f3981`, and it uses a few
+pinned hooks, so a newer nightly may need an update first. Build it into a launcher instance with
+`horizon-launcher native-build mod --instance <instance> --trust-native-code`, then type `/b help` in the game.
+
+This repository also holds the [plan](docs/PLAN.md) and the test tools described in [tools/README.md](tools/README.md).
 
 ## Upstream
 
