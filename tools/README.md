@@ -206,6 +206,41 @@ Known limits:
   not loaded. Searches do not reach 26.3's differences (see the cost-compare section).
 - The Rust side reads the whole file; the default size is about 100 MB.
 
+## bench
+
+Times upstream's real search against `mod/engine`'s on the same large generated worlds, and compares them by seed. The results and
+their limits are in [`docs/BENCHMARK.md`](../docs/BENCHMARK.md). Like the other comparisons it holds no second Java search: it times
+`PathingBehavior.createPathfinder` and `AbstractNodeCostSearch.calculate` of the checkout.
+
+1. `bench/java/baritone/pathing/calc/SearchBench.java` (a `main`, in upstream's package like `SearchGoldenDump`) is the only world
+   generator. A world is `n` x `n` columns (256 to 1024) and 80 high: noise terrain in four grades of relief, sea and lakes, rivers,
+   ravines, caves with lava, trees, and three cobblestone walls with gaps in every third seed. Every chunk counts as loaded and the
+   world border is the box, so a search never stops at the box's edge. Each seed has four cases: a `GoalBlock` 100 to 220 blocks
+   away (`near`), a `GoalBlock` and a `GoalXZ` far away (`far`, `xz`: 55 to 95 % of the room the world leaves in that direction), and a
+   `GoalBlock` 24 blocks under the surface (`deep`, only used for the same-limit runs). Settings are config 0 and search settings 0 of
+   the cost and search comparisons: upstream's defaults, with a pickaxe, a throwaway block and sprinting.
+2. `bench/src/main.rs` (a crate on its own, `search-bench`, outside the root workspace so that the hashes in the comparison reports
+   do not change) reads the files the Java side wrote (`world-N.txt`, in the format of `search-compare`'s golden file, with the
+   world's hash checked against the Java side's) and times `create_pathfinder` and `calculate` the same way.
+3. `run_bench.py` builds both halves, waits by PID until no game, build or Gradle run is going and the CPUs are idle, pins both sides
+   to the same two CPUs (one thread of each of two physical cores), and runs: Java finish, Rust finish (twice), Java same-limit, Rust
+   same-limit. The Java process warms up on other worlds (3 million nodes) before it times anything. A search is timed from the
+   creation of the finder to the result of `calculate()`, after the context is built; the first run of each case is discarded.
+   Both sides write `T` lines with every repetition's nanoseconds, the counters and the hash of the result path (positions and
+   movements, as in the L2 comparison's `sf` line); the script compares the counters and the hash.
+4. The raw timings, worlds and tables stay in `--scratch` (`results.json`, `tables.md`, several hundred MB). `reports/bench-1.21.4.json`
+   holds metadata and counts only.
+
+```sh
+# From the repository root; JDK 21, an upstream checkout at the pinned commit; no game, build or Gradle run, and nothing else heavy.
+python3 tools/run_bench.py --upstream upstream/baritone-1.21.4 --jdk DIR --scratch DIR [--seeds 20 --finish-ms 10000 --reps 5 --rounds 2 --cpus 2,3]
+# Only wait until the machine is idle:
+python3 tools/run_bench.py --wait-only
+```
+
+The whole run takes about 35 minutes. The time-to-finish phase runs in two rounds (Java, then Rust, twice) so that a drift of the machine shows; `--tables-from SCRATCH` rewrites `tables.md` from an earlier run's `results.json`. The unit tests of its pure parts are in `test_bench.py`; `cd tools/bench && cargo fmt --check &&
+cargo clippy -- -D warnings` checks the Rust half, which the root workspace does not cover.
+
 ## facts-compare
 
 L1: does Horizon describe each block as Minecraft does? It is not in the root workspace, because it builds against Horizon's

@@ -1,0 +1,13 @@
+[package]
+name = "search-bench"
+version = "0.0.0"
+edition = "2021"
+license = "LGPL-3.0-or-later"
+publish = false
+description = "Times baritone-engine's search on the worlds the Java side of the benchmark generated (the other half of tools/run_bench.py)"
+
+# On its own, not in the root workspace, so that the root Cargo.toml and Cargo.lock (hashed in the comparison reports) stay as they are.
+[workspace]
+
+[dependencies]
+baritone-engine = { path = "../../mod/engine" }

@@ -4,3 +4,4 @@
 /gate-result.json
 __pycache__/
 /tools/facts-compare/target/
+/tools/bench/target/
