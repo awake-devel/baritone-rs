@@ -662,6 +662,31 @@ mod tests {
     }
 
     #[test]
+    fn a_new_goal_forgets_the_last_goals_cancel() {
+        // Found on 6b6t: the glue announced the previous goal's "cancelled: TimedOut" again when a new goto started.
+        let mut rig = Rig::new(TestWorld::flat(24, 8), (1, 1, 3));
+        rig.pathing.goto(block(18, 1, 3));
+        for _ in 0..200 {
+            rig.tick();
+            if rig.p.x > 7.0 && rig.world.state_id(11, 1, 3) == AIR as usize {
+                for z in 0..6 {
+                    for y in 1..=3 {
+                        rig.world.set(11, y, z, STONE);
+                    }
+                }
+            }
+            if rig.pathing.last_cancel().is_some() {
+                break;
+            }
+        }
+        assert!(rig.pathing.last_cancel().is_some(), "the wall should cancel the path");
+        rig.pathing.goto(block(1, 1, 3));
+        assert_eq!(rig.pathing.last_cancel(), None);
+        rig.pathing.path();
+        assert_eq!(rig.pathing.last_cancel(), None);
+    }
+
+    #[test]
     fn a_goal_that_cannot_be_reached_ends_the_process() {
         // the goal is walled in
         let mut w = TestWorld::flat(16, 16);

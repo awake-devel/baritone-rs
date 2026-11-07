@@ -253,6 +253,8 @@ impl<R: SearchRunner<S>, S> Pathing<R, S> {
 
     /// Upstream's `ICustomGoalProcess.setGoalAndPath`: what `/b goto` does. The search starts on the next tick.
     pub fn goto(&mut self, goal: Goal) {
+        // A new goal starts with no cancel to report, or the glue would announce the previous goal's again (found on 6b6t).
+        self.last_cancel = None;
         self.process.set_goal_and_path(goal);
     }
 
@@ -268,6 +270,7 @@ impl<R: SearchRunner<S>, S> Pathing<R, S> {
 
     /// `ICustomGoalProcess.path`.
     pub fn path(&mut self) {
+        self.last_cancel = None;
         self.process.path();
     }
 

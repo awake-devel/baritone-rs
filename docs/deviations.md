@@ -480,6 +480,16 @@ The port does what upstream does here; a change would change paths, so it is the
 - **U14. The pillar breaks the block at its feet with the throwaway block in hand.** `MovementPillar` selects the throwaway block (`selectThrowawayForLocation`) and then clicks the block at the feet
   when it is neither air nor replaceable, with no `switchToBestToolFor`. It matters only for a block that the cost lets through but is neither walkable nor replaceable (a torch, a carpet, a sign): it is dug by hand.
   Kept (`exec/review_tests.rs` R3).
+- **U15. No path at all from the top of the world.** `AStarPathFinder` drops a neighbour whose feet would be above `maxY`
+  (`minY + height - 1`, 319 in the Overworld), and a player standing on the highest block layer has feet at `maxY + 1`. So every
+  move from there, even a flat step, is refused and the search ends with no path. Found on 6b6t.org (2026-11-07), whose main-world
+  spawn is an obsidian floor at y 319: `/b goto` 50 blocks away on that floor answered "No path to the goal was found." at once. The
+  port does the same (`search/astar.rs`, the `max_y` check). Allowing feet at `maxY + 1` would change paths, so it is the owner's call.
+- **U16. Adventure mode is not considered.** Nothing in upstream reads the game mode or `mayBuild`, so with `allowBreak` on (the
+  default) the search still plans to dig. The game refuses the break, the movement times out after its cost plus
+  `movementTimeoutTicks`, the new search finds the same path, and the player stands still in that loop until stopped. Found in
+  6b6t.org's lobby (2026-11-07): an Ascend through dirt and grass (cost 43.6) repeated every 148 ticks. `/b set allowBreak false`
+  avoids it. The port does the same; reading the game mode would change paths, so it is the owner's call.
 
 ## Where upstream's two branches disagree
 

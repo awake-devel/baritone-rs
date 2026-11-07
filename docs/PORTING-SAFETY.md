@@ -401,7 +401,7 @@ mining out (D31), `/b` and `/baritone` are taken from servers, `/b trace` logs e
 not range-checked (a huge `primaryTimeoutMS` on an unreachable goal makes the search run as long as asked, as upstream; not run). Open from the first part: the logs of searches and snapshots grow slowly outside the test code, and "Arrived." can print while the player is still falling.
 
 **Final checks of this work.** `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace` (200 engine tests), `python3 -m unittest discover -s tools -q` (95 tests), the
-ledger check and `tools/check_public_tree.py` with the deny list all pass. The Java comparisons (L0 to L2) and the gate were **not** rerun.
+ledger check and `tools/check_public_tree.py` with the deny list all pass. The Java comparisons (L0 to L2) and the gate were not rerun by that agent; the gate was run afterwards and passed (see "The gate" above).
 
 **Limits of this result.**
 
@@ -416,7 +416,34 @@ ledger check and `tools/check_public_tree.py` with the deny list all pass. The J
 
 **Left out on purpose.** Parkour and swimming (off by upstream's defaults, branches fail by name, D16); `goto <block>` and the other processes (mine, follow, explore, build, farm, elytra); using doors, buttons and levers beyond what D15 says (`allowInventory`); Depth Strider and Frost Walker from the boots (D22); the stored settings that nothing reads (`freeLook`, `renderPath`, `allowInventory`, D29).
 
-Measured effort: the first part took a workflow of 7 agents, 3 h 39 min and 1.96 million tokens, and its last agent ended before writing this section. The second part was done in several stages by hand and by agents; the effort was not measured.
+Measured effort: the first part took a workflow of 7 agents, 3 h 39 min and 1.96 million tokens, and its last agent ended before writing this section. The second part took a workflow of 7 agents (probe, engine, glue, scenarios, two reviews, fixes), 2 h 47 min and 2.04 million tokens, then two gate runs by hand.
+
+### S5, first session (6b6t.org, 2026-11-07)
+
+L4 on **6b6t.org** only, with the owner's account, the S4 build (`3218596`) and Horizon `66f3981`. Commands were typed through the control
+socket (`horizon-ctl chat`), with the chat closed. Each run sampled the player's position every 0.1 s and counted any jump of more than 3
+blocks between samples as a server setback. Gear was never at risk: the account had an empty inventory and no armour.
+
+**Main world: no movement possible, as upstream.** Every spawn, and the account's saved position, is on an obsidian floor at y 319, the
+top of the Overworld, with the ground about 250 blocks below. `/b goto` 50 blocks away on that floor answered "No path" at once,
+because upstream's search refuses any move whose feet would be above `maxY` (U15). The floor's few holes are 250-block drops, which
+upstream never takes without a water bucket. The mod was set to never break ender chests (`blocksToDisallowBreaking`) before any run there.
+
+**Lobby (adventure mode): walking works on the real server.** 10 runs, about 584 blocks walked over 1,551 samples, with **no setback**:
+- `/b goto` into the lobby's portal arrived both times it was used, and moved the account to the main world.
+- 4 runs arrived: 41.6 blocks in 7.7 s (sprinting, about 5.4 blocks/s), 73.7 blocks in 14.4 s, 85.5 blocks in 16.7 s, and the portal walk. They
+  included jumps up steps, diagonals and slab floors.
+- 2 runs stood still in U16's loop (an Ascend through dirt that adventure mode can't break, retried every 148 ticks) until `/b set allowBreak false`.
+- With `allowBreak` off, 3 runs ended with "No path" after walking 0, 29 and 189 blocks: a goal outside the lobby's walkable area and a
+  pit at y 57 with no way out without breaking. These are expected answers, not faults found.
+
+**Port bug found and fixed:** a new `/b goto` announced the previous goal's "the path was cancelled: TimedOut" again, because the engine
+kept the last cancel reason across goals. `Pathing::goto` and `path` now clear it (test `a_new_goal_forgets_the_last_goals_cancel`, which
+fails without the fix). The fix is not yet in a build that ran on the server.
+
+**Not tested yet on a server:** breaking and placing (adventure mode and the empty inventory allowed neither), the chat open (`horizon-ctl
+key t` does not open it, so all runs had it closed), small setbacks under 3 blocks (the method can't see them), any anticheat kick
+(none happened, but the runs were short), and another server. Going further on 6b6t needs either U15 changed or a start below the roof.
 
 ## Reports
 
