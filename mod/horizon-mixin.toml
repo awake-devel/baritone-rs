@@ -1,0 +1,112 @@
+# baritone-rs: a Rust port of the Baritone pathfinder as a native Horizon mod.
+# LGPL-3.0-or-later, like the rest of this repository. Ported from cabaletta/baritone, see ../CREDITS.md.
+#
+# The first version walks and sprints to a goal: `/b goto`, `/b stop`, and the path drawn in the world. It never breaks or places.
+#
+# The mod reads private `Game` fields (the player, the world, the view angles, the screen, the border and the resources),
+# so it pins the Horizon revision it was written against. The hooks are the stable `native_*` ones.
+[mod]
+id = "baritone_rs"
+version = "0.0.0"
+priority = 100
+
+[compatibility]
+horizon_revision = "66f3981f522b24c250b21523a70080965b940424"
+
+# The engine: Baritone's rules in plain Rust, with no Horizon types. Built apart from the game crate.
+[[crate]]
+id = "engine"
+path = "engine"
+
+# The glue that turns Horizon's block data into the engine's block table. One file, also compiled by tools/facts-compare.
+[[module]]
+id = "facts"
+file = "crates/horizon-client/src/game.rs"
+name = "baritone_rs_facts"
+source = "glue/state_facts.rs"
+
+# State, snapshots, the tick, the commands and the drawing.
+[[module]]
+id = "runtime"
+file = "crates/horizon-client/src/game.rs"
+name = "baritone_rs"
+source = "runtime.rs"
+
+[[injection]]
+id = "tick"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_tick"
+helper = "tick.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+]
+
+[[injection]]
+id = "movement"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_movement_input"
+helper = "movement.rs"
+bindings = [
+  { name = "forward", ty = "&mut f32", value = "&mut *forward" },
+  { name = "strafe", ty = "&mut f32", value = "&mut *strafe" },
+  { name = "jump", ty = "&mut bool", value = "&mut *jump" },
+  { name = "sneak", ty = "&mut bool", value = "&mut *sneak" },
+]
+
+[[injection]]
+id = "command"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_command"
+helper = "command.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "command", ty = "&str", value = "command" },
+  { name = "ran", ty = "&mut bool", value = "&mut *ran" },
+]
+
+[[injection]]
+id = "commands"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_commands"
+helper = "commands.rs"
+bindings = [
+  { name = "commands", ty = "&mut Vec<&'static str>", value = "&mut *commands" },
+]
+
+[[injection]]
+id = "list"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_mods"
+helper = "list.rs"
+bindings = [
+  { name = "mods", ty = "&mut Vec<crate::game::native_hooks::NativeMod>", value = "&mut *mods" },
+]
+
+[[injection]]
+id = "primitives"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_world_primitives"
+helper = "primitives.rs"
+bindings = [
+  { name = "primitives", ty = "&mut horizon_client::world_primitives::WorldPrimitives", value = "&mut *primitives" },
+]
+
+# The level is dropped: leaving the server, or changing dimension.
+[[injection]]
+id = "level_unload"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_client_level_unload"
+helper = "unload.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+]
+
+# The connection is about to be discarded.
+[[injection]]
+id = "disconnecting"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_client_disconnecting"
+helper = "disconnecting.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "self" },
+]

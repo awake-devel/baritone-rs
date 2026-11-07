@@ -80,6 +80,7 @@ impl Fixture {
 }
 
 /// A world of `w * d` columns, 16 blocks high, from the origin. Everything outside the columns is air. Columns with `x >= loaded_below_x` are not loaded.
+#[derive(Clone)]
 pub struct TestWorld {
     pub w: i32,
     pub d: i32,

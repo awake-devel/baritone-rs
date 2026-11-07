@@ -301,6 +301,89 @@ errors from 1 h 51 min (479 errors, 6 workers) to 34 minutes, and the cost error
 on the cost errors. Verdicts are saved next to the golden file and reused only on byte-identical inputs, so a gate that repeats
 them on unchanged code takes about a minute for that step.
 
+### S4 result (walking and sprinting goto)
+
+The owner cut this first version down to `/b goto`, `/b stop` and `/b help`, walking and sprinting only. Breaking, placing, parkour,
+swimming, a water bucket and settings are still to do, so S4 as a whole is not finished.
+
+**The gate passed, with nothing skipped.** S4 changed no search or cost answer: all 29,446 searches and 22,312,446 rule results still match Java, all
+1,786,150 block facts match, and the injected-error counts are unchanged (415 of 491 in the search, 773 of 836 in the rules). The gate does not run the game, so the
+in-game result below comes from its own report. The ledger has 763 rows: port 325, redesign 131, drop 77, later 185 and missing 45.
+
+**In the game (L3).** All 20 runs of the final run passed, in single player on Horizon `66f3981`, in a new world. Earlier full runs
+failed on test problems, not on the mod: chat lines were not captured, and water at y = 200 in a cold biome froze by itself, so the watch box
+now leaves out that pit. Report: `reports/l3-66f3981.json`. Ticks run from the command to arrival. Estimated and actual ticks are summed
+over the movements executed.
+
+| Scenario | Runs (chat closed / open) | Ticks | Estimated / actual | Longest search |
+|---|---|---|---|---|
+| Flat, 50 blocks | pass / pass | 180 | 178.2 / 178 | 0.6 ms |
+| Around an L wall | pass / pass | 121 | 119.2 / 119 | 2.3 ms |
+| 8 steps up, then 8 diagonal blocks | pass / pass | 139 | 119.2 / 137 | 1.1 ms |
+| Drops of 1, 2 and 3 | pass / pass | 77 | 79.9 / 75 | 0.2 ms |
+| Natural terrain, 300 blocks | pass / not run | 2129 | 1329.7 / 2125 | 137.7 ms |
+| Sealed room | pass / pass | gave up at 144 | 71.3 / 71 | 4.0 ms (73 searches) |
+| Wall placed in the way | pass / pass | 165 | 162.1 / 162 | 1.0 ms |
+| `/b stop` | pass / pass | still after 7 | none | 0.5 ms |
+| Ladder and 1-deep water | pass / pass | 144 | 144.2 / 142 | 3.2 ms |
+| Floor of bottom slabs | pass / pass | 117 | 115.8 / 115 | 1.4 ms |
+| 1500 blocks, unloaded chunks | pass / not run | 9825 | 6587.3 / 9821 | 135.8 ms (10 searches) |
+
+Every arriving run ended within 1 block of its goal, and no player died. Blocks changed was 0 in every watched box, which covers the built areas
+only, so the natural walks are not checked for it. The flat walk sprinted on every driven tick. The mod's own work per tick had a median of about
+18 µs and a maximum of 1.6 ms, and the world snapshot took at most 1.2 ms for 637 chunks. No search came near its time limit, so these
+numbers say nothing yet about speed against Java.
+
+**On a server (6b6t.org, the lobby only).** The owner's first try failed: every first move timed out. A per-tick trace (`/b trace`) showed the
+cause, a port bug. Upstream's `playerFeet` answers the block above when the feet are in a slab, and the port had left that rule out. On the
+lobby's floor of bottom slabs, every step was planned as an ascend from inside the slab, and the ascend's slab rule then never jumped. With the
+rule ported, `/b goto 200 200` arrived from the same floor in about 11 seconds. The slab-floor scenario was added for it, but it was not run on
+the build before the fix, so it has not been shown to catch the bug.
+
+**The input hook (`tools/input-probe`).** With the chat or the inventory open, forward walks at 4.32 blocks/s and sprint holds at 5.61. The integrated
+server accepted it, with no rubber banding.
+
+**Estimates against the game.** On land the costs hold: Traverse 1.01 to 1.04 and Diagonal 0.96 to 0.97 of the estimate on the natural walks. Two
+do not:
+
+- Moves touching deep water took about 2.2 times their estimate (578 Traverse moves in the 1500-block run: 2678 estimated, 5902 actual). The cause is
+  upstream, not the port: see U8 in [deviations.md](deviations.md). Without Depth Strider, Java prices water like land, and so does the port. Fixing it
+  changes paths, so it is the owner's call.
+- Ascend ran 1.16 times its estimate on natural terrain, and the steps scenario took 137 ticks against 119. This is not explained yet.
+
+**Unit and property tests.** A stop always gives a neutral intent, a stale or cancelled result never installs a path, no movement runs with a block
+in its way, and the executor survives any world edit and any player view. They use fixed-seed random runs and a simple simulator, which is not
+evidence of real physics.
+
+**Reviews.** Two independent reviews, of the executor against upstream and of safety, found no difference that changes a path. Fixed after them:
+
+- The mouse sensitivity setting was never read, so aim could be off the player's own mouse grid (D17).
+- A search that panics would retry every tick without a word, as upstream does. It now stops the goto and says so (D23).
+- A block id missing from the table could panic. It now reads as air.
+- `tools/l3/run.py` could close a game it did not start.
+- `/b` typed while the mod was off went on to the server.
+- A failed thread start would have crashed the game.
+
+Still open from the reviews: the logs of searches and snapshots grow slowly because only the test code empties them, the test triggers do not check that
+the open world is a test world when their variable is set, and "Arrived." can print while the player is still falling.
+
+The check S3 left for this stage is done: Rust's copied `Movement` values go stale in the path's copy, but only positions and structure are read from it, and
+the review found no difference in behaviour.
+
+Limits of this result:
+
+- Single player only, so no anticheat and no real server lag. That is S5.
+- Commands went straight to the mod's command function, not through the chat box, so a typed `/b goto` has not been run by the tests. Real keys
+  during a path have not been run either, nor has a real disconnect.
+- The natural walks ran with the chat closed only, each on the terrain of its own new world. The executor has not been compared with Java tick by tick: the review compared
+  it by reading.
+- Water and a player with Depth Strider or Frost Walker: `water_mult` and `frost_walker` stay at the defaults of a player without boots (D22).
+- A closed door on the only route makes a loop of failing and searching until someone opens it, because using blocks is off by default (D15).
+- The Nether is only tested as far as stopping when the dimension changes.
+
+Measured effort: a workflow of 7 agents took 3 h 39 min and 1.96 million tokens. Its last agent ended before writing this section and left its final
+in-game run going, so the section and the gate were done by hand afterwards.
+
 ## Reports
 
 A comparison writes a small JSON report: the upstream commit, the game version, the Java and Rust versions, hashes of the

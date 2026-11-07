@@ -18,14 +18,22 @@
 #![forbid(unsafe_code)]
 
 pub mod blocks;
+pub mod command;
 pub mod config;
 pub mod costs;
+pub mod exec;
 pub mod goals;
+pub mod look;
 pub mod movement;
 pub mod plan;
 pub mod pos;
+pub mod process;
 pub mod search;
+pub mod settings;
+pub mod worker;
 pub mod world;
 
+#[cfg(test)]
+mod sim;
 #[cfg(test)]
 mod testing;

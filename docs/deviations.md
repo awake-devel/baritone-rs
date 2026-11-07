@@ -3,7 +3,7 @@
 Each place where this port differs from upstream on purpose. The rules are in
 [PORTING-SAFETY.md](PORTING-SAFETY.md#deviations). Upstream lines are cited at the `1.21.4` commit `1b8e87c`.
 
-Entries 1 to 4 are decided and wait for the code they apply to. Entry 5 is active and has no effect on any real search. Entries 6 to 10 are active (S3) and change no chosen path that a game can reach.
+Entries 1 to 4 are decided and wait for the code they apply to. Entry 5 is active and has no effect on any real search. Entries 6 to 10 are active (S3) and change no chosen path that a game can reach. Entries 11 to 22 are active (S4, executor, state machine and the mod): they change when a search is cancelled (12) and what `/b stop` waits for (13), and nothing a search returns.
 
 ## How exceptions work today
 
@@ -152,6 +152,163 @@ Fields: upstream, ours, why, changes chosen paths, decided by, expectation in th
 - **Decided by:** nobody needed.
 - **Comparison:** none (the time limits never fire in L2).
 
+### D11. The executor owns its movements, and splices in place
+
+- **Status:** active, in `exec`.
+- **Upstream:** `PathExecutor` holds the `IPath`, whose `Movement` objects carry their own state (`currentState`, `numTicks`,
+  `forceSafeMode`, cached costs). A splice or a cut makes a new executor over movement objects shared with the old one.
+- **Ours:** `PathExecutor` copies the movements out of the path and keeps their runtime state in a parallel list. `try_splice`
+  changes the executor in place and appends the next executor's movements and state. It keeps what upstream's new executor is
+  given (position, cost estimate and its index, ticks on the current movement) and resets what it resets (`ticksAway`, `sprintNextTick`).
+- **Why:** a path is plain data that a search hands over; nothing is shared between threads.
+- **Changes chosen paths:** no.
+- **Decided by:** nobody needed.
+
+### D12. The best path so far of a running search cannot be read
+
+- **Status:** active, in `exec` and `process::pathing`.
+- **Upstream:** `PathExecutor.shouldPause` and the "are we calculating the right thing" check in `tickPath` read
+  `inProgress.bestPathSoFar()`, which the running search computes on demand from another thread.
+- **Ours:** the search runs in one call on the worker, and its partial path is not visible before it ends. The executor gets
+  `Progress { best_positions: None }`. `shouldPause` then never pauses (the player does not wait for a search that is about to
+  replace the path with a backtrack). `tickPath` takes "there is no best path so far", so it cancels a search whose start is
+  neither the end of the current path, nor the player's feet, nor the expected start, without asking whether the best path so far
+  passes through the player.
+- **Why:** reading it would mean running the search in slices, which changes the search code and its comparison with Java.
+- **Changes chosen paths:** it changes when a search is cancelled and restarted, not which path a search returns.
+- **Decided by:** nobody yet; reported. Review if the player is seen to walk back and forth while a long search runs.
+
+### D13. `/b stop` is `forceCancel`
+
+- **Status:** active, in `process::pathing` (`Pathing::stop`).
+- **Upstream:** `#stop` is `cancelEverything`: the processes lose control at once, but the current segment is cut only when
+  the movement says it is safe (`safeToCancel`). A fall in the air, or a diagonal cornering over a gap, goes on until then.
+- **Ours:** `stop` is `forceCancel`: it cancels the search, drops the current and next paths, clears the keys and returns a neutral
+  `Intent`. `cancel_everything` is also there, with upstream's behaviour.
+- **Why:** with walking only, nothing needs a safe moment, and a stop that leaves keys held for some ticks is a surprise.
+- **Changes chosen paths:** no.
+- **Decided by:** the task for S4 ("stop always gives a neutral Intent").
+
+### D14. A cancelled or replaced search is dropped by its generation, and does not block the next one
+
+- **Status:** active, in `process::pathing` and `worker`.
+- **Upstream:** `inProgress` stays set until the search thread returns, even after `cancel()`, so no second search starts
+  until the cancelled one has ended; its result is dropped by the thread itself (`Cancellation` installs nothing).
+- **Ours:** `cancel` forgets the search at once, tells the runner to stop it, and a result of any other generation than the one
+  in progress is dropped when it arrives. A new search can start in the same tick. The worker runs one search at a time: a new job replaces a job that waits, and
+  stops the one that runs, and a cancelled search delivers nothing.
+- **Why:** the plan (docs/PLAN.md): "results carry a generation number, so a stale result is dropped".
+- **Changes chosen paths:** no.
+- **Decided by:** the plan.
+
+### D15. Closed doors and fence gates
+
+- **Status:** active, in `exec::movements`.
+- **Upstream:** `MovementHelper.openDoors` and the gate branch of `MovementTraverse` aim at the middle of the block's collision shape
+  (`VecUtils.calculateBlockCenter`, `RotationUtils.reachable` with a ray trace) and press the right button.
+- **Ours:** the aim is the middle of the block, and there is no ray trace, so a gate is always "reachable". The click is
+  `Intent::use_block`, set only when `ExecSettings::can_use_blocks` is true (the default is false). When it is false, the movement
+  ends as `Failed` with `NeedsUseBlock` and the path is cancelled and searched again. Whether a door or gate is open is
+  `WorldView::is_open`, not a block fact (the default says open).
+- **Why:** the glue may not have a simple way to press the button yet. Not adding fields to the block table keeps `facts-compare` as it is.
+- **Changes chosen paths:** no. But a closed door on the only route is searched again at once, so the walk loops until the door is opened by hand, or the glue sets `can_use_blocks`.
+- **Decided by:** the task for S4.
+
+### D16. Branches that break, place, use a bucket, swim or jump a gap fail by name
+
+- **Status:** active, in `exec::movements`. Each has a row marked `later` in the ledger.
+- **Upstream:** a movement mines what is in its way (`prepared`), places the bridge block, the support to jump onto and the pillar blocks,
+  lands a long fall with a water bucket, swims along the surface with `allowSwimming`, and mines what is selected when the head is
+  in a block.
+- **Ours:** the movement ends as `Failed` with a `MoveFailure` (`NeedsBreaking`, `NeedsPlacing`, `NeedsBucket`, `Swimming`,
+  `InsideWall`, `Parkour`). The executor cancels the path and the pathing searches again. With `allowBreak` and `allowPlace` off a
+  search never returns a movement that needs one of these, so this happens only when the world changes under the path.
+- **Why:** S4 is walking and sprinting only.
+- **Changes chosen paths:** no.
+- **Decided by:** the owner (the S4 cut).
+
+### D17. The aim
+
+- **Status:** active, in `look`.
+- **Upstream:** `Mth.atan2` (Minecraft's own approximation), random offsets on the aim (`randomLooking` 0.01 and `randomLooking113`),
+  free look with a server-only rotation, and `smoothLook`.
+- **Ours:** `f64::atan2`, no random offsets, no free look and no smoothing: `Intent::rotation` is what the glue sets as the player's yaw and
+  pitch. The mouse grid (`peekRotation`, `nudgeToLevel`) is ported. The sensitivity is the player's own option, as upstream
+  (`LookBehavior`, `options.sensitivity()`): the glue copies Horizon's `settings.sensitivity` into `ExecSettings::mouse_sensitivity` every tick and
+  `Pathing` hands it to the aim processor each time (a test in `sim.rs` pins it; before the S4 review the setting was never read and the grid was fixed at 0.5).
+  `Rotation::new` turns a NaN or an infinity into 0 where upstream throws.
+- **Why:** the first two differ by far less than the mouse grid (0.15 degrees). The glue has no server-only rotation.
+- **Changes chosen paths:** no.
+- **Decided by:** the task for S4.
+
+### D18. Exceptions that upstream throws are values
+
+- **Status:** active, in `exec` and `process`.
+- **Upstream:** `openDoors` throws `NoSuchElementException` when the two positions are not next to each other. `onTick` throws `IllegalStateException`
+  when `overrideFall` returns a position not on the path. `trySplice` throws when the spliced path ends elsewhere.
+  `CustomGoalProcess.onTick` throws in an unknown state. `Movement.calculatedWhileLoaded` unboxes a null.
+- **Ours:** `open_doors` answers true. The fall override cancels the path (`CancelReason::IllegalState`). A splice that cannot be done drops the
+  planned next path. A process that is not active answers a command that does nothing. An unset `calculated_while_loaded` counts as loaded.
+- **Why:** the executor must not panic. None of these is reached by a path from the search.
+- **Changes chosen paths:** no.
+- **Decided by:** nobody needed.
+
+### D19. Smaller differences
+
+- `MovementFall.willPlaceBucket` is `hasWaterBucket && drop > maxFallHeightNoWater` and not a second run of `dynamicFallCost` (a ladder halfway down the fall is ignored).
+- `Movement.prepared` does not wait for falling-block entities (`pauseMiningForFallingBlocks`): the world view has no entities.
+- `Movement.update` sets `flying = false` and the auto jump off: these are `Intent::cancel_flying` and `disable_auto_jump`.
+- `PathingBehavior.pathStart` and the rest are as upstream. The search's `previous` path for favoring is a clone of the current path.
+- The order of a tick differs from Baritone's: Baritone ticks before the player moves; Horizon's `native_tick` runs after the move,
+  and the hook that sets the keys runs before the next one. An `Intent` therefore acts on the next movement of the player (`docs/PLAN.md`, "Walking with the chat open").
+
+### D20. Arriving is recognised by the mod
+
+- **Status:** active, in `mod/runtime.rs`.
+- **Upstream:** `PathingBehavior.tickPath` queues `AT_GOAL` when the path ends in the goal. But `CustomGoalProcess` gives up control as soon as the
+  feet are in the goal, and that runs in `preTick`, before `tickPath`. Read from the code, the path is then cut first and `AT_GOAL` is not
+  queued (not traced in the game). Upstream says nothing at that moment in its default settings, so it would not show there.
+  That holds only when the previous tick said the movement was safe to cancel. After a fall or a descend it is not, and then the engine does queue
+  `AtGoal` (test `at_goal_is_queued_when_a_fall_ends_in_the_goal`, same as upstream). The process has lost control as soon as the feet are in the goal's
+  cell, so "Arrived." can be printed while the player is still falling.
+- **Ours:** the mod remembers the goal of `/b goto`. When the goal process is done and the feet are in that goal, it says "Arrived." The
+  engine is unchanged.
+- **Why:** a first version should say that it arrived. In the game on 2026-11-06 a 30-block walk ended in the goal and the mod received no `AtGoal` event.
+- **Changes chosen paths:** no.
+- **Decided by:** nobody needed.
+
+### D21. The mod reads the world from two places
+
+- **Status:** active, in `mod/runtime.rs`.
+- **Upstream:** one `BlockStateInterface` over the live world, for the search thread and the game thread alike.
+- **Ours:** the search gets a `Snapshot`: clones of the `Arc<Chunk>` of every loaded chunk, taken on the game thread when a search starts,
+  indexed by the block table. The executor's rechecks on the game thread read the live world (`Live`). They share only the block table
+  (`Tables`, read only). The snapshot covers every loaded chunk, not a window around the player.
+- **Why:** docs/PLAN.md, "How it runs".
+- **Changes chosen paths:** no.
+- **Decided by:** the plan.
+
+### D22. What the first version leaves out of the player's side
+
+- **Status:** active, in `mod/runtime.rs`.
+- **Ours:** `Config.can_sprint` is true for the whole session (the executor still reads the food level and stops a sprint at 6 or less); the
+  tool strength is the empty hand's, because nothing is broken; `water_mult` and `frost_walker` are the defaults of a player without boots. There
+  is no setting yet, so the executor's `ExecSettings` are upstream's defaults. `goto <block>` is refused with a message (the get-to-block process is not
+  ported). A path to a goal in another dimension is not a thing: the goal is dropped when the dimension changes.
+- **Changes chosen paths:** `can_sprint` could, for a player who starts a walk hungry. Not seen.
+- **Decided by:** the task for S4.
+
+### D23. A search that panics stops the goto
+
+- **Status:** active, in `process/pathing.rs` (`take_search_failure`) and `mod/runtime.rs`.
+- **Upstream:** an exception inside a search ends it with `Exception`; no `CALC_FAILED` is queued, the goal process stays in its executing
+  state and starts the same search on the next tick, again and again.
+- **Ours:** the engine keeps that behaviour and only remembers the failure. The glue reads it, stops the goto and says so in the chat, once.
+- **Why:** upstream's loop would take a chunk snapshot every tick and log an error at 20 Hz while the player stands still and says nothing.
+- **Changes chosen paths:** no. It only applies when no path was found at all.
+- **Decided by:** nobody needed. A search now also cannot index past the block table: the glue reads an id the table lacks as air
+  (`world::known_state`, not upstream), which removes the one panic source found.
+
 ### Upstream behaviour kept, found in S3 (reported, not fixed)
 
 The port does what upstream does here; a change would change paths, so it is the owner's call.
@@ -163,6 +320,23 @@ The port does what upstream does here; a change would change paths, so it is the
 - **U2. The y part of the cell key repeats every 2048 blocks** (`(y >> 3) & 0xFF`, bug 4 in `tools/search-compare/known-missed.txt`). Two nodes
   2048 blocks apart in y, with the same x and z, share a slot, so a search in a column higher than 2048 stops at 2048 nodes and
   returns a segment. The committed corpus has a one-wide shaft 4064 high for this. A vanilla world is at most 384 high.
+
+### Upstream behaviour kept, found in S4 (reported, not fixed)
+
+- **U3. A new `goto` while a search runs does not stop that search.** `ForceRevalidate` only cancels when there is a current path, so
+  the search for the old goal finishes and its path is followed to its end; the new goal is searched from there.
+- **U4. A descend is never sprinted through into a traverse.** `canSprintFromDescendInto` compares the traverse's direction `(1, 0, 0)` with the
+  descend's `(1, -1, 0)`; older Baritone compared `next.getDirection().down()`. At 1b8e87c the descend into a traverse slows to a stop; a
+  descend into a descend, and into a diagonal, still sprints. Fixing it changes how fast stairs down are walked, so it is the owner's call.
+- **U5. When the goal is reached, `CustomGoalProcess` answers `CANCEL_AND_SET_GOAL` with a null goal** (it builds the command after `onLostControl`), and
+  `PathingBehavior` sets its goal to null. Harmless.
+- **U6. `CANCELED` is queued on every tick without a process** (`cancelSegmentIfSafe` runs each idle tick). The events are only for the chat.
+- **U7. While a path is followed, the player's own keys are ignored.** See `docs/PLAN.md`, decision 3.
+- **U8. Without Depth Strider, water costs the same as land.** `CalculationContext.waterSpeedMultiplier` ends in `return 1.0f` at 1b8e87c, and the
+  26.3 branch starts from the same `1.0f`. The formula `WALK_ONE_IN_WATER_COST * (1 - m) + WALK_ONE_BLOCK_COST * m` then gives 4.633 ticks a block, not 9.091,
+  so a player without boots is priced as faster in water than one with Depth Strider I (m = 0.33). The search takes water it should avoid. In the game (S4
+  scenarios 5 and 10) moves through deep water took about 2.2 times their estimate. A value of 0 would match the 9.091 constant. Fixing it changes
+  paths, so it is the owner's call.
 
 ## Where upstream's two branches disagree
 

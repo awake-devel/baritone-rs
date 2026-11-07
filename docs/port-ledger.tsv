@@ -113,15 +113,15 @@ ChunkPacker	<init>	later	1b8e87c	a3f1fd36dead1050		Persistent cache: after the p
 ChunkPacker	getPathingBlockType	later	1b8e87c	4a65e6e31454cfc3		Persistent cache: after the processes; the first release has no cache.
 ChunkPacker	pack	later	1b8e87c	5851b3cea208d4dc		Persistent cache: after the processes; the first release has no cache.
 ChunkPacker	pathingTypeToBlock	later	1b8e87c	b961cfc04aad98b2		Persistent cache: after the processes; the first release has no cache.
-CustomGoalProcess	<init>	missing	1b8e87c	abce76fb4c4963cf		
-CustomGoalProcess	displayName0	missing	1b8e87c	e53eb30222b7b304		
-CustomGoalProcess	getGoal	missing	1b8e87c	b54c19de1948e51d		
-CustomGoalProcess	isActive	missing	1b8e87c	07af9aa8085c8d6b		
-CustomGoalProcess	mostRecentGoal	missing	1b8e87c	f368e2331e466b40		
-CustomGoalProcess	onLostControl	missing	1b8e87c	02ba15f70dc67392		
-CustomGoalProcess	onTick	missing	1b8e87c	447f2ca527fd08ff		
-CustomGoalProcess	path	missing	1b8e87c	95f47ff15a96493c		
-CustomGoalProcess	setGoal	missing	1b8e87c	488fc75dee396526		
+CustomGoalProcess	<init>	redesign	1b8e87c	abce76fb4c4963cf		`CustomGoalProcess::new`.
+CustomGoalProcess	displayName0	drop	1b8e87c	e53eb30222b7b304		Display name for the chat.
+CustomGoalProcess	getGoal	port	1b8e87c	b54c19de1948e51d		
+CustomGoalProcess	isActive	port	1b8e87c	07af9aa8085c8d6b		
+CustomGoalProcess	mostRecentGoal	port	1b8e87c	f368e2331e466b40		
+CustomGoalProcess	onLostControl	port	1b8e87c	02ba15f70dc67392		
+CustomGoalProcess	onTick	port	1b8e87c	447f2ca527fd08ff		`disconnectOnArrival` and the notification are not ported.
+CustomGoalProcess	path	port	1b8e87c	95f47ff15a96493c		
+CustomGoalProcess	setGoal	port	1b8e87c	488fc75dee396526		The elytra process is not there.
 CutoffPath	<init>(IPath,int)	redesign	1b8e87c	06d1ae15b8266fe2		`Path::cutoff`. A bad range is a `SearchError` where upstream's subList throws.
 CutoffPath	<init>(IPath,int,int)	redesign	1b8e87c	b263057bb466da39		`Path::cutoff`. A bad range is a `SearchError` where upstream's subList throws.
 CutoffPath	getGoal	port	1b8e87c	50a9d398a5a822ff	search-compare	One `Path` struct stands for Path, CutoffPath and SplicedPath.
@@ -270,6 +270,11 @@ GoalYLevel	hashCode	drop	1b8e87c	6b1b23018d75fb80		No goal is hashed.
 GoalYLevel	heuristic	port	1b8e87c	f46da47852d52114	cost-compare	
 GoalYLevel	isInGoal	port	1b8e87c	8c4b30e28bde1666	cost-compare	
 GoalYLevel	toString	drop	1b8e87c	5d73102a49970fc0		Only for display; commands (S4) can format their own text.
+GotoCommand	<init>	drop	1b8e87c	72444e7c4c86c64c		Commands are matched by name in the glue.
+GotoCommand	execute	redesign	1b8e87c	ff4a9da3ef30f6c1		`command.rs`. The coordinate branch only. `goto <block>` needs the get-to-block process, which is not ported: the command says so.
+GotoCommand	getLongDesc	drop	1b8e87c	533dd20783ca4377		The help text is the glue's own, short.
+GotoCommand	getShortDesc	drop	1b8e87c	5e8148d32265be1b		See getLongDesc.
+GotoCommand	tabComplete	drop	1b8e87c	45def654c089e386		No tab completion.
 IOpenSet	insert	redesign	1b8e87c	b4deb9bf2f10037e		No interface: the pathfinder uses `BinaryHeapOpenSet` only.
 IOpenSet	isEmpty	redesign	1b8e87c	69c4fc8c60b25dbd		No interface: the pathfinder uses `BinaryHeapOpenSet` only.
 IOpenSet	removeLowest	redesign	1b8e87c	2a263e3e13d4483f		No interface: the pathfinder uses `BinaryHeapOpenSet` only.
@@ -285,44 +290,44 @@ IPath	positions	redesign	1b8e87c	2c7a82a6f3ad613b		`Path::positions`.
 IPath	postProcess	redesign	1b8e87c	3fcb8cdc08553d69		`Path::post_process`.
 IPath	sanityCheck	port	1b8e87c	6c9b5496674aff55	search-compare	
 IPath	staticCutoff	redesign	1b8e87c	dc27d0e5f23b1553		`Path::static_cutoff`.
-IPath	ticksRemainingFrom	later	1b8e87c	79d91911d5c8be31		Used by the executor and ticksRemainingInSegment: S4.
-InputOverrideHandler	<init>	missing	1b8e87c	83ac5d53c5456d6b		
-InputOverrideHandler	clearAllKeys	missing	1b8e87c	d0e2c41528c77b15		
-InputOverrideHandler	getBlockBreakHelper	missing	1b8e87c	abc272a91324687c		
-InputOverrideHandler	inControl	missing	1b8e87c	a4534235ac06f46c		
-InputOverrideHandler	isInputForcedDown	missing	1b8e87c	8251719ec0b517bf		
-InputOverrideHandler	onTick	missing	1b8e87c	b0e4908457c6b7df		
-InputOverrideHandler	setInputForceState	missing	1b8e87c	126fc0a3d8ffe822		
+IPath	ticksRemainingFrom	port	1b8e87c	79d91911d5c8be31		`PathExecutor::ticks_remaining_from`.
+InputOverrideHandler	<init>	drop	1b8e87c	83ac5d53c5456d6b		The block break and place helpers are later.
+InputOverrideHandler	clearAllKeys	port	1b8e87c	d0e2c41528c77b15		
+InputOverrideHandler	getBlockBreakHelper	drop	1b8e87c	abc272a91324687c		The block break and place helpers are later.
+InputOverrideHandler	inControl	redesign	1b8e87c	a4534235ac06f46c		`Intent::active`, made in `Pathing::build_intent`.
+InputOverrideHandler	isInputForcedDown	redesign	1b8e87c	8251719ec0b517bf		`Keys`, plain flags.
+InputOverrideHandler	onTick	redesign	1b8e87c	b0e4908457c6b7df		`Pathing::build_intent`. Breaking and placing are later.
+InputOverrideHandler	setInputForceState	redesign	1b8e87c	126fc0a3d8ffe822		`Keys`, plain flags.
 LinkedListOpenSet	insert	drop	1b8e87c	e260b2a42a79b253		Not used by the pathfinder; upstream keeps it for its open set test.
 LinkedListOpenSet	isEmpty	drop	1b8e87c	8c346ecac3df27a6		Not used by the pathfinder; upstream keeps it for its open set test.
 LinkedListOpenSet	removeLowest	drop	1b8e87c	a6b78cce5a55d37b		Not used by the pathfinder; upstream keeps it for its open set test.
 LinkedListOpenSet	update	drop	1b8e87c	9a4a68372cb97d66		Not used by the pathfinder; upstream keeps it for its open set test.
-LookBehavior	<init>	missing	1b8e87c	dd0f6a2f5b59ea19		
-LookBehavior	getAimProcessor	missing	1b8e87c	4dd326b65fa404d2		
-LookBehavior	getEffectiveRotation	missing	1b8e87c	4f0681935f22aa95		
-LookBehavior	onPlayerRotationMove	missing	1b8e87c	21cba8780bde5cd6		
-LookBehavior	onPlayerUpdate	missing	1b8e87c	3e1f966eaa8a8833		
-LookBehavior	onSendPacket	missing	1b8e87c	cd165ee044ee3fc8		
-LookBehavior	onTick	missing	1b8e87c	26c5bd7446d04111		
-LookBehavior	onWorldEvent	missing	1b8e87c	b7241aa897b0d4c0		
-LookBehavior	pig	missing	1b8e87c	78a1a9c317663c9f		
-LookBehavior	updateTarget	missing	1b8e87c	ea4ae106d35df1d7		
-LookBehavior.AbstractAimProcessor	<init>(AbstractAimProcessor)	missing	1b8e87c	2eda6ab93a04c81f		
-LookBehavior.AbstractAimProcessor	<init>(IPlayerContext)	missing	1b8e87c	50fb9a2d93282586		
-LookBehavior.AbstractAimProcessor	advance	missing	1b8e87c	220c81f4a41b6eda		
-LookBehavior.AbstractAimProcessor	angleToMouse	missing	1b8e87c	a0e6685d33119b2f		
-LookBehavior.AbstractAimProcessor	calculateMouseMove	missing	1b8e87c	6e093e71af6560ee		
-LookBehavior.AbstractAimProcessor	fork	missing	1b8e87c	15ff3c141e29a1e7		
-LookBehavior.AbstractAimProcessor	getPrevRotation	missing	1b8e87c	ea117701eb25a4a6		
-LookBehavior.AbstractAimProcessor	mouseToAngle	missing	1b8e87c	b55e4243c318dd68		
-LookBehavior.AbstractAimProcessor	nextRotation	missing	1b8e87c	570b4ab4c54ce874		
-LookBehavior.AbstractAimProcessor	nudgeToLevel	missing	1b8e87c	c41d90b49915ec46		
-LookBehavior.AbstractAimProcessor	peekRotation	missing	1b8e87c	de1a69eaf1ab1da1		
-LookBehavior.AbstractAimProcessor	tick	missing	1b8e87c	6883d573c94e39b0		
-LookBehavior.AimProcessor	<init>	missing	1b8e87c	2d79797ea89f32b2		
-LookBehavior.AimProcessor	getPrevRotation	missing	1b8e87c	8ce25b03ace8e15c		
-LookBehavior.Target	<init>	missing	1b8e87c	5b012e9c6ff7c960		
-LookBehavior.Target.Mode	resolve	missing	1b8e87c	a2cfb7cfedc5b285		
+LookBehavior	<init>	drop	1b8e87c	dd0f6a2f5b59ea19		Free look is not used: the glue sets the player's yaw and pitch from `Intent::rotation`.
+LookBehavior	getAimProcessor	drop	1b8e87c	4dd326b65fa404d2		Free look is not used: the glue sets the player's yaw and pitch from `Intent::rotation`.
+LookBehavior	getEffectiveRotation	drop	1b8e87c	4f0681935f22aa95		Free look is not used: the glue sets the player's yaw and pitch from `Intent::rotation`.
+LookBehavior	onPlayerRotationMove	drop	1b8e87c	21cba8780bde5cd6		Free look is not used: the glue sets the player's yaw and pitch from `Intent::rotation`.
+LookBehavior	onPlayerUpdate	drop	1b8e87c	3e1f966eaa8a8833		Free look is not used: the glue sets the player's yaw and pitch from `Intent::rotation`.
+LookBehavior	onSendPacket	drop	1b8e87c	cd165ee044ee3fc8		Free look is not used: the glue sets the player's yaw and pitch from `Intent::rotation`.
+LookBehavior	onTick	drop	1b8e87c	26c5bd7446d04111		Free look is not used: the glue sets the player's yaw and pitch from `Intent::rotation`.
+LookBehavior	onWorldEvent	drop	1b8e87c	b7241aa897b0d4c0		Free look is not used: the glue sets the player's yaw and pitch from `Intent::rotation`.
+LookBehavior	pig	drop	1b8e87c	78a1a9c317663c9f		Free look is not used: the glue sets the player's yaw and pitch from `Intent::rotation`.
+LookBehavior	updateTarget	redesign	1b8e87c	ea4ae106d35df1d7		`Controls::look`.
+LookBehavior.AbstractAimProcessor	<init>(AbstractAimProcessor)	later	1b8e87c	2eda6ab93a04c81f		The random offsets (`randomLooking`) and the forked processor of the elytra code are not ported.
+LookBehavior.AbstractAimProcessor	<init>(IPlayerContext)	later	1b8e87c	50fb9a2d93282586		The random offsets (`randomLooking`) and the forked processor of the elytra code are not ported.
+LookBehavior.AbstractAimProcessor	advance	later	1b8e87c	220c81f4a41b6eda		The random offsets (`randomLooking`) and the forked processor of the elytra code are not ported.
+LookBehavior.AbstractAimProcessor	angleToMouse	port	1b8e87c	a0e6685d33119b2f		
+LookBehavior.AbstractAimProcessor	calculateMouseMove	port	1b8e87c	6e093e71af6560ee		
+LookBehavior.AbstractAimProcessor	fork	later	1b8e87c	15ff3c141e29a1e7		The random offsets (`randomLooking`) and the forked processor of the elytra code are not ported.
+LookBehavior.AbstractAimProcessor	getPrevRotation	later	1b8e87c	ea117701eb25a4a6		The random offsets (`randomLooking`) and the forked processor of the elytra code are not ported.
+LookBehavior.AbstractAimProcessor	mouseToAngle	port	1b8e87c	b55e4243c318dd68		
+LookBehavior.AbstractAimProcessor	nextRotation	later	1b8e87c	570b4ab4c54ce874		The random offsets (`randomLooking`) and the forked processor of the elytra code are not ported.
+LookBehavior.AbstractAimProcessor	nudgeToLevel	port	1b8e87c	c41d90b49915ec46		
+LookBehavior.AbstractAimProcessor	peekRotation	port	1b8e87c	de1a69eaf1ab1da1		
+LookBehavior.AbstractAimProcessor	tick	later	1b8e87c	6883d573c94e39b0		The random offsets (`randomLooking`) and the forked processor of the elytra code are not ported.
+LookBehavior.AimProcessor	<init>	redesign	1b8e87c	2d79797ea89f32b2		`AimProcessor`: the previous rotation is the player's.
+LookBehavior.AimProcessor	getPrevRotation	redesign	1b8e87c	8ce25b03ace8e15c		`AimProcessor`: the previous rotation is the player's.
+LookBehavior.Target	<init>	drop	1b8e87c	5b012e9c6ff7c960		Free look is not used.
+LookBehavior.Target.Mode	resolve	drop	1b8e87c	a2cfb7cfedc5b285		Free look is not used.
 MineProcess	<init>	later	1b8e87c	bfae21d062cbb6cf		Process: next after the first release (mine, follow, explore, in that order).
 MineProcess	addNearby	later	1b8e87c	95a70841d1b7c495		Process: next after the first release (mine, follow, explore, in that order).
 MineProcess	coalesce	later	1b8e87c	06f301cb066ad1f6		Process: next after the first release (mine, follow, explore, in that order).
@@ -351,81 +356,81 @@ MineProcess.GoalThreeBlocks	toString	later	1b8e87c	3669a6976d6b71e5		Process: ne
 Movement	<init>(IBaritone,BetterBlockPos,BetterBlockPos,BetterBlockPos[])	redesign	1b8e87c	2f48e88c7287f8a1		`Movement::new` keeps kind, src and dest. toBreak and toPlace are executor work.
 Movement	<init>(IBaritone,BetterBlockPos,BetterBlockPos,BetterBlockPos[],BetterBlockPos)	redesign	1b8e87c	74088287641e4e86		`Movement::new` keeps kind, src and dest. toBreak and toPlace are executor work.
 Movement	calculateCost	redesign	1b8e87c	c6cdc8d04918ae75		`Movement::calculate_cost` matches on the kind.
-Movement	calculateValidPositions	later	1b8e87c	2d58b95babd90d11		Executor: S4.
+Movement	calculateValidPositions	redesign	1b8e87c	2d58b95babd90d11		`valid_positions`, one match over the kinds. Each kind's own row is `port`.
 Movement	calculatedWhileLoaded	redesign	1b8e87c	ad40ba650fbc1fce		The field `calculated_while_loaded` is an Option.
 Movement	checkLoadedChunk	port	1b8e87c	b69102e6560d403a	search-compare	
 Movement	getCost()	port	1b8e87c	8ca681380229112d		None where upstream unboxes a null and throws.
 Movement	getCost(CalculationContext)	port	1b8e87c	2e59021b15c879dd		
 Movement	getDest	redesign	1b8e87c	ef439a1590aa54c7		Public field `dest`.
-Movement	getDirection	later	1b8e87c	211ff52e1c6ec8e3		Executor: S4.
+Movement	getDirection	port	1b8e87c	211ff52e1c6ec8e3		Executor: S4.
 Movement	getSrc	redesign	1b8e87c	6be22d8df7288701		Public field `src`.
-Movement	getValidPositions	later	1b8e87c	637bda20ef2fdb84		Executor: S4.
-Movement	holdWaterline	later	1b8e87c	d2fe23f667fc7b26		Executor: S4.
-Movement	lookForSwimVelocity	later	1b8e87c	ffc8c2b099e06844		Executor: S4.
+Movement	getValidPositions	redesign	1b8e87c	637bda20ef2fdb84		`MoveRuntime::valid`, computed once.
+Movement	holdWaterline	later	1b8e87c	d2fe23f667fc7b26		Swimming: `allowSwimming` is off by default. With it on, a movement in water fails with `MoveFailure::Swimming`.
+Movement	lookForSwimVelocity	later	1b8e87c	ffc8c2b099e06844		Swimming: `allowSwimming` is off by default. With it on, a movement in water fails with `MoveFailure::Swimming`.
 Movement	override	port	1b8e87c	2f38c18661421e09	search-compare	`Movement::override_cost`.
-Movement	pitchForSwimVelocity	later	1b8e87c	a715f1f1804de095		Executor: S4.
-Movement	playerInValidPosition	later	1b8e87c	070d9969b2bd0bc2		Executor: S4.
-Movement	preTurnIntoTheBend	later	1b8e87c	578c25c1d8d69b73		Executor: S4.
-Movement	prepared	later	1b8e87c	eae3867ba73b8b38		Executor: S4.
+Movement	pitchForSwimVelocity	later	1b8e87c	a715f1f1804de095		Swimming: `allowSwimming` is off by default. With it on, a movement in water fails with `MoveFailure::Swimming`.
+Movement	playerInValidPosition	port	1b8e87c	070d9969b2bd0bc2		Executor: S4.
+Movement	preTurnIntoTheBend	later	1b8e87c	578c25c1d8d69b73		Swimming: `allowSwimming` is off by default. With it on, a movement in water fails with `MoveFailure::Swimming`.
+Movement	prepared	port	1b8e87c	eae3867ba73b8b38		`exec/movements.rs`. Mining the block in the way is a failure (`NeedsBreaking`). The wait for a falling block entity is left out: the world view has no entities.
 Movement	recalculateCost	port	1b8e87c	e7ec743f307f538d		
-Movement	reset	later	1b8e87c	20247ab911639e9e		Executor: S4.
-Movement	resetBlockCache	later	1b8e87c	c7740c02ac6ef5b3		Executor: S4.
-Movement	safeToCancel()	later	1b8e87c	2fef8ae86af16f11		Executor: S4.
-Movement	safeToCancel(MovementState)	later	1b8e87c	dfd31fd5316ca91d		Executor: S4.
-Movement	shouldSwim	later	1b8e87c	0499657898822fe3		Executor: S4.
-Movement	toBreak	later	1b8e87c	3d1cc95adf1aa01d		Executor: S4.
-Movement	toBreakAll	later	1b8e87c	b9d13341c6f54c6d		Executor: S4.
-Movement	toPlace	later	1b8e87c	55e066d696ecc2ac		Executor: S4.
-Movement	toWalkInto	later	1b8e87c	b4ce8638adae76f0		Executor: S4.
-Movement	update	later	1b8e87c	3ddb04be9cc19623		Executor: S4.
-Movement	updateState	later	1b8e87c	88bc25824f1ae844		Executor: S4.
+Movement	reset	port	1b8e87c	20247ab911639e9e		`MoveRuntime::reset`.
+Movement	resetBlockCache	drop	1b8e87c	c7740c02ac6ef5b3		`to_break` and `to_place` are computed when asked. Nothing is cached.
+Movement	safeToCancel()	port	1b8e87c	2fef8ae86af16f11		Executor: S4.
+Movement	safeToCancel(MovementState)	port	1b8e87c	dfd31fd5316ca91d		Executor: S4.
+Movement	shouldSwim	later	1b8e87c	0499657898822fe3		Swimming: `allowSwimming` is off by default. With it on, a movement in water fails with `MoveFailure::Swimming`.
+Movement	toBreak	port	1b8e87c	3d1cc95adf1aa01d		Executor: S4.
+Movement	toBreakAll	port	1b8e87c	b9d13341c6f54c6d		Executor: S4.
+Movement	toPlace	port	1b8e87c	55e066d696ecc2ac		Executor: S4.
+Movement	toWalkInto	port	1b8e87c	b4ce8638adae76f0		`exec/movements.rs`: empty except for the diagonal.
+Movement	update	port	1b8e87c	3ddb04be9cc19623		`exec/movements.rs`. Swimming (`allowSwimming`) and the click when the head is in a block are failures by name.
+Movement	updateState	port	1b8e87c	88bc25824f1ae844		`exec/movements.rs`: `base_update_state`.
 MovementAscend	<init>	redesign	1b8e87c	f97db35233e1a72e		`Movement::new`. toBreak and toPlace are executor work.
 MovementAscend	calculateCost	port	1b8e87c	57e33d60a46f1c69		
-MovementAscend	calculateValidPositions	later	1b8e87c	870e4046e4679bdd		Executor: S4.
+MovementAscend	calculateValidPositions	port	1b8e87c	870e4046e4679bdd		`exec/movements.rs`: `valid_positions`.
 MovementAscend	cost	port	1b8e87c	a1de32bdeb227a53	cost-compare	
-MovementAscend	headBonkClear	later	1b8e87c	e630635a510b9e7c		Executor: S4.
-MovementAscend	reset	later	1b8e87c	23ce7033958c272b		Executor: S4.
-MovementAscend	safeToCancel	later	1b8e87c	9344a6eed892eca9		Executor: S4.
-MovementAscend	updateState	later	1b8e87c	2831fdcdc5c33ef1		Executor: S4.
+MovementAscend	headBonkClear	port	1b8e87c	e630635a510b9e7c		Executor: S4.
+MovementAscend	reset	port	1b8e87c	23ce7033958c272b		Executor: S4.
+MovementAscend	safeToCancel	port	1b8e87c	9344a6eed892eca9		Executor: S4.
+MovementAscend	updateState	port	1b8e87c	2831fdcdc5c33ef1		The branch that places the block to jump onto fails with `NeedsPlacing`.
 MovementDescend	<init>	redesign	1b8e87c	09599d7ac7244418		`Movement::new`. toBreak and toPlace are executor work.
 MovementDescend	calculateCost	port	1b8e87c	37df4709e7715a6d		
-MovementDescend	calculateValidPositions	later	1b8e87c	288833ad4ab1d4a2		Executor: S4.
+MovementDescend	calculateValidPositions	port	1b8e87c	288833ad4ab1d4a2		`exec/movements.rs`: `valid_positions`.
 MovementDescend	cost	port	1b8e87c	0279f30ee709b206	cost-compare	
 MovementDescend	dynamicFallCost	port	1b8e87c	e01387427bb0637a	cost-compare	allowFallIntoLava is false outside the elytra code.
-MovementDescend	forceSafeMode	later	1b8e87c	c4ca6e92420007a1		Executor: S4.
-MovementDescend	reset	later	1b8e87c	5fe72d7ce18dddc9		Executor: S4.
-MovementDescend	safeMode	later	1b8e87c	7b1def7002d96a97		Executor: S4.
-MovementDescend	skipToAscend	later	1b8e87c	c0a2eb2f4548e8bb		Executor: S4.
-MovementDescend	updateState	later	1b8e87c	9156ee8590018c18		Executor: S4.
+MovementDescend	forceSafeMode	redesign	1b8e87c	c4ca6e92420007a1		The executor sets `MoveRuntime::force_safe_mode`.
+MovementDescend	reset	port	1b8e87c	5fe72d7ce18dddc9		Executor: S4.
+MovementDescend	safeMode	port	1b8e87c	7b1def7002d96a97		Executor: S4.
+MovementDescend	skipToAscend	port	1b8e87c	c0a2eb2f4548e8bb		Executor: S4.
+MovementDescend	updateState	port	1b8e87c	9156ee8590018c18		Executor: S4.
 MovementDiagonal	<init>(IBaritone,BetterBlockPos,BetterBlockPos,BetterBlockPos,BetterBlockPos)	redesign	1b8e87c	ccbdf63ed5cbb51a		`Movement::new`. toBreak and toPlace are executor work. The diagonal takes its end from `Moves.apply0`.
 MovementDiagonal	<init>(IBaritone,BetterBlockPos,BetterBlockPos,BetterBlockPos,Direction,int)	redesign	1b8e87c	3eec2988bcb57519		`Movement::new`. toBreak and toPlace are executor work. The diagonal takes its end from `Moves.apply0`.
 MovementDiagonal	<init>(IBaritone,BetterBlockPos,Direction,Direction,int)	redesign	1b8e87c	baefdf4fb6162e7b		`Movement::new`. toBreak and toPlace are executor work. The diagonal takes its end from `Moves.apply0`.
 MovementDiagonal	calculateCost	port	1b8e87c	37df4709e7715a6d		
-MovementDiagonal	calculateValidPositions	later	1b8e87c	c4c03e664af16e51		Executor: S4.
+MovementDiagonal	calculateValidPositions	port	1b8e87c	c4c03e664af16e51		`exec/movements.rs`: `valid_positions`.
 MovementDiagonal	cost	port	1b8e87c	c422c1e311ef5484	cost-compare	
 MovementDiagonal	isBlockingDoor	port	1b8e87c	db372b2640e5044e	cost-compare	
-MovementDiagonal	prepared	later	1b8e87c	6180a6f1184bfb3e		Executor: S4.
-MovementDiagonal	safeToCancel	later	1b8e87c	59a6e5bef1c2dffe		Executor: S4.
-MovementDiagonal	sprint	later	1b8e87c	295bc12222939373		Executor: S4.
-MovementDiagonal	toBreak	later	1b8e87c	08dd54ec4c07d34d		Executor: S4.
-MovementDiagonal	toWalkInto	later	1b8e87c	699d613c4f4f838e		Executor: S4.
-MovementDiagonal	updateState	later	1b8e87c	785d042514ddb708		Executor: S4.
+MovementDiagonal	prepared	port	1b8e87c	6180a6f1184bfb3e		Executor: S4.
+MovementDiagonal	safeToCancel	port	1b8e87c	59a6e5bef1c2dffe		Executor: S4.
+MovementDiagonal	sprint	port	1b8e87c	295bc12222939373		Executor: S4.
+MovementDiagonal	toBreak	port	1b8e87c	08dd54ec4c07d34d		Executor: S4.
+MovementDiagonal	toWalkInto	port	1b8e87c	699d613c4f4f838e		Executor: S4.
+MovementDiagonal	updateState	port	1b8e87c	785d042514ddb708		Executor: S4.
 MovementDownward	<init>	redesign	1b8e87c	3fee61e2f5b4d4ab		`Movement::new`. toBreak and toPlace are executor work.
 MovementDownward	calculateCost	port	1b8e87c	b98f2f7234fd0837		
-MovementDownward	calculateValidPositions	later	1b8e87c	383246429d6b166b		Executor: S4.
+MovementDownward	calculateValidPositions	port	1b8e87c	383246429d6b166b		`exec/movements.rs`: `valid_positions`.
 MovementDownward	cost	port	1b8e87c	f895b0d4306457e0	cost-compare	
-MovementDownward	reset	later	1b8e87c	b43e6509299e61f2		Executor: S4.
-MovementDownward	updateState	later	1b8e87c	53d0b489162e47c4		Executor: S4.
+MovementDownward	reset	port	1b8e87c	b43e6509299e61f2		Executor: S4.
+MovementDownward	updateState	port	1b8e87c	53d0b489162e47c4		Executor: S4.
 MovementFall	<init>	redesign	1b8e87c	4bb102f992e7629f		`Movement::new`. toBreak and toPlace are executor work.
-MovementFall	avoid	later	1b8e87c	f7ca9c2ac76f59e0		Executor: S4.
-MovementFall	buildPositionsToBreak	later	1b8e87c	df00a0bf8ca01b01		Executor: S4.
+MovementFall	avoid	port	1b8e87c	f7ca9c2ac76f59e0		Executor: S4.
+MovementFall	buildPositionsToBreak	port	1b8e87c	df00a0bf8ca01b01		Executor: S4.
 MovementFall	calculateCost	port	1b8e87c	ac2b756bbcecb7be		
-MovementFall	calculateValidPositions	later	1b8e87c	050b67d207870d0e		Executor: S4.
-MovementFall	prepared	later	1b8e87c	3d3b4ce15f7917c6		Executor: S4.
-MovementFall	safeToCancel	later	1b8e87c	f5a789f9c1ee179e		Executor: S4.
-MovementFall	updateState	later	1b8e87c	9093b11d6694c793		Executor: S4.
-MovementFall	willPlaceBucket	later	1b8e87c	e0506533818050c7		Executor: S4.
-MovementHelper	attemptToPlaceABlock	later	1b8e87c	4473a56a0d0bdd8a		Executor side: S4.
+MovementFall	calculateValidPositions	port	1b8e87c	050b67d207870d0e		`exec/movements.rs`: `valid_positions`.
+MovementFall	prepared	port	1b8e87c	3d3b4ce15f7917c6		Executor: S4.
+MovementFall	safeToCancel	port	1b8e87c	f5a789f9c1ee179e		Executor: S4.
+MovementFall	updateState	port	1b8e87c	9093b11d6694c793		Without a water bucket. A fall that needs one fails with `NeedsBucket`; picking the water up again is not done.
+MovementFall	willPlaceBucket	redesign	1b8e87c	e0506533818050c7		`will_place_bucket` checks `hasWaterBucket` and the drop height instead of running `dynamicFallCost` again.
+MovementHelper	attemptToPlaceABlock	later	1b8e87c	4473a56a0d0bdd8a		Placing and breaking are later.
 MovementHelper	avoidAdjacentBreaking	port	1b8e87c	b94c152b1b81a19c	cost-compare	
 MovementHelper	avoidBreaking(BlockStateInterface,int,int,int,BlockState)	later	1b8e87c	479795bcf839b293		Executor side: S4.
 MovementHelper	avoidBreaking(CalculationContext,int,int,int,BlockState)	port	1b8e87c	0ce5ceb6141fe423	cost-compare	
@@ -438,25 +443,25 @@ MovementHelper	canPlaceAgainst(CalculationContext,int,int,int,BlockState)	port	1
 MovementHelper	canPlaceAgainst(IPlayerContext,BlockPos)	later	1b8e87c	db5b25392a2792b4		Executor side: S4.
 MovementHelper	canUseFrostWalker(CalculationContext,BlockState)	port	1b8e87c	73fe151347609958	cost-compare	
 MovementHelper	canUseFrostWalker(IPlayerContext,BlockPos)	later	1b8e87c	66bdc4ff0fe33c97		Executor side: S4.
-MovementHelper	canWalkOn(BlockStateInterface,int,int,int)	later	1b8e87c	0b18522bab903a7b		Executor side: S4.
-MovementHelper	canWalkOn(BlockStateInterface,int,int,int,BlockState)	later	1b8e87c	fad245bb6ebc0361		Executor side: S4.
+MovementHelper	canWalkOn(BlockStateInterface,int,int,int)	redesign	1b8e87c	0b18522bab903a7b		`Env::can_walk_on`: the same flags and position check as the search's.
+MovementHelper	canWalkOn(BlockStateInterface,int,int,int,BlockState)	redesign	1b8e87c	fad245bb6ebc0361		`Env::can_walk_on`: the same flags and position check as the search's.
 MovementHelper	canWalkOn(CalculationContext,int,int,int)	port	1b8e87c	5b388d5a012b8c4b	cost-compare	
 MovementHelper	canWalkOn(CalculationContext,int,int,int,BlockState)	port	1b8e87c	948bbace0a702950	cost-compare	
-MovementHelper	canWalkOn(IPlayerContext,BetterBlockPos)	later	1b8e87c	ed6f5b15ab463855		Executor side: S4.
-MovementHelper	canWalkOn(IPlayerContext,BetterBlockPos,BlockState)	later	1b8e87c	b692192952744e84		Executor side: S4.
-MovementHelper	canWalkOn(IPlayerContext,BlockPos)	later	1b8e87c	87035631e38d0fb9		Executor side: S4.
+MovementHelper	canWalkOn(IPlayerContext,BetterBlockPos)	redesign	1b8e87c	ed6f5b15ab463855		`Env::can_walk_on`: the same flags and position check as the search's.
+MovementHelper	canWalkOn(IPlayerContext,BetterBlockPos,BlockState)	redesign	1b8e87c	b692192952744e84		`Env::can_walk_on`: the same flags and position check as the search's.
+MovementHelper	canWalkOn(IPlayerContext,BlockPos)	redesign	1b8e87c	87035631e38d0fb9		`Env::can_walk_on`: the same flags and position check as the search's.
 MovementHelper	canWalkOnBlockState	port	1b8e87c	c4ee6e86b12806ba	cost-compare	
 MovementHelper	canWalkOnPosition	port	1b8e87c	f84987c5d84a407a	cost-compare	
-MovementHelper	canWalkThrough(BlockStateInterface,int,int,int)	later	1b8e87c	c626c3ef871a8c52		Executor side: S4.
-MovementHelper	canWalkThrough(BlockStateInterface,int,int,int,BlockState)	later	1b8e87c	f95322f965a4729c		Executor side: S4.
+MovementHelper	canWalkThrough(BlockStateInterface,int,int,int)	redesign	1b8e87c	c626c3ef871a8c52		`Env::can_walk_through`: the same flags and position check as the search's.
+MovementHelper	canWalkThrough(BlockStateInterface,int,int,int,BlockState)	redesign	1b8e87c	f95322f965a4729c		`Env::can_walk_through`: the same flags and position check as the search's.
 MovementHelper	canWalkThrough(CalculationContext,int,int,int)	port	1b8e87c	2803ae9c6c04941f	cost-compare	
 MovementHelper	canWalkThrough(CalculationContext,int,int,int,BlockState)	port	1b8e87c	5ae051b633794f81	cost-compare	
-MovementHelper	canWalkThrough(IPlayerContext,BetterBlockPos)	later	1b8e87c	eef0cc6757efe1a7		Executor side: S4.
+MovementHelper	canWalkThrough(IPlayerContext,BetterBlockPos)	redesign	1b8e87c	eef0cc6757efe1a7		`Env::can_walk_through`: the same flags and position check as the search's.
 MovementHelper	canWalkThroughBlockState	port	1b8e87c	f0c29c7ba0fc3d75	cost-compare	isPathfindable is a fact from the glue.
 MovementHelper	canWalkThroughPosition	port	1b8e87c	5ed5543749ae9e4c	cost-compare	
 MovementHelper	fullyPassable(CalculationContext,int,int,int)	port	1b8e87c	b7a45af9a083a95e	cost-compare	
 MovementHelper	fullyPassable(CalculationContext,int,int,int,BlockState)	port	1b8e87c	0917adf01389b5fd	cost-compare	
-MovementHelper	fullyPassable(IPlayerContext,BlockPos)	later	1b8e87c	6bb931f2722d3d26		Executor side: S4.
+MovementHelper	fullyPassable(IPlayerContext,BlockPos)	redesign	1b8e87c	6bb931f2722d3d26		`Env::fully_passable`.
 MovementHelper	fullyPassableBlockState	port	1b8e87c	c986d88da2f78d2b	cost-compare	
 MovementHelper	fullyPassablePosition	port	1b8e87c	ebb4bc3eb55427dc	cost-compare	
 MovementHelper	getMiningDurationTicks(CalculationContext,int,int,int,BlockState,boolean)	port	1b8e87c	1febf2e4ac62db90	cost-compare	
@@ -465,27 +470,31 @@ MovementHelper	getMiningDurationTicks0	port	1b8e87c	1c07f267f37ecdab	cost-compar
 MovementHelper	isBlockNormalCube	port	1b8e87c	8d6ad00a9ca34b1e	cost-compare	
 MovementHelper	isBottomSlab	port	1b8e87c	ec7057983b8e452f	cost-compare	
 MovementHelper	isClimbable	port	1b8e87c	a9b700a7d5a91755	cost-compare	
-MovementHelper	isDoorPassable	later	1b8e87c	26e019ae3c4885c1		Executor side: S4.
+MovementHelper	isDoorPassable	port	1b8e87c	26e019ae3c4885c1		Executor side: S4.
 MovementHelper	isFlowing	port	1b8e87c	8ce4074c8c065142	cost-compare	
-MovementHelper	isGatePassable	later	1b8e87c	106214f02b2479a9		Executor side: S4.
+MovementHelper	isGatePassable	port	1b8e87c	106214f02b2479a9		Executor side: S4.
 MovementHelper	isLava	port	1b8e87c	5ccb5e71d01f631b	cost-compare	
 MovementHelper	isLiquid(BlockState)	port	1b8e87c	44acec4c4ac4536d	cost-compare	
-MovementHelper	isLiquid(IPlayerContext,BlockPos)	later	1b8e87c	c10afab3ccd9801d		Executor side: S4.
+MovementHelper	isLiquid(IPlayerContext,BlockPos)	redesign	1b8e87c	c10afab3ccd9801d		`Env::is_liquid`.
 MovementHelper	isReplaceable	port	1b8e87c	b047cf27c0901f44	cost-compare	
 MovementHelper	isTransparent	port	1b8e87c	595a24bf2d4de89c	cost-compare	
 MovementHelper	isWater(BlockState)	port	1b8e87c	6c4510c91c7c8d22	cost-compare	
-MovementHelper	isWater(IPlayerContext,BlockPos)	later	1b8e87c	ff7e93ab9663aa37		Executor side: S4.
+MovementHelper	isWater(IPlayerContext,BlockPos)	redesign	1b8e87c	ff7e93ab9663aa37		`Env::is_water`.
 MovementHelper	isWaterloggedSolidTop	port	1b8e87c	15fad80f9e89a8e8	cost-compare	
-MovementHelper	moveTowards	later	1b8e87c	f71bab2a745f74d7		Executor side: S4.
-MovementHelper	moveTowardsWithSlightRotation	later	1b8e87c	1813bf5430988acc		Executor side: S4.
-MovementHelper	moveTowardsWithoutRotation(IPlayerContext,MovementState,BlockPos)	later	1b8e87c	14e13264cd7131ba		Executor side: S4.
-MovementHelper	moveTowardsWithoutRotation(IPlayerContext,MovementState,float)	later	1b8e87c	4683692d05d274b0		Executor side: S4.
+MovementHelper	moveTowards	port	1b8e87c	f71bab2a745f74d7		Executor side: S4.
+MovementHelper	moveTowardsWithSlightRotation	later	1b8e87c	1813bf5430988acc		Used by the branch of the traverse that places a bridge block: placing is later.
+MovementHelper	moveTowardsWithoutRotation(IPlayerContext,MovementState,BlockPos)	later	1b8e87c	14e13264cd7131ba		Used by the branch of the traverse that places a bridge block: placing is later.
+MovementHelper	moveTowardsWithoutRotation(IPlayerContext,MovementState,float)	later	1b8e87c	4683692d05d274b0		Used by the branch of the traverse that places a bridge block: placing is later.
 MovementHelper	mustBeSolidToWalkOn	port	1b8e87c	4158dd03d47cb9fd	cost-compare	
-MovementHelper	openDoors	later	1b8e87c	22a8f6aedc2cd83e		Executor side: S4.
+MovementHelper	openDoors	port	1b8e87c	22a8f6aedc2cd83e		The click is `Intent::use_block` (with `can_use_blocks`), else `NeedsUseBlock`. The aim is the middle of the block.
 MovementHelper	possiblyFlowing	port	1b8e87c	135e5ad22ff9a802	cost-compare	
-MovementHelper	steppingOnBlocks	later	1b8e87c	2549cdcfe6accd89		Executor side: S4.
-MovementHelper	switchToBestToolFor(IPlayerContext,BlockState)	later	1b8e87c	266b18edf4cca6d2		Executor side: S4.
-MovementHelper	switchToBestToolFor(IPlayerContext,BlockState,ToolSet,boolean)	later	1b8e87c	2f3e6afe62ce4008		Executor side: S4.
+MovementHelper	steppingOnBlocks	port	1b8e87c	2549cdcfe6accd89		Executor side: S4.
+MovementHelper	switchToBestToolFor(IPlayerContext,BlockState)	later	1b8e87c	266b18edf4cca6d2		Placing and breaking are later.
+MovementHelper	switchToBestToolFor(IPlayerContext,BlockState,ToolSet,boolean)	later	1b8e87c	2f3e6afe62ce4008		Placing and breaking are later.
+MovementOption	<init>	later	1b8e87c	cfbdc94076590828		Only `moveTowardsWithoutRotation` uses it (strafing without turning).
+MovementOption	distanceToSq	later	1b8e87c	437268da75c04db2		Only `moveTowardsWithoutRotation` uses it (strafing without turning).
+MovementOption	getOptions	later	1b8e87c	649d97d0309f5794		Only `moveTowardsWithoutRotation` uses it (strafing without turning).
+MovementOption	setInputs	later	1b8e87c	b658097e055d29b0		Only `moveTowardsWithoutRotation` uses it (strafing without turning).
 MovementParkour	<init>	redesign	1b8e87c	2644f3c489c09eac		`Movement::new`. toBreak and toPlace are executor work.
 MovementParkour	calculateCost	port	1b8e87c	a815eed498afb743		
 MovementParkour	calculateValidPositions	later	1b8e87c	1c83db9b93285e8e		Executor: S4.
@@ -497,18 +506,28 @@ MovementParkour	safeToCancel	later	1b8e87c	55e0812dcb1fa176		Executor: S4.
 MovementParkour	updateState	later	1b8e87c	bcd5f0021510c0ac		Executor: S4.
 MovementPillar	<init>	redesign	1b8e87c	6bb63703f7092286		`Movement::new`. toBreak and toPlace are executor work.
 MovementPillar	calculateCost	port	1b8e87c	b98f2f7234fd0837		
-MovementPillar	calculateValidPositions	later	1b8e87c	383246429d6b166b		Executor: S4.
+MovementPillar	calculateValidPositions	port	1b8e87c	383246429d6b166b		`exec/movements.rs`: `valid_positions`.
 MovementPillar	cost	port	1b8e87c	a08876128e928e32	cost-compare	
-MovementPillar	prepared	later	1b8e87c	d9a71a7a9bf934bf		Executor: S4.
-MovementPillar	updateState	later	1b8e87c	7b1bb2c43de52022		Executor: S4.
+MovementPillar	prepared	port	1b8e87c	d9a71a7a9bf934bf		Executor: S4.
+MovementPillar	updateState	port	1b8e87c	7b1bb2c43de52022		Ladders, vines and a column of water. A pillar that places blocks fails with `NeedsPlacing`.
+MovementState	getInputStates	redesign	1b8e87c	534df4a29ab14ac4		`MoveState`, with `Keys`.
+MovementState	getStatus	redesign	1b8e87c	a64adb9f149fc076		`MoveState`, with `Keys`.
+MovementState	getTarget	redesign	1b8e87c	88d07451c6f41ee4		`MoveState`, with `Keys`.
+MovementState	setInput	redesign	1b8e87c	548f1dc7812d05ac		`MoveState`, with `Keys`.
+MovementState	setStatus	redesign	1b8e87c	f30172f5d5fcde36		`MoveState`, with `Keys`.
+MovementState	setTarget	redesign	1b8e87c	16a96bd336229a39		`MoveState`, with `Keys`.
+MovementState.MovementTarget	<init>()	redesign	1b8e87c	f602cc3bd158a136		`state::Target`.
+MovementState.MovementTarget	<init>(Rotation,boolean)	redesign	1b8e87c	d3c73a85256cf585		`state::Target`.
+MovementState.MovementTarget	getRotation	redesign	1b8e87c	fe7150631edcd936		`state::Target`.
+MovementState.MovementTarget	hasToForceRotations	redesign	1b8e87c	2fb8dee783550854		`state::Target`.
 MovementTraverse	<init>	redesign	1b8e87c	73be90078e8f594a		`Movement::new`. toBreak and toPlace are executor work.
 MovementTraverse	calculateCost	port	1b8e87c	57e33d60a46f1c69		
-MovementTraverse	calculateValidPositions	later	1b8e87c	383246429d6b166b		Executor: S4.
+MovementTraverse	calculateValidPositions	port	1b8e87c	383246429d6b166b		`exec/movements.rs`: `valid_positions`.
 MovementTraverse	cost	port	1b8e87c	d3f6b3b49021d2c3	cost-compare	
-MovementTraverse	prepared	later	1b8e87c	cca0bb7772344049		Executor: S4.
-MovementTraverse	reset	later	1b8e87c	e415f81bea730766		Executor: S4.
-MovementTraverse	safeToCancel	later	1b8e87c	3ed0a190a240e5f9		Executor: S4.
-MovementTraverse	updateState	later	1b8e87c	71cb6aeb8d77e9f1		Executor: S4.
+MovementTraverse	prepared	port	1b8e87c	cca0bb7772344049		Executor: S4.
+MovementTraverse	reset	port	1b8e87c	e415f81bea730766		Executor: S4.
+MovementTraverse	safeToCancel	port	1b8e87c	3ed0a190a240e5f9		Executor: S4.
+MovementTraverse	updateState	port	1b8e87c	71cb6aeb8d77e9f1		The branch that places the bridge block fails with `NeedsPlacing`. A closed door or gate is `use_block`, or `NeedsUseBlock`.
 Moves	<init>(int,int,int)	redesign	1b8e87c	44231cfdfba4e7ef	cost-compare	The enum has offset and flag functions instead of fields.
 Moves	<init>(int,int,int,boolean,boolean)	redesign	1b8e87c	7cb2b27c96e607f1	cost-compare	The enum has offset and flag functions instead of fields.
 Moves	apply	port	1b8e87c	779e80c6d2db7615	cost-compare	
@@ -570,82 +589,84 @@ Path	postProcess	port	1b8e87c	87e6d2ccd3eaa090	search-compare	Also stands for th
 Path	runBackwards	port	1b8e87c	7cb062a4fdbc2b78	search-compare	
 PathBase	cutoffAtLoadedChunks	port	1b8e87c	3b7cbf94111efd6f	search-compare	
 PathBase	staticCutoff	port	1b8e87c	484ecfa8df878449	search-compare	A factor above 1 can make the cut longer than the path: upstream's subList throws, here it is a `SearchError`.
-PathExecutor	<init>	missing	1b8e87c	43cddb0e30389ece		
-PathExecutor	canSprintFromDescendInto	missing	1b8e87c	088ce295a464aeb9		
-PathExecutor	canStartHeadHitting	missing	1b8e87c	0209ef113fa91a49		
-PathExecutor	cancel	missing	1b8e87c	906fa9e4ec33d940		
-PathExecutor	clearKeys	missing	1b8e87c	862269ab3efa1718		
-PathExecutor	clearOfCeilingEntrance	missing	1b8e87c	9324ea126ad41e96		
-PathExecutor	clearOfLedgesAhead	missing	1b8e87c	c3c636d8eb01fbdd		
-PathExecutor	closestPathPos	missing	1b8e87c	fdd5d5bd22419904		
-PathExecutor	cutIfTooLong	missing	1b8e87c	c259199036ac6552		
-PathExecutor	failed	missing	1b8e87c	6463fe6981974487		
-PathExecutor	finished	missing	1b8e87c	6fda9371849c03eb		
-PathExecutor	fly	missing	1b8e87c	583beddb02276bfa		
-PathExecutor	getPath	missing	1b8e87c	47cea0cd4c6ecc5d		
-PathExecutor	getPosition	missing	1b8e87c	ab38a41ea0d9183a		
-PathExecutor	headHitJump	missing	1b8e87c	401748b65c9e3355		
-PathExecutor	isSprinting	missing	1b8e87c	e0e8561be1361ad4		
-PathExecutor	onChangeInPathPosition	missing	1b8e87c	f28db77fcbcda019		
-PathExecutor	onTick	missing	1b8e87c	4f7456e6d153803a		
-PathExecutor	overrideFall	missing	1b8e87c	505da65ac68d06e8		
-PathExecutor	possiblyOffPath	missing	1b8e87c	0b34fc479615eb3a		
-PathExecutor	shouldPause	missing	1b8e87c	39ea94d307a856a1		
-PathExecutor	shouldSprintNextTick	missing	1b8e87c	e9b6db101478c281		
-PathExecutor	skipNow	missing	1b8e87c	82e36a71ec2c9c10		
-PathExecutor	snipsnapifpossible	missing	1b8e87c	0e35c836bde01525		
-PathExecutor	sprintableAscend	missing	1b8e87c	ebc7e5a06b2abf46		
-PathExecutor	steer	missing	1b8e87c	73249dba1b5701c6		
-PathExecutor	toBreak	missing	1b8e87c	05e789d9fdf38d94		
-PathExecutor	toPlace	missing	1b8e87c	9b115e1e5d46965f		
-PathExecutor	toWalkInto	missing	1b8e87c	bad5159cf3f9cef4		
-PathExecutor	trySplice	missing	1b8e87c	264377a9939fc4af		
-PathExecutor	underHeadBonkCeiling	missing	1b8e87c	cf0f03be5b1c11e1		
+PathExecutor	<init>	redesign	1b8e87c	43cddb0e30389ece		`PathExecutor::new`: the executor owns a copy of the movements, with their runtime state.
+PathExecutor	canSprintFromDescendInto	port	1b8e87c	088ce295a464aeb9		Kept as it is at 1b8e87c, where the traverse case compares the direction without `.down()`: see deviations.md.
+PathExecutor	canStartHeadHitting	later	1b8e87c	0209ef113fa91a49		`headHitters` is off by default.
+PathExecutor	cancel	port	1b8e87c	906fa9e4ec33d940		
+PathExecutor	clearKeys	port	1b8e87c	862269ab3efa1718		
+PathExecutor	clearOfCeilingEntrance	later	1b8e87c	9324ea126ad41e96		`headHitters` is off by default.
+PathExecutor	clearOfLedgesAhead	later	1b8e87c	c3c636d8eb01fbdd		`headHitters` is off by default.
+PathExecutor	closestPathPos	port	1b8e87c	fdd5d5bd22419904		
+PathExecutor	cutIfTooLong	port	1b8e87c	c259199036ac6552		
+PathExecutor	failed	port	1b8e87c	6463fe6981974487		
+PathExecutor	finished	port	1b8e87c	6fda9371849c03eb		
+PathExecutor	fly	later	1b8e87c	583beddb02276bfa		`sprintJumping` (`SprintJump`) is off by default.
+PathExecutor	getPath	redesign	1b8e87c	47cea0cd4c6ecc5d		`PathExecutor::path`.
+PathExecutor	getPosition	port	1b8e87c	ab38a41ea0d9183a		
+PathExecutor	headHitJump	later	1b8e87c	401748b65c9e3355		`headHitters` is off by default.
+PathExecutor	isSprinting	port	1b8e87c	e0e8561be1361ad4		
+PathExecutor	onChangeInPathPosition	port	1b8e87c	f28db77fcbcda019		
+PathExecutor	onTick	port	1b8e87c	4f7456e6d153803a		Without `flight`. `shouldPause` gets no best path of the running search (see deviations.md).
+PathExecutor	overrideFall	port	1b8e87c	505da65ac68d06e8		
+PathExecutor	possiblyOffPath	port	1b8e87c	0b34fc479615eb3a		
+PathExecutor	shouldPause	port	1b8e87c	39ea94d307a856a1		Needs `Progress::best_positions`, which the glue cannot read from a running search: it passes none, so this never pauses.
+PathExecutor	shouldSprintNextTick	port	1b8e87c	e9b6db101478c281		Without `sprintJumping` and `headHitters`, both off by default upstream.
+PathExecutor	skipNow	port	1b8e87c	82e36a71ec2c9c10		
+PathExecutor	snipsnapifpossible	port	1b8e87c	0e35c836bde01525		
+PathExecutor	sprintableAscend	port	1b8e87c	ebc7e5a06b2abf46		
+PathExecutor	steer	later	1b8e87c	73249dba1b5701c6		`sprintJumping` (`SprintJump`) is off by default.
+PathExecutor	toBreak	redesign	1b8e87c	05e789d9fdf38d94		`PathExecutor::blocks_to_break` and the like, on demand. Upstream recalculates its sets each tick (`recalcBP`).
+PathExecutor	toPlace	redesign	1b8e87c	9b115e1e5d46965f		`PathExecutor::blocks_to_break` and the like, on demand. Upstream recalculates its sets each tick (`recalcBP`).
+PathExecutor	toWalkInto	redesign	1b8e87c	bad5159cf3f9cef4		`PathExecutor::blocks_to_break` and the like, on demand. Upstream recalculates its sets each tick (`recalcBP`).
+PathExecutor	trySplice	port	1b8e87c	264377a9939fc4af		Changes the executor in place instead of returning a new one.
+PathExecutor	underHeadBonkCeiling	later	1b8e87c	cf0f03be5b1c11e1		`headHitters` is off by default.
 PathNode	<init>	redesign	1b8e87c	0e6c746b24f48c2e		`PathNode::new`. A NaN heuristic is a `SearchError`.
 PathNode	equals	port	1b8e87c	0197f1fb3aabbc65	search-compare	`PathNode::same_position`.
 PathNode	hashCode	drop	1b8e87c	eb3322274863152b		The node arena has no hash set.
 PathNode	isOpen	port	1b8e87c	edb273355743efed	search-compare	
-PathingBehavior	<init>	missing	1b8e87c	b31dd33664f809a5		
-PathingBehavior	calcFailedLastTick	missing	1b8e87c	d53de6b7e97026b6		
-PathingBehavior	cancelEverything	missing	1b8e87c	30be79508cd2554b		
-PathingBehavior	cancelSegmentIfSafe	missing	1b8e87c	406515e90009f269		
+PathingBehavior	<init>	redesign	1b8e87c	b31dd33664f809a5		`Pathing::new`.
+PathingBehavior	calcFailedLastTick	redesign	1b8e87c	d53de6b7e97026b6		A field, read in `execute_processes`.
+PathingBehavior	cancelEverything	port	1b8e87c	30be79508cd2554b		
+PathingBehavior	cancelSegmentIfSafe	port	1b8e87c	406515e90009f269		
 PathingBehavior	createPathfinder	port	1b8e87c	56d442b09a94dd16	search-compare	`plan::create_pathfinder`. The player's feet and the avoidances come from the caller.
-PathingBehavior	dispatchEvents	missing	1b8e87c	e6e30bc7e7421d57		
-PathingBehavior	estimatedTicksToGoal	missing	1b8e87c	cbece6ffa3889b35		
+PathingBehavior	dispatchEvents	port	1b8e87c	e6e30bc7e7421d57		
+PathingBehavior	estimatedTicksToGoal	later	1b8e87c	cbece6ffa3889b35		Only the `eta` command uses it.
 PathingBehavior	findPathInNewThread	redesign	1b8e87c	404bd8c609c300fc		The thread, the locks and the events are S4. `plan::timeouts` is the choice of timeouts and `plan::next_segment_search` is the search it builds for the next segment.
-PathingBehavior	forceCancel	missing	1b8e87c	b852772908eaa216		
-PathingBehavior	getCurrent	missing	1b8e87c	4da2c572ebdccf5d		
-PathingBehavior	getGoal	missing	1b8e87c	50a9d398a5a822ff		
-PathingBehavior	getInProgress	missing	1b8e87c	319d3ad00cdcea0d		
-PathingBehavior	getNext	missing	1b8e87c	0a096887eb7d9de6		
-PathingBehavior	isPathing	missing	1b8e87c	4f4904e30a87cf34		
-PathingBehavior	isSafeToCancel	missing	1b8e87c	bd0e5741b131b100		
-PathingBehavior	onPlayerSprintState	missing	1b8e87c	605953ed5583589c		
-PathingBehavior	onPlayerUpdate	missing	1b8e87c	47864f56ba63543a		
-PathingBehavior	onRenderPass	missing	1b8e87c	e217451d56350922		
-PathingBehavior	onTick	missing	1b8e87c	02014521947fbafc		
-PathingBehavior	pathStart	missing	1b8e87c	18f2e9d89c937e5c		
-PathingBehavior	queuePathEvent	missing	1b8e87c	3bcff0b083617cfa		
-PathingBehavior	requestPause	missing	1b8e87c	d5b5cd982e3fcc52		
-PathingBehavior	resetEstimatedTicksToGoal()	missing	1b8e87c	c0461dbb844e4788		
-PathingBehavior	resetEstimatedTicksToGoal(BetterBlockPos)	missing	1b8e87c	74e22c5b48800ceb		
-PathingBehavior	resetEstimatedTicksToGoal(BlockPos)	missing	1b8e87c	a5176b40deab5f37		
-PathingBehavior	secretInternalGetCalculationContext	missing	1b8e87c	c76dd73c37d3fc1d		
-PathingBehavior	secretInternalSegmentCancel	missing	1b8e87c	a6de6ac3e70b389c		
-PathingBehavior	secretInternalSetGoal	missing	1b8e87c	f21f443a2e6be667		
-PathingBehavior	secretInternalSetGoalAndPath	missing	1b8e87c	cfa1fe74e97238e8		
-PathingBehavior	softCancelIfSafe	missing	1b8e87c	61d2e7415fd06568		
-PathingBehavior	tickPath	missing	1b8e87c	d02e75600b51bdb3		
-PathingControlManager	<init>	missing	1b8e87c	73e599ccae712dad		
-PathingControlManager	cancelEverything	missing	1b8e87c	652e6d2bf2039537		
-PathingControlManager	executeProcesses	missing	1b8e87c	c7754215340e7e74		
-PathingControlManager	forceRevalidate	missing	1b8e87c	2c9ab62413f438cc		
-PathingControlManager	mostRecentCommand	missing	1b8e87c	a4157261d9bcaa03		
-PathingControlManager	mostRecentInControl	missing	1b8e87c	31fdacf17c6282a5		
-PathingControlManager	postTick	missing	1b8e87c	b95b3eec7a6df6ff		
-PathingControlManager	preTick	missing	1b8e87c	99cc018339ae5835		
-PathingControlManager	registerProcess	missing	1b8e87c	5d413c6233069351		
-PathingControlManager	revalidateGoal	missing	1b8e87c	3e4f29716bb0ed8b		
+PathingBehavior	forceCancel	port	1b8e87c	b852772908eaa216		`/b stop` calls it: see deviations.md.
+PathingBehavior	getCurrent	port	1b8e87c	4da2c572ebdccf5d		
+PathingBehavior	getGoal	port	1b8e87c	50a9d398a5a822ff		
+PathingBehavior	getInProgress	redesign	1b8e87c	319d3ad00cdcea0d		`Pathing::is_calculating`.
+PathingBehavior	getNext	port	1b8e87c	0a096887eb7d9de6		
+PathingBehavior	isPathing	port	1b8e87c	4f4904e30a87cf34		
+PathingBehavior	isSafeToCancel	port	1b8e87c	bd0e5741b131b100		
+PathingBehavior	onPlayerSprintState	redesign	1b8e87c	605953ed5583589c		`Intent::sprint`.
+PathingBehavior	onPlayerUpdate	redesign	1b8e87c	47864f56ba63543a		`Intent::disable_auto_jump`.
+PathingBehavior	onRenderPass	later	1b8e87c	e217451d56350922		The path renderer is the glue's; no process pauses.
+PathingBehavior	onTick	port	1b8e87c	02014521947fbafc		`Pathing::tick`, with `PathingControlManager.preTick` and `postTick`.
+PathingBehavior	pathStart	port	1b8e87c	18f2e9d89c937e5c		
+PathingBehavior	queuePathEvent	port	1b8e87c	3bcff0b083617cfa		
+PathingBehavior	requestPause	later	1b8e87c	d5b5cd982e3fcc52		The path renderer is the glue's; no process pauses.
+PathingBehavior	resetEstimatedTicksToGoal()	redesign	1b8e87c	c0461dbb844e4788		Called with the expected start.
+PathingBehavior	resetEstimatedTicksToGoal(BetterBlockPos)	port	1b8e87c	74e22c5b48800ceb		
+PathingBehavior	resetEstimatedTicksToGoal(BlockPos)	redesign	1b8e87c	a5176b40deab5f37		Same as the BetterBlockPos one.
+PathingBehavior	secretInternalGetCalculationContext	drop	1b8e87c	c76dd73c37d3fc1d		The context is made from the tables each tick.
+PathingBehavior	secretInternalSegmentCancel	port	1b8e87c	a6de6ac3e70b389c		
+PathingBehavior	secretInternalSetGoal	redesign	1b8e87c	f21f443a2e6be667		A field.
+PathingBehavior	secretInternalSetGoalAndPath	port	1b8e87c	cfa1fe74e97238e8		
+PathingBehavior	softCancelIfSafe	port	1b8e87c	61d2e7415fd06568		
+PathingBehavior	tickPath	port	1b8e87c	d02e75600b51bdb3		`process/pathing.rs`. The pause request is left out (no process sends one). The partial path of the running search is not readable: see deviations.md.
+PathingControlManager	<init>	drop	1b8e87c	73e599ccae712dad		There is one process.
+PathingControlManager	cancelEverything	port	1b8e87c	652e6d2bf2039537		
+PathingControlManager	executeProcesses	redesign	1b8e87c	c7754215340e7e74		One process: `Pathing::execute_processes`.
+PathingControlManager	forceRevalidate	port	1b8e87c	2c9ab62413f438cc		
+PathingControlManager	mostRecentCommand	drop	1b8e87c	a4157261d9bcaa03		There is one process.
+PathingControlManager	mostRecentInControl	drop	1b8e87c	31fdacf17c6282a5		There is one process.
+PathingControlManager	postTick	port	1b8e87c	b95b3eec7a6df6ff		
+PathingControlManager	preTick	port	1b8e87c	99cc018339ae5835		
+PathingControlManager	registerProcess	drop	1b8e87c	5d413c6233069351		There is one process.
+PathingControlManager	revalidateGoal	port	1b8e87c	3e4f29716bb0ed8b		
+PlayerMovementInput	<init>	drop	1b8e87c	b4a6589c43f29ceb		The keyboard replacement is the glue's: it reads `Intent`.
+PlayerMovementInput	tick	redesign	1b8e87c	bbdc08be1ba3a92d		`Intent::forward_impulse` and `strafe_impulse`; the glue sets the keys.
 PrecomputedData	<init>	redesign	1b8e87c	f136104bdab4dce4		Ctx::new builds the flag table from one Config snapshot.
 PrecomputedData	canPlaceAgainst	port	1b8e87c	124200e6c62cc0a2	cost-compare	
 PrecomputedData	canWalkOn	port	1b8e87c	a0d571f09490fe12	cost-compare	
@@ -657,6 +678,48 @@ PrecomputedData	forCurrentSettings	redesign	1b8e87c	94ce2920cd06156c		No shared 
 PrecomputedData	fullyPassable	port	1b8e87c	3c1295499672cdcc	cost-compare	
 PrecomputedData	matchesCurrentSettings	redesign	1b8e87c	3fb86567443521aa		No shared table, so no settings match test.
 PrecomputedData	neverBreak	port	1b8e87c	8114dc78249b7daf	cost-compare	
+RelativeCoordinate	apply	port	1b8e87c	fe903bbee3d58441		`command.rs`. Arguments are plain strings, not command arguments. A bad argument is `None`, where upstream throws and the callers catch it.
+RelativeCoordinate	tabComplete	drop	1b8e87c	5b3fb8a64658a51e		The chat box has no tab completion for this command.
+RelativeGoal	apply	port	1b8e87c	72d04a938fe3bbbb		`command.rs`. Only reached with a first argument that is a coordinate, so the empty default is never used from `goto`.
+RelativeGoal	tabComplete	drop	1b8e87c	3127401eea8929b3		No tab completion.
+RelativeGoalBlock	apply	port	1b8e87c	f5e9aa0071b7903b		`command.rs`. 
+RelativeGoalBlock	tabComplete	drop	1b8e87c	b984d2afaab8a669		No tab completion.
+RelativeGoalXZ	apply	port	1b8e87c	274b84486c19eeb2		`command.rs`. 
+RelativeGoalXZ	tabComplete	drop	1b8e87c	906656bcf71476e0		No tab completion.
+RelativeGoalYLevel	apply	port	1b8e87c	79ab9f26f5ca4593		`command.rs`. 
+RelativeGoalYLevel	tabComplete	drop	1b8e87c	8ca45a46e521daa1		No tab completion.
+Rotation	<init>	redesign	1b8e87c	b9aa909c955d7cf3		`Rotation::new`: a NaN or an infinity becomes 0 where upstream throws.
+Rotation	add	port	1b8e87c	2e80d4b6258c34db		
+Rotation	clamp	port	1b8e87c	32df2e42cd328ea9		
+Rotation	clampPitch	port	1b8e87c	35047f79544a0145		
+Rotation	getPitch	redesign	1b8e87c	dc3f163ece493348		Public fields.
+Rotation	getYaw	redesign	1b8e87c	43da4cf13531d038		Public fields.
+Rotation	isReallyCloseTo	port	1b8e87c	15d3e6cf185474a2		
+Rotation	normalize	port	1b8e87c	7ae78ddaff62a64e		
+Rotation	normalizeAndClamp	later	1b8e87c	588d03be2dd55c13		Used by the placing and swimming code only.
+Rotation	normalizeYaw	port	1b8e87c	fa27b296ed03d911		
+Rotation	subtract	port	1b8e87c	3cb9783af9f8a8f7		
+Rotation	toString	drop	1b8e87c	3a0cc320ac57c2ac		Debug output.
+Rotation	withPitch	port	1b8e87c	66018b9e8e60c470		
+Rotation	yawDistanceFromOffset	later	1b8e87c	90220b4148a3e8dc		Used by the placing and swimming code only.
+Rotation	yawIsReallyClose	port	1b8e87c	e90d30a37890117e		
+RotationUtils	<init>	drop	1b8e87c	36077678c486ad78		A private constructor; a deprecated alias.
+RotationUtils	calcLookDirectionFromRotation	later	1b8e87c	b04a9b02d62d6971		Used by ray traces and the builder.
+RotationUtils	calcRotationFromCoords	later	1b8e87c	3a425de58089c600		Used by ray traces and the builder.
+RotationUtils	calcRotationFromVec3d(Vec3,Vec3)	port	1b8e87c	fe3298016362aaae		`Mth.atan2` is `f64::atan2`: see deviations.md.
+RotationUtils	calcRotationFromVec3d(Vec3,Vec3,Rotation)	port	1b8e87c	f68f94a0b5c990e1		`Mth.atan2` is `f64::atan2`: see deviations.md.
+RotationUtils	calcVec3dFromRotation	drop	1b8e87c	56997428b29674d6		A private constructor; a deprecated alias.
+RotationUtils	reachable(IPlayerContext,BlockPos)	later	1b8e87c	e95aa3643787341d		Needs ray traces against block shapes: placing, breaking and gates (a gate is aimed at the middle of the block).
+RotationUtils	reachable(IPlayerContext,BlockPos,boolean)	later	1b8e87c	4a681466bd388b78		Needs ray traces against block shapes: placing, breaking and gates (a gate is aimed at the middle of the block).
+RotationUtils	reachable(IPlayerContext,BlockPos,double)	later	1b8e87c	8c0c03cbc1442564		Needs ray traces against block shapes: placing, breaking and gates (a gate is aimed at the middle of the block).
+RotationUtils	reachable(IPlayerContext,BlockPos,double,boolean)	later	1b8e87c	2dbf02276c25282d		Needs ray traces against block shapes: placing, breaking and gates (a gate is aimed at the middle of the block).
+RotationUtils	reachable(LocalPlayer,BlockPos,double)	later	1b8e87c	0a7830c7a0bb1652		Needs ray traces against block shapes: placing, breaking and gates (a gate is aimed at the middle of the block).
+RotationUtils	reachable(LocalPlayer,BlockPos,double,boolean)	later	1b8e87c	a8d82f267e1b1a95		Needs ray traces against block shapes: placing, breaking and gates (a gate is aimed at the middle of the block).
+RotationUtils	reachableCenter(Entity,BlockPos,double,boolean)	later	1b8e87c	37acdc09d5820cc9		Needs ray traces against block shapes: placing, breaking and gates (a gate is aimed at the middle of the block).
+RotationUtils	reachableCenter(IPlayerContext,BlockPos,double,boolean)	later	1b8e87c	aba58535496166b3		Needs ray traces against block shapes: placing, breaking and gates (a gate is aimed at the middle of the block).
+RotationUtils	reachableOffset(Entity,BlockPos,Vec3,double,boolean)	later	1b8e87c	5d85324da81c2d57		Needs ray traces against block shapes: placing, breaking and gates (a gate is aimed at the middle of the block).
+RotationUtils	reachableOffset(IPlayerContext,BlockPos,Vec3,double,boolean)	later	1b8e87c	ee2dc4974a34300d		Needs ray traces against block shapes: placing, breaking and gates (a gate is aimed at the middle of the block).
+RotationUtils	wrapAnglesToRelative	port	1b8e87c	aaa99af04071ea00		`Mth.atan2` is `f64::atan2`: see deviations.md.
 SplicedPath	<init>	redesign	1b8e87c	55f3ac4536f20a1f		Built inside `Path::try_splice`, and checked there.
 SplicedPath	getGoal	port	1b8e87c	50a9d398a5a822ff	search-compare	
 SplicedPath	getNumNodesConsidered	port	1b8e87c	4657048dd65c49a6	search-compare	
@@ -664,25 +727,25 @@ SplicedPath	length	port	1b8e87c	259760ce8f3aee18	search-compare
 SplicedPath	movements	port	1b8e87c	9ff71a2ec2408a25	search-compare	
 SplicedPath	positions	port	1b8e87c	b7e64f7afa055602	search-compare	
 SplicedPath	trySplice	port	1b8e87c	415a7b16c26d970d	search-compare	Either path may be None, as upstream's null.
-SprintJump	<init>	missing	1b8e87c	55ff403ea9e9abe2		
-SprintJump	across	missing	1b8e87c	dfe17ea0fa46c43c		
-SprintJump	along	missing	1b8e87c	29bf30e8723f9893		
-SprintJump	canHop	missing	1b8e87c	aeb6bad764323df8		
-SprintJump	chains	missing	1b8e87c	f3898b802344cfe3		
-SprintJump	choose	missing	1b8e87c	1ca2a0d5c6c42374		
-SprintJump	clear	missing	1b8e87c	8362e7b0efcd128c		
-SprintJump	fly	missing	1b8e87c	606d0f59f6716264		
-SprintJump	highest	missing	1b8e87c	f740fe5059a6b4ab		
-SprintJump	jump	missing	1b8e87c	ea03eeb7439aa328		
-SprintJump	plan(IPlayerContext,IPath,int)	missing	1b8e87c	70be1e290515f1f4		
-SprintJump	plan(double,double)	missing	1b8e87c	8130b3a5ebf6be5a		
-SprintJump	safe	missing	1b8e87c	5d2475879bef7087		
-SprintJump	side	missing	1b8e87c	fd10bed236924bf3		
-SprintJump	solidFloor	missing	1b8e87c	f0a33ddc8e05a639		
-SprintJump	steer	missing	1b8e87c	eb5045280cfd2dfb		
-SprintJump	stepUpAhead	missing	1b8e87c	cbb2e7473e476f41		
-SprintJump	throttle	missing	1b8e87c	4314dcbde7632256		
-SprintJump	works	missing	1b8e87c	7db1ad0aae16ce0b		
+SprintJump	<init>	later	1b8e87c	55ff403ea9e9abe2		`sprintJumping` is off by default. Not ported.
+SprintJump	across	later	1b8e87c	dfe17ea0fa46c43c		`sprintJumping` is off by default. Not ported.
+SprintJump	along	later	1b8e87c	29bf30e8723f9893		`sprintJumping` is off by default. Not ported.
+SprintJump	canHop	later	1b8e87c	aeb6bad764323df8		`sprintJumping` is off by default. Not ported.
+SprintJump	chains	later	1b8e87c	f3898b802344cfe3		`sprintJumping` is off by default. Not ported.
+SprintJump	choose	later	1b8e87c	1ca2a0d5c6c42374		`sprintJumping` is off by default. Not ported.
+SprintJump	clear	later	1b8e87c	8362e7b0efcd128c		`sprintJumping` is off by default. Not ported.
+SprintJump	fly	later	1b8e87c	606d0f59f6716264		`sprintJumping` is off by default. Not ported.
+SprintJump	highest	later	1b8e87c	f740fe5059a6b4ab		`sprintJumping` is off by default. Not ported.
+SprintJump	jump	later	1b8e87c	ea03eeb7439aa328		`sprintJumping` is off by default. Not ported.
+SprintJump	plan(IPlayerContext,IPath,int)	later	1b8e87c	70be1e290515f1f4		`sprintJumping` is off by default. Not ported.
+SprintJump	plan(double,double)	later	1b8e87c	8130b3a5ebf6be5a		`sprintJumping` is off by default. Not ported.
+SprintJump	safe	later	1b8e87c	5d2475879bef7087		`sprintJumping` is off by default. Not ported.
+SprintJump	side	later	1b8e87c	fd10bed236924bf3		`sprintJumping` is off by default. Not ported.
+SprintJump	solidFloor	later	1b8e87c	f0a33ddc8e05a639		`sprintJumping` is off by default. Not ported.
+SprintJump	steer	later	1b8e87c	eb5045280cfd2dfb		`sprintJumping` is off by default. Not ported.
+SprintJump	stepUpAhead	later	1b8e87c	cbb2e7473e476f41		`sprintJumping` is off by default. Not ported.
+SprintJump	throttle	later	1b8e87c	4314dcbde7632256		`sprintJumping` is off by default. Not ported.
+SprintJump	works	later	1b8e87c	7db1ad0aae16ce0b		`sprintJumping` is off by default. Not ported.
 ToolSet	<init>	missing	1b8e87c	1e4736c522ac87ed		
 ToolSet	avoidanceMultiplier	missing	1b8e87c	45f94a52c4da7c3e		
 ToolSet	calculateSpeedVsBlock	missing	1b8e87c	5921a4268a0e4b5a		
@@ -693,3 +756,9 @@ ToolSet	getMaterialCost	missing	1b8e87c	fea5f1eb4b931a6e
 ToolSet	getStrVsBlock	missing	1b8e87c	df21270199437a50		
 ToolSet	hasSilkTouch	missing	1b8e87c	3385d7eca846d40a		
 ToolSet	potionAmplifier	missing	1b8e87c	ecb35bc4bfa60ce2		
+VecUtils	<init>	drop	1b8e87c	b753e0fcad03f7a0		A private constructor.
+VecUtils	calculateBlockCenter	later	1b8e87c	2d91124d67d60989		Needs collision shapes. Doors and gates are aimed at the middle of the block.
+VecUtils	distanceToCenter	port	1b8e87c	7a84293414eddb5d		
+VecUtils	entityDistanceToCenter	redesign	1b8e87c	a19306296a36b9eb		`distance_to_center` with the player's position.
+VecUtils	entityFlatDistanceToCenter	redesign	1b8e87c	877e6850cca4e05d		`distance_to_center` with the player's position.
+VecUtils	getBlockPosCenter	port	1b8e87c	bbf006dfca711cca		

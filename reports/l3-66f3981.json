@@ -1,0 +1,277 @@
+{
+ "horizon_revision": "66f3981",
+ "instance": "baritone-test",
+ "run": "finished",
+ "scenarios": [
+  {
+   "scenario": "s05_natural300_chat0",
+   "chat": false,
+   "status": "pass",
+   "ticks": 2150,
+   "ticks_from_command_to_arrival": 2129,
+   "command_tick": 10,
+   "arrived_tick": 2139,
+   "distance_to_goal_xz": 0.1,
+   "min_health": 20.0,
+   "successful_searches": 2,
+   "failed_checks": []
+  },
+  {
+   "scenario": "s10_far1500_chat0",
+   "chat": false,
+   "status": "pass",
+   "ticks": 9846,
+   "ticks_from_command_to_arrival": 9825,
+   "command_tick": 10,
+   "arrived_tick": 9835,
+   "distance_to_goal_xz": 0.05,
+   "min_health": 20.0,
+   "successful_searches": 10,
+   "failed_checks": []
+  },
+  {
+   "scenario": "s01_flat_chat0",
+   "chat": false,
+   "status": "pass",
+   "ticks": 201,
+   "ticks_from_command_to_arrival": 180,
+   "command_tick": 10,
+   "arrived_tick": 190,
+   "distance_to_goal_xz": 0.06,
+   "min_health": 20.0,
+   "successful_searches": 1,
+   "failed_checks": []
+  },
+  {
+   "scenario": "s02_wall_chat0",
+   "chat": false,
+   "status": "pass",
+   "ticks": 142,
+   "ticks_from_command_to_arrival": 121,
+   "command_tick": 10,
+   "arrived_tick": 131,
+   "distance_to_goal_xz": 0.1,
+   "min_health": 20.0,
+   "successful_searches": 1,
+   "failed_checks": []
+  },
+  {
+   "scenario": "s03_steps_diagonals_chat0",
+   "chat": false,
+   "status": "pass",
+   "ticks": 160,
+   "ticks_from_command_to_arrival": 139,
+   "command_tick": 10,
+   "arrived_tick": 149,
+   "distance_to_goal_xz": 0.24,
+   "min_health": 20.0,
+   "successful_searches": 1,
+   "failed_checks": []
+  },
+  {
+   "scenario": "s04_drops_chat0",
+   "chat": false,
+   "status": "pass",
+   "ticks": 98,
+   "ticks_from_command_to_arrival": 77,
+   "command_tick": 10,
+   "arrived_tick": 87,
+   "distance_to_goal_xz": 0.02,
+   "min_health": 20.0,
+   "successful_searches": 1,
+   "failed_checks": []
+  },
+  {
+   "scenario": "s01_flat_chat1",
+   "chat": true,
+   "status": "pass",
+   "ticks": 201,
+   "ticks_from_command_to_arrival": 180,
+   "command_tick": 10,
+   "arrived_tick": 190,
+   "distance_to_goal_xz": 0.06,
+   "min_health": 20.0,
+   "successful_searches": 1,
+   "failed_checks": []
+  },
+  {
+   "scenario": "s02_wall_chat1",
+   "chat": true,
+   "status": "pass",
+   "ticks": 142,
+   "ticks_from_command_to_arrival": 121,
+   "command_tick": 10,
+   "arrived_tick": 131,
+   "distance_to_goal_xz": 0.1,
+   "min_health": 20.0,
+   "successful_searches": 1,
+   "failed_checks": []
+  },
+  {
+   "scenario": "s03_steps_diagonals_chat1",
+   "chat": true,
+   "status": "pass",
+   "ticks": 160,
+   "ticks_from_command_to_arrival": 139,
+   "command_tick": 10,
+   "arrived_tick": 149,
+   "distance_to_goal_xz": 0.24,
+   "min_health": 20.0,
+   "successful_searches": 1,
+   "failed_checks": []
+  },
+  {
+   "scenario": "s04_drops_chat1",
+   "chat": true,
+   "status": "pass",
+   "ticks": 98,
+   "ticks_from_command_to_arrival": 77,
+   "command_tick": 10,
+   "arrived_tick": 87,
+   "distance_to_goal_xz": 0.02,
+   "min_health": 20.0,
+   "successful_searches": 1,
+   "failed_checks": []
+  },
+  {
+   "scenario": "s07_block_chat0",
+   "chat": false,
+   "status": "pass",
+   "ticks": 186,
+   "ticks_from_command_to_arrival": 165,
+   "command_tick": 10,
+   "arrived_tick": 175,
+   "distance_to_goal_xz": 0.27,
+   "min_health": 20.0,
+   "successful_searches": 2,
+   "failed_checks": []
+  },
+  {
+   "scenario": "s09_ladder_water_chat0",
+   "chat": false,
+   "status": "pass",
+   "ticks": 165,
+   "ticks_from_command_to_arrival": 144,
+   "command_tick": 10,
+   "arrived_tick": 154,
+   "distance_to_goal_xz": 0.04,
+   "min_health": 20.0,
+   "successful_searches": 1,
+   "failed_checks": []
+  },
+  {
+   "scenario": "s08_stop_chat0",
+   "chat": false,
+   "status": "pass",
+   "ticks": 171,
+   "command_tick": 10,
+   "arrived_tick": null,
+   "min_health": 20.0,
+   "failed_checks": []
+  },
+  {
+   "scenario": "s11_slab_floor_chat0",
+   "chat": false,
+   "status": "pass",
+   "ticks": 138,
+   "ticks_from_command_to_arrival": 117,
+   "command_tick": 10,
+   "arrived_tick": 127,
+   "distance_to_goal_xz": 0.19,
+   "min_health": 20.0,
+   "successful_searches": 1,
+   "failed_checks": []
+  },
+  {
+   "scenario": "s07_block_chat1",
+   "chat": true,
+   "status": "pass",
+   "ticks": 185,
+   "ticks_from_command_to_arrival": 164,
+   "command_tick": 10,
+   "arrived_tick": 174,
+   "distance_to_goal_xz": 0.33,
+   "min_health": 20.0,
+   "successful_searches": 2,
+   "failed_checks": []
+  },
+  {
+   "scenario": "s09_ladder_water_chat1",
+   "chat": true,
+   "status": "pass",
+   "ticks": 165,
+   "ticks_from_command_to_arrival": 144,
+   "command_tick": 10,
+   "arrived_tick": 154,
+   "distance_to_goal_xz": 0.04,
+   "min_health": 20.0,
+   "successful_searches": 1,
+   "failed_checks": []
+  },
+  {
+   "scenario": "s08_stop_chat1",
+   "chat": true,
+   "status": "pass",
+   "ticks": 171,
+   "command_tick": 10,
+   "arrived_tick": null,
+   "min_health": 20.0,
+   "failed_checks": []
+  },
+  {
+   "scenario": "s11_slab_floor_chat1",
+   "chat": true,
+   "status": "pass",
+   "ticks": 138,
+   "ticks_from_command_to_arrival": 117,
+   "command_tick": 10,
+   "arrived_tick": 127,
+   "distance_to_goal_xz": 0.19,
+   "min_health": 20.0,
+   "successful_searches": 1,
+   "failed_checks": []
+  },
+  {
+   "scenario": "s06_sealed_chat0",
+   "chat": false,
+   "status": "pass",
+   "ticks": 144,
+   "command_tick": 10,
+   "arrived_tick": null,
+   "min_health": 20.0,
+   "failed_checks": []
+  },
+  {
+   "scenario": "s06_sealed_chat1",
+   "chat": true,
+   "status": "pass",
+   "ticks": 144,
+   "command_tick": 10,
+   "arrived_tick": null,
+   "min_health": 20.0,
+   "failed_checks": []
+  }
+ ],
+ "overall_timing": {
+  "search_micros": {
+   "max": 137700.0,
+   "median_of_medians": 929.0,
+   "runs": 20
+  },
+  "snapshot_micros": {
+   "max": 1172.0,
+   "median_of_medians": 62.5,
+   "runs": 20
+  },
+  "snapshot_chunks": {
+   "max": 637.0,
+   "median_of_medians": 637.0,
+   "runs": 20
+  },
+  "mod_tick_micros": {
+   "max": 1622.0,
+   "median_of_medians": 18.0,
+   "runs": 20
+  }
+ }
+}

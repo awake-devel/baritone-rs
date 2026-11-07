@@ -1,0 +1,405 @@
+#!/usr/bin/env python3
+# baritone-rs test tool. LGPL-3.0-or-later, see LICENSE.
+"""L3: plays the scenarios of scenarios.py in the game and judges what the mod recorded.
+
+  python3 tools/l3/run.py --out DIR [--only NAME_PREFIX ...] [--no-far] [--world NAME]    play the scenarios, then judge
+  python3 tools/l3/run.py --out DIR --judge-only                                          judge files from an earlier run
+
+The mod (mod/runtime.rs, "L3 script player") builds each world through the single-player server's console, teleports the player,
+opens the chat when the scenario says so, gives the commands, and writes one row per tick. This script writes the spec, starts the
+game of the instance baritone-test with BARITONE_RS_L3_SPEC set, waits for "finished", closes the game by its PID, and applies the
+pass criteria. No input goes to the desktop. The world is created by `play --world` and is new each time; nothing of it is committed.
+
+The mod must be built into the instance first (tools/README.md, "L3 scenarios"). One game or build at a time: this refuses to start
+while a horizon-client, cargo or rustc process runs.
+
+Writes <out>/judgement.json (everything) and, with --report FILE, a metadata-only summary for reports/.
+"""
+import argparse
+import csv
+import datetime
+import json
+import math
+import os
+import signal
+import statistics
+import subprocess
+import sys
+import time
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import scenarios  # noqa: E402
+
+LAUNCHER = os.path.expanduser("~/Applications/horizon/horizon-launcher-linux-x86_64.AppImage")
+INSTANCE = "baritone-test"
+HORIZON_REVISION = "66f3981"
+
+
+# ---------------------------------------------------------------- running the game
+
+def running(name):
+    return subprocess.run(["pgrep", "-x", name], capture_output=True, text=True).stdout.split()
+
+
+def started_by(spec_path):
+    """The `horizon-client` PIDs that carry this run's spec path in their environment, i.e. the game this script started.
+
+    The game inherits the environment of `play`. A game that somebody else opened has no such variable, and is never listed."""
+    mine = []
+    for pid in running("horizon-client"):
+        try:
+            with open(f"/proc/{pid}/environ", "rb") as f:
+                env = f.read().split(b"\0")
+        except OSError:
+            continue
+        if f"BARITONE_RS_L3_SPEC={spec_path}".encode() in env:
+            mine.append(pid)
+    return mine
+
+
+def preflight():
+    busy = {n: running(n) for n in ("horizon-client", "cargo", "rustc")}
+    busy = {n: p for n, p in busy.items() if p}
+    if busy:
+        sys.exit(f"blocked: a game or a build is running ({busy}); nothing was started")
+
+
+def play(spec_path, out, world, timeout_s):
+    env = dict(os.environ, BARITONE_RS_L3_SPEC=spec_path)
+    log = open(os.path.join(out, "play.log"), "w")
+    proc = subprocess.Popen([LAUNCHER, "play", "--instance", INSTANCE, "--world", world], env=env, stdout=log, stderr=subprocess.STDOUT,
+                            start_new_session=True)
+    started = time.time()
+    result = os.path.join(out, "l3-result.txt")
+    mine = set()
+    status = "timeout"
+    try:
+        while time.time() - started < timeout_s:
+            time.sleep(5)
+            mine |= set(started_by(spec_path))
+            if os.path.exists(result) and open(result).read().rstrip().endswith("finished"):
+                status = "finished"
+                break
+            if proc.poll() is not None and not started_by(spec_path):
+                status = "the game exited early"
+                break
+            done = open(result).read().count("\n") if os.path.exists(result) else 0
+            print(f"  {int(time.time() - started)} s, {done} scenarios recorded", flush=True)
+    finally:
+        # Close what was started here, by PID, also when something failed.
+        mine |= set(started_by(spec_path))
+        for pid in mine:
+            try:
+                os.kill(int(pid), signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+        for _ in range(30):
+            if not any(os.path.exists(f"/proc/{pid}") for pid in mine):
+                break
+            time.sleep(1)
+        for pid in started_by(spec_path):
+            try:
+                os.kill(int(pid), signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+        if proc.poll() is None:
+            proc.terminate()
+        log.close()
+    return status
+
+
+# ---------------------------------------------------------------- reading what the mod wrote
+
+def read_rows(path):
+    with open(path) as f:
+        return list(csv.DictReader(f))
+
+
+def fnum(r, k):
+    return float(r[k])
+
+
+def read_meta(out):
+    metas = {}
+    with open(os.path.join(out, "l3-result.txt")) as f:
+        for line in f:
+            line = line.strip()
+            if line.startswith("{"):
+                m = json.loads(line)
+                metas[m["name"]] = m
+    return metas
+
+
+def read_kv_lines(path):
+    rows = []
+    if not os.path.exists(path):
+        return rows
+    for line in open(path):
+        d = {}
+        for part in line.split():
+            if "=" in part:
+                k, v = part.split("=", 1)
+                d[k] = v
+        if d:
+            rows.append(d)
+    return rows
+
+
+def read_notes(path):
+    notes = []
+    if os.path.exists(path):
+        for line in open(path):
+            parts = line.rstrip("\n").split("\t", 2)
+            if len(parts) == 3:
+                notes.append((int(parts[0]), parts[1], parts[2]))
+    return notes
+
+
+def speed(a, b):
+    return math.hypot(fnum(b, "x") - fnum(a, "x"), fnum(b, "z") - fnum(a, "z"))
+
+
+# ---------------------------------------------------------------- measurements
+
+def movement_groups(rows):
+    """Consecutive rows of one movement (kind, source, destination): actual ticks against the estimated cost."""
+    groups = []
+    for r in rows:
+        if r["mk"] in ("0", ""):
+            continue
+        key = (r["mk"], r["msx"], r["msy"], r["msz"], r["mdx"], r["mdy"], r["mdz"])
+        if groups and groups[-1]["key"] == key:
+            groups[-1]["ticks"] += 1
+        else:
+            groups.append({"key": key, "kind": r["mk"], "est": float(r["mcost"]), "ticks": 1, "first": int(r["t"]), "water": False})
+        if r.get("water") == "1":
+            groups[-1]["water"] = True
+    return groups
+
+
+def per_movement(rows):
+    groups = movement_groups(rows)
+    kinds = {}
+    for g in groups:
+        k = kinds.setdefault(g["kind"] + (" (touching water)" if g["water"] else ""), {"count": 0, "estimated_ticks": 0.0, "actual_ticks": 0})
+        k["count"] += 1
+        k["estimated_ticks"] += g["est"]
+        k["actual_ticks"] += g["ticks"]
+    for k in kinds.values():
+        k["estimated_ticks"] = round(k["estimated_ticks"], 2)
+        k["ratio_actual_over_estimated"] = round(k["actual_ticks"] / k["estimated_ticks"], 3) if k["estimated_ticks"] else None
+    est = sum(g["est"] for g in groups)
+    act = sum(g["ticks"] for g in groups)
+    return {
+        "movements": len(groups),
+        "estimated_ticks_total": round(est, 2),
+        "actual_ticks_total": act,
+        "ratio_actual_over_estimated": round(act / est, 3) if est else None,
+        "by_kind": kinds,
+    }
+
+
+def stats(values):
+    if not values:
+        return None
+    v = sorted(values)
+    return {"n": len(v), "mean": round(statistics.fmean(v), 1), "median": round(statistics.median(v), 1),
+            "p95": round(v[min(len(v) - 1, int(len(v) * 0.95))], 1), "max": round(v[-1], 1)}
+
+
+def timing(out, name, rows, command_tick):
+    searches = [s for s in read_kv_lines(os.path.join(out, name + ".searches.txt"))]
+    snaps = read_kv_lines(os.path.join(out, name + ".snapshots.txt"))
+    tick_us = [float(r["tick_us"]) for r in rows if command_tick is None or int(r["t"]) > command_tick]
+    return {
+        "searches": len(searches),
+        "search_micros": stats([float(s["micros"]) for s in searches]),
+        "search_results": sorted({s["kind"] for s in searches}),
+        "snapshots": len(snaps),
+        "snapshot_micros": stats([float(s["micros"]) for s in snaps]),
+        "snapshot_chunks": stats([float(s["chunks"]) for s in snaps]),
+        "mod_tick_micros": stats(tick_us),
+    }
+
+
+# ---------------------------------------------------------------- the pass criteria
+
+def judge(out, sc, meta):
+    name = sc["name"]
+    chk = sc["check"]
+    res = {"scenario": name, "chat": sc["chat"], "kind": chk["kind"], "checks": {}, "notes": []}
+    if meta is None:
+        res.update(status="not run", notes=["the mod recorded nothing for this scenario"])
+        return res
+    if meta.get("setup_error"):
+        res.update(status="setup failed", notes=[meta["setup_error"]])
+        return res
+    csv_path = os.path.join(out, name + ".csv")
+    rows = read_rows(csv_path) if os.path.exists(csv_path) else []
+    if not rows:
+        res.update(status="not run", notes=["no rows"])
+        return res
+    ok = res["checks"]
+    cmd = meta.get("command_tick")
+    first, last = rows[0], rows[-1]
+    res["ticks"] = meta["ticks"]
+    res["command_tick"] = cmd
+    res["arrived_tick"] = meta.get("arrived_tick")
+    notes = read_notes(os.path.join(out, name + ".notes.txt"))
+    res["chat_lines"] = [n[2] for n in notes if n[1] == "chat"]
+    res["chat_open_in_rows"] = sum(int(r["chat"]) for r in rows)
+    if sc["chat"]:
+        ok["chat was open during the walk"] = res["chat_open_in_rows"] >= len(rows) * 0.9
+    ok["never died"] = not meta["died"]
+    if chk.get("blocks_changed") == 0 and meta.get("blocks_changed") is not None:
+        ok["blocks changed = 0"] = meta["blocks_changed"] == 0
+        res["watch_cells"] = meta.get("watch_cells")
+    if chk.get("no_health_loss"):
+        ok["no fall damage (health never below its start)"] = meta["min_health"] is not None and meta["min_health"] >= float(first["health"]) - 0.01
+    res["min_health"] = meta.get("min_health")
+    if meta.get("changed_cells"):
+        res["changed_cells"] = meta["changed_cells"]
+    kind = chk["kind"]
+    fp = (fnum(last, "x"), fnum(last, "y"), fnum(last, "z"))
+    res["final_position"] = [round(v, 2) for v in fp]
+
+    if kind in ("arrive", "arrive_relative"):
+        if kind == "arrive":
+            gx, gy, gz = chk["goal"]
+            near = abs(fp[0] - (gx + 0.5)) <= 1.0 and abs(fp[2] - (gz + 0.5)) <= 1.0 and abs(fp[1] - gy) <= 1.0
+        else:
+            sx, sz = fnum(first, "x"), fnum(first, "z")
+            gx, gz = math.floor(sx) + chk["dx"], math.floor(sz) + chk["dz"]
+            near = abs(fp[0] - (gx + 0.5)) <= 1.0 and abs(fp[2] - (gz + 0.5)) <= 1.0
+        res["distance_to_goal_xz"] = round(math.hypot(fp[0] - (gx + 0.5), fp[2] - (gz + 0.5)), 2)
+        arrived = meta.get("arrived_tick") is not None
+        took = (meta["arrived_tick"] - cmd) if arrived and cmd is not None else None
+        res["ticks_from_command_to_arrival"] = took
+        ok["arrived (the mod said so)"] = arrived
+        ok["within 1 block of the goal"] = near
+        ok[f"within {chk['limit_ticks']} ticks"] = took is not None and took <= chk["limit_ticks"]
+        if "sprint_min_fraction" in chk:
+            moving = [r for r in rows if r["forced"] == "1" and int(r["t"]) > (cmd or 0) + 3]
+            frac = sum(1 for r in moving if r["sprinting"] == "1") / max(1, len(moving))
+            res["sprint_fraction_of_driven_ticks"] = round(frac, 2)
+            ok["sprinting most of the way"] = frac >= chk["sprint_min_fraction"]
+        searches = read_kv_lines(os.path.join(out, name + ".searches.txt"))
+        good = [s for s in searches if s["cancelled"] == "false" and s["kind"] in ("SuccessToGoal", "SuccessSegment")]
+        res["successful_searches"] = len(good)
+        if "min_segments" in chk:
+            ok[f"more than one segment (>= {chk['min_segments']} searches that gave a path)"] = len(good) >= chk["min_segments"]
+        if "min_searches_after" in chk:
+            t0, n = chk["min_searches_after"]
+            late = [s for s in good if int(s["t"].split("=")[-1]) >= t0]
+            res["searches_after_the_block_appeared"] = len(late)
+            ok["recalculated after the block appeared"] = len(late) >= 1
+        res["per_movement"] = per_movement(rows)
+        if cmd is not None:
+            res["first_driven_tick_after_command"] = next((int(r["t"]) - cmd for r in rows if r["forced"] == "1"), None)
+        if kind == "arrive_relative" and not all(ok.values()) and chk.get("reported_ok"):
+            stopped_with_message = (not meta["busy_at_end"]) and any("No path" in c or "Stopped" in c or "cancel" in c.lower() for c in res["chat_lines"])
+            if stopped_with_message:
+                res["notes"].append("did not arrive but stopped with a message: " + " | ".join(res["chat_lines"][-3:]))
+    elif kind == "unreachable":
+        msgs = res["chat_lines"]
+        ok["stopped on its own (path off, keys released)"] = (not meta["busy_at_end"]) and (not meta["forced_at_end"])
+        ok["said why in the chat"] = any("No path" in m for m in msgs)
+        ok[f"within {chk['limit_ticks']} ticks of the command"] = cmd is not None and meta["ticks"] - cmd <= chk["limit_ticks"]
+        # Walking in circles: how far did it travel in total, against the distance between start and end.
+        total = sum(speed(rows[i], rows[i + 1]) for i in range(len(rows) - 1))
+        res["distance_walked"] = round(total, 1)
+        res["per_movement"] = per_movement(rows)
+    elif kind == "stop":
+        ts = chk["stop_tick"]
+        byt = {int(r["t"]): r for r in rows}
+        ok["keys released at the stop tick"] = byt[ts]["forced"] == "0"
+        ok["no keys and no path from the stop tick on"] = all(r["forced"] == "0" and r["pathing"] == "0" for r in rows if int(r["t"]) >= ts)
+        before = byt[ts - 1]
+        res["speed_the_tick_before_the_stop"] = round(speed(byt[ts - 2], before), 3)
+        ok["was walking before the stop"] = res["speed_the_tick_before_the_stop"] > 0.2
+        settle = None
+        still = 0
+        for t in range(ts + 1, len(rows)):
+            if t in byt and t - 1 in byt:
+                still = still + 1 if speed(byt[t - 1], byt[t]) < 0.005 else 0
+                if still >= 5 and settle is None:
+                    settle = t - 4
+        res["ticks_until_still"] = None if settle is None else settle - ts
+        res["coasting_distance_blocks"] = round(math.hypot(fnum(byt[ts], "x") - fnum(rows[-1], "x"), fnum(byt[ts], "z") - fnum(rows[-1], "z")), 3)
+        ok["stood still within 30 ticks of the stop"] = settle is not None and settle - ts <= 30
+        if settle is not None:
+            a, b = byt[settle], rows[-1]
+            ok["no movement after that"] = math.hypot(fnum(a, "x") - fnum(b, "x"), fnum(a, "z") - fnum(b, "z")) < 0.01
+    res["timing"] = timing(out, name, rows, cmd)
+    res["status"] = "pass" if all(ok.values()) else "fail"
+    if kind == "arrive_relative" and res["status"] == "fail" and chk.get("reported_ok") and res["notes"]:
+        res["status"] = "reported"
+    return res
+
+
+def summarize(results):
+    allm = {}
+    for r in results:
+        t = r.get("timing")
+        if not t:
+            continue
+        for k in ("search_micros", "snapshot_micros", "snapshot_chunks", "mod_tick_micros"):
+            if t[k]:
+                allm.setdefault(k, []).append(t[k])
+    out = {}
+    for k, lst in allm.items():
+        out[k] = {"max": max(x["max"] for x in lst), "median_of_medians": round(statistics.median(x["median"] for x in lst), 1), "runs": len(lst)}
+    return out
+
+
+# ---------------------------------------------------------------- main
+
+def main():
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--out", required=True, help="folder for the recorded files")
+    ap.add_argument("--only", nargs="*", help="run only the scenarios whose name starts with one of these")
+    ap.add_argument("--no-far", action="store_true", help="leave out the 1500-block scenario")
+    ap.add_argument("--world", help="name of the new world (default: l3-<time>)")
+    ap.add_argument("--judge-only", action="store_true")
+    ap.add_argument("--timeout", type=int, default=3600, help="seconds to wait for the whole run")
+    ap.add_argument("--report", help="write the metadata-only summary here")
+    args = ap.parse_args()
+    out = os.path.abspath(args.out)
+    scs = scenarios.all_scenarios(include_far=not args.no_far)
+    if args.only:
+        scs = [s for s in scs if any(s["name"].startswith(p) for p in args.only)]
+    status = "judged earlier files"
+    if not args.judge_only:
+        preflight()
+        if os.path.exists(out) and os.listdir(out):
+            sys.exit(f"{out} is not empty; use a new folder")
+        os.makedirs(out, exist_ok=True)
+        spec = {"out": out, "scenarios": [{k: v for k, v in s.items() if k != "check"} for s in scs]}
+        spec_path = os.path.join(out, "spec.json")
+        with open(spec_path, "w") as f:
+            json.dump(spec, f, indent=1)
+        world = args.world or "l3-" + datetime.datetime.now().strftime("%m%d-%H%M%S")
+        print(f"playing {len(scs)} scenarios in a new world", flush=True)
+        status = play(spec_path, out, world, args.timeout)
+        print("game:", status, flush=True)
+    metas = read_meta(out) if os.path.exists(os.path.join(out, "l3-result.txt")) else {}
+    results = [judge(out, s, metas.get(s["name"])) for s in scs]
+    summary = {"horizon_revision": HORIZON_REVISION, "run": status, "scenarios": results, "overall_timing": summarize(results)}
+    with open(os.path.join(out, "judgement.json"), "w") as f:
+        json.dump(summary, f, indent=1)
+    for r in results:
+        failed = [k for k, v in r["checks"].items() if not v]
+        print(f"{r['status'].upper():8} {r['scenario']:34} ticks={r.get('ticks')} {('failed: ' + '; '.join(failed)) if failed else ''} {' '.join(r['notes'])[:160]}")
+    if args.report:
+        keep = ("scenario", "chat", "status", "ticks", "ticks_from_command_to_arrival", "command_tick", "arrived_tick", "distance_to_goal_xz", "min_health", "successful_searches")
+        slim = [{k: r[k] for k in keep if k in r} | {"failed_checks": [k for k, v in r["checks"].items() if not v]} for r in results]
+        rep = {"horizon_revision": HORIZON_REVISION, "instance": INSTANCE, "run": status, "scenarios": slim, "overall_timing": summary["overall_timing"]}
+        with open(args.report, "w") as f:
+            json.dump(rep, f, indent=1)
+            f.write("\n")
+    bad = [r for r in results if r["status"] not in ("pass", "reported")]
+    sys.exit(1 if bad or status not in ("finished", "judged earlier files") else 0)
+
+
+if __name__ == "__main__":
+    main()

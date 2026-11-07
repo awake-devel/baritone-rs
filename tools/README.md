@@ -251,6 +251,95 @@ horizon-launcher native-build tools/walk-test --instance baritone-test --trust-n
 Start the course by typing `/baritonewalk` in the chat box. `horizon-ctl chat` and `command` do not reach it, because
 on a connected game they go straight to the server.
 
+## input-probe
+
+A native mod that answers, in the real game, whether a mod can walk, jump, sneak and sprint through the stable
+`native_movement_input` hook with the chat or the inventory open ([PLAN.md](../docs/PLAN.md#walking-with-the-chat-open)).
+It runs by itself: with the environment variable `BARITONE_PROBE_DIR` set to a folder, it waits for the player to be in a
+world, sets up a stone platform at (980..1050, 99, 980..1050) through the single-player server's console (the call
+`horizon-ctl command` makes), teleports the player to a start point, opens the screen itself (`open_chat_method("")`, or
+`Screen::Inventory` set directly), drives the hook for 60 ticks and writes one CSV row per tick (`probe.csv`: position,
+yaw, on-ground, sprint flag and speed modifier, speed, the screen, what the hook saw from the game, what it set) and
+`probe-console.txt` (every console command and its answer, and the server's own position of the player after each
+trial). `runtime.rs` holds the 17 trials. Without the variable it does nothing. It pins a Horizon revision.
+
+```sh
+L=~/Applications/horizon/horizon-launcher-linux-x86_64.AppImage
+$L native-build tools/input-probe --instance baritone-test --trust-native-code       # about 2 to 3 minutes
+mkdir -p OUT
+# The game must not pause when the window has no focus: pauseOnLostFocus:false in the instance's options.txt.
+BARITONE_PROBE_DIR=OUT $L play --instance baritone-test --world SOME-NEW-WORLD-NAME   # creates the world if it is missing
+# Wait for OUT/probe.csv (about two minutes with the world creation), then close the game you started by its PID.
+```
+
+No input is sent to the desktop. The world is created by `play --world`, which needs no clicks. While the game window is
+focused, a real key pressed by someone sitting at the machine goes into the open chat (this happened once in the first
+run, with the probe not yet typing: a single `t` reached the server as a chat message).
+
+## The mod and its scenario trigger
+
+`mod/` is the native mod (id `baritone_rs`): the bundle `horizon-mixin.toml`, `runtime.rs` (state, snapshots, the tick, the commands, the
+drawing, and the scenario trigger below), small hook helpers (`tick.rs`, `movement.rs`, `command.rs`, `commands.rs`, `list.rs`,
+`primitives.rs`, `unload.rs`, `disconnecting.rs`), `engine/` as a `[[crate]]`, and `glue/state_facts.rs`, which is injected as the module
+`baritone_rs_facts` and is also the file `tools/facts-compare` compiles (one file, no copy). It pins Horizon `66f3981`. In the game:
+
+- `/b goto <x> <y> <z>`, `/b goto <x> <z>`, `/b goto <y>` (a `~` makes a number relative to the player; `k` and `m` scale), `/b stop`, `/b help`.
+  `/baritone` is the same. Messages come with the prefix `[baritone-rs]`. It walks and sprints and never breaks or places.
+- With no goal given since the game started, the mod does nothing: no thread, no table, no key.
+- The first `/b goto` makes the block table from `mob-data.json` and Horizon's block facts (about 0.1 s). If `mob-data.json` is missing or does not
+  match the game, the mod says so in chat and does not path.
+- The path is drawn in red, the next segment in magenta, a block goal as a green box and an x/z goal as a beam.
+- It stops, with the keys the player's again, on `/b stop`, death, a dimension change, the level being dropped, the connection ending, and
+  the mod being turned off in Options > Mods.
+
+Build it for the separate instance (about 2 to 3.5 minutes; one build at a time, check `pgrep -a horizon-client; pgrep -af 'cargo|rustc'` first):
+
+```sh
+L=~/Applications/horizon/horizon-launcher-linux-x86_64.AppImage
+$L native-build mod --instance baritone-test --trust-native-code
+```
+
+**Scenario trigger (test only).** With the environment variable `BARITONE_RS_SCENARIO_DIR` set to a folder, the mod runs six fixed walks by
+itself once a single-player world is open, and writes there. Without the variable the scenario code returns at once. It sends no input to the desktop. It builds a stone platform (980..1050, 99, 980..1050) through the
+single-player server's console, trying again until the chunks are loaded, then runs, each from (1000.5, 100, 1000.5):
+`smoke` (`b goto 1030 100 1000`), `diagonal` (`b goto ~20 ~ ~20`), `xz` (`b goto 1030 1010`), `stop` (`b stop` after 30 ticks of walking),
+`dimension` (a teleport to the Nether after 30 ticks) and `death` (`kill @p` after 30 ticks). The commands go through `on_command`, the code
+a typed command reaches. Files: `scenario-result.txt` (PASS or FAIL per run, with the numbers), `scenario-log.txt` (console answers and the
+mod's chat lines), and one `<run>.csv` per run with a row for every tick (position, velocity, yaw, on-ground, sprint, whether the keys are
+forced, whether a path or a search runs, dead, dimension).
+
+```sh
+mkdir -p OUT
+# pauseOnLostFocus:false in the instance's options.txt, as for the input probe.
+BARITONE_RS_SCENARIO_DIR=OUT $L play --instance baritone-test --world SOME-NEW-WORLD-NAME
+# The last line of OUT/scenario-result.txt is "finished" (about 1.5 minutes after launch). Close the game you started, by its PID.
+```
+
+A real typed command, the real keyboard and a connection that really ends are not exercised by this.
+
+## L3 scenarios
+
+`tools/l3/` plays fixed scenarios in the game and judges them (L3 in [PORTING-SAFETY.md](../docs/PORTING-SAFETY.md)). `scenarios.py` builds
+each world through the single-player server's console (forceload, fill, setblock; nothing of a world is committed) and says what counts as a
+pass. The mod plays the spec (`mod/runtime.rs`, "L3 script player", only when `BARITONE_RS_L3_SPEC` is set), records one row per tick and
+judges nothing; `run.py` starts the game of the instance `baritone-test` with a new world, waits for `finished`, closes the game by its PID
+(also on failure), and applies the criteria: arrived within 1 block, within a tick limit, blocks changed = 0 in a watched box, never died,
+no health lost on drops, plus the checks of each kind (sprinting, a recalculation after a block appears, the stop message and released
+keys for an unreachable goal, keys released at `/b stop`). Most scenarios run with the chat closed and open (`chat` in the name).
+
+```sh
+# Build the mod into the instance first (see "The mod and its scenario trigger"); no game or build may run.
+python3 tools/l3/run.py --out OUTDIR [--only s01 s04] [--no-far] [--report reports/l3-66f3981.json]
+python3 tools/l3/run.py --out OUTDIR --judge-only          # judge files from an earlier run
+```
+
+Per scenario it writes `<name>.csv` (position, velocity, sprint, health, keys forced, path position, the current movement with its
+estimated cost, the mod's tick time), `.segments.txt` (every path installed, with its estimated ticks), `.searches.txt` (the worker's time
+for each search), `.snapshots.txt` (the time of each world snapshot and the number of chunks in it), `.notes.txt` (commands and the mod's chat
+lines) and `judgement.json`, which also holds the estimated cost against the actual ticks per movement kind. `--report` writes the metadata
+only (no paths or names). Scenarios 5 and 10 use natural terrain around the spawn of the new world, so their result depends on the seed
+the world got.
+
 ## gate.py, check_public_tree.py, run_compare.py
 
 `python3 tools/gate.py` is what a change must pass before a commit; see "The gate" in

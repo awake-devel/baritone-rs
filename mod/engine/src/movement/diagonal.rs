@@ -161,7 +161,7 @@ pub fn cost<W: WorldView>(ctx: &Ctx<'_, W>, x: i32, y: i32, z: i32, dest_x: i32,
 // Same shape as upstream on purpose: the late init stays, so the two can be read side by side.
 /// `MovementDiagonal.isBlockingDoor`: whether `other` is the diagonal neighbour of the door in the direction of the door's hinge.
 #[allow(clippy::needless_late_init)]
-fn is_blocking_door(state: &State, door_x: i32, door_z: i32, other_x: i32, other_z: i32) -> bool {
+pub(crate) fn is_blocking_door(state: &State, door_x: i32, door_z: i32, other_x: i32, other_z: i32) -> bool {
     if !state.door {
         return false;
     }
