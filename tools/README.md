@@ -400,6 +400,16 @@ one ore), `goto crafting_table` through a wall (ends next to the table, table in
 `/b stop` during `mine` while walking and while the scan runs. For `mine` and `goto <block>` the run is done when the mod has been idle for
 60 ticks, and the path to the next ore, made while the last one is broken, is never walked, so the last plan is not required to be done.
 
+The cache and explore scenarios (R2): `c01_goto_chest_cached` stands the player 150 ticks at a trapped chest (the cache packs the chunks within five
+chunks of the player every four seconds), moves him 390 blocks away, records with a `probe` event that the chest's chunk is not loaded, and gives
+`b goto trapped_chest` (a trapped chest: natural chests lie in the loaded chunks below and are nearer). `c02_goto_across_cached` visits a wall and the goal 400
+blocks away the same way, goes back to the start, probes that both are unloaded, and gives a goto whose first path must have more than 290
+positions (the loaded world ends about 273 blocks out) round the wall, with `allowBreak` off. `c03_explore` runs `b explore` for 1200 ticks from a random
+dry spot (`spreadplayers`), then `b stop`: it walks at least 150 blocks, gets 40 away, goes farther in the later part, loses no health, stops. Each
+cache scenario has its own ground, because the cache keeps the chunks of the world for the whole run. `run.py --controls` adds `c01x`/`c02x`, the same
+without the visits; they are expected to FAIL (the chest is not found, the first path ends at the loaded edge). `chunkCaching` off is no control: as in
+upstream it only stops the files. Every scenario with an area clears the weather again (a half hour run let snow fall in a cold biome).
+
 ```sh
 # Build the mod into the instance first (see "The mod and its scenario trigger"); no game or build may run.
 python3 tools/l3/run.py --out OUTDIR [--only s01 s04] [--no-far] [--report reports/l3-66f3981.json]

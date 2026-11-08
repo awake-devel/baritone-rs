@@ -1,6 +1,17 @@
 // baritone-rs engine: how the rules see the world. Written for this project. LGPL-3.0-or-later, see lib.rs.
 
 /// What a search reads. The game's implementation holds a snapshot of chunks; tests use [`GridWorld`].
+/// What the persistent cache says about a chunk for `ExploreProcess`: upstream's private `ExploreProcess.Status`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ChunkStatus {
+    /// The cache holds the chunk.
+    Explored,
+    /// The region of the chunk is in memory and has no such chunk.
+    NotExplored,
+    /// The region has not been read from disk yet: a read was asked for, and the answer comes in a later tick.
+    Unknown,
+}
+
 pub trait WorldView {
     /// The block state id at a position, an index into the state table. `y` is a world Y inside the world's height.
     fn state_id(&self, x: i32, y: i32, z: i32) -> usize;
@@ -10,6 +21,26 @@ pub trait WorldView {
     /// `BlockStateInterface.isLoaded`: the glue answers with its cache. The default is the live check alone, which is what a world without a cache means.
     fn is_loaded(&self, x: i32, z: i32) -> bool {
         self.contains_loaded_chunk(x, z)
+    }
+    /// The state of the block if its chunk is loaded, `None` if not. One lookup for what `contains_loaded_chunk` and `state_id` ask apart; the cache
+    /// layer (`cache::WithCache`) uses it to read a block from the loaded world first.
+    fn loaded_state_id(&self, x: i32, y: i32, z: i32) -> Option<usize> {
+        self.contains_loaded_chunk(x, z).then(|| self.state_id(x, y, z))
+    }
+    /// `ctx.worldData.getCachedWorld().getLocationsOf`: the places the persistent cache holds of a special block (`cache::BLOCKS_TO_KEEP_TRACK_OF`), searched
+    /// around the region of `(center_x, center_z)` out to `max_region_distance_sq`. The default is a world without a cache: none.
+    fn cached_locations(&self, _block: &str, _maximum: i32, _center_x: i32, _center_z: i32, _max_region_distance_sq: i32) -> Vec<crate::pos::Pos> {
+        vec![]
+    }
+    /// Upstream's `ExploreProcess.BaritoneChunkCache.isAlreadyExplored`: what the cache says about the chunk at these chunk coordinates. Asking about a chunk of a region that is
+    /// not in memory starts reading that region on another thread and answers [`ChunkStatus::Unknown`]. The default is a world without a cache (the glue always has one
+    /// while a world is open): a loaded chunk is explored, any other is not.
+    fn chunk_status(&self, chunk_x: i32, chunk_z: i32) -> ChunkStatus {
+        if self.chunk_loaded(chunk_x, chunk_z) {
+            ChunkStatus::Explored
+        } else {
+            ChunkStatus::NotExplored
+        }
     }
     /// Whether the door or fence gate at this position is open. Not a fact of the block table: it is the block's `open` property,
     /// which only the executor reads (`MovementHelper.isDoorPassable`, `isGatePassable`). The default says open, so a world that

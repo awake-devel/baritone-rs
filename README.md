@@ -12,7 +12,10 @@ A Rust port of [Baritone](https://github.com/cabaletta/baritone), the Minecraft 
   upstream's defaults, and not ported yet.
 - **Commands:** `/b goto`, `goal`, `path`, `stop`, `eta`, `set` and `help`, with tab completion of subcommands, settings and values.
   Settings follow upstream's names and defaults, and `freeLook` keeps the camera yours while Baritone steers.
-- **Not yet:** `goto <block>` and the other processes (mine, follow, explore, build, farm, elytra).
+- **Chunk cache:** the chunks the client loads are remembered (packed to 2 bits per block, saved to region files in upstream's format), so a path can be planned through
+  terrain that is not loaded any more and `goto <chest, furnace, spawner, ...>` finds blocks seen earlier.
+- **Processes:** `goto <block>`, `mine`, `follow` and `explore` (`explorefilter` takes a JSON list of chunks), as upstream's.
+- **Not yet:** build, farm, elytra.
 
 **How it is checked.** Every movement rule gives upstream's answer bit for bit on 22 million cases, whole searches match upstream's
 node by node on 29,446 searches, Horizon's block facts match Java's on all 35,723 block states, and 42 fixed scenarios pass in the

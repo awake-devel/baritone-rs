@@ -404,7 +404,7 @@ mod tests {
     use crate::movement::step::MovementKind;
     use crate::testing::*;
 
-    fn finder<'c, 'a>(ctx: &'c Ctx<'a, TestWorld>, from: Pos, goal: Goal) -> AStarPathFinder<'c, 'a, TestWorld> {
+    fn finder<'c, 'a, W: crate::world::WorldView>(ctx: &'c Ctx<'a, W>, from: Pos, goal: Goal) -> AStarPathFinder<'c, 'a, W> {
         AStarPathFinder::new(from, from.x, from.y, from.z, goal, Favoring::from_previous(None, &ctx.cfg.search), ctx)
     }
 
@@ -738,5 +738,43 @@ mod tests {
         // the node costs were halved by the favoring, and the movement cost is the smaller of the two
         let half = crate::costs::SPRINT_ONE_BLOCK_COST * 0.5;
         assert!(second.movements().unwrap().iter().all(|m| (m.cost.unwrap() - half).abs() < 1e-9));
+    }
+
+    /// `BlockStateInterface.getUncached`: a block in a chunk that is not loaded is read from the cached region. A wall that only the cache knows is
+    /// planned around, where the same search over the loaded chunks alone ends at their border.
+    #[test]
+    fn a_cached_region_beyond_the_loaded_chunks_is_planned_through() {
+        use crate::cache::testkit::{cache_of, temp_dir, with_cache};
+        let fx = Fixture::new();
+        // what the cache was told once: a wall 3 high across x = 40 with a gap at z = 70
+        let mut known = TestWorld::flat(100, 100);
+        for z in 0..100 {
+            if z != 70 {
+                for y in 1..4 {
+                    known.set(40, y, z, STONE);
+                }
+            }
+        }
+        let dir = temp_dir("astar");
+        let cache = cache_of(&known, &["air", "stone"], dir.clone());
+        // what the game shows now: nothing from x = 16 on is loaded
+        let mut live = TestWorld::flat(100, 100);
+        live.loaded_below_x = 16;
+        let goal = Goal::Block { x: 60, y: 1, z: 50 };
+        // without the cache: a segment that ends at the border
+        let ctx = fx.ctx(&live);
+        let r = finder(&ctx, Pos::new(2, 1, 50), goal.clone()).calculate(500, 2000, &SearchLimits::default(), &mut || 0);
+        assert_eq!(r.kind, ResultType::SuccessSegment);
+        // with it: the whole way, through the gap
+        let world = with_cache(live, &cache);
+        let ctx = fx.ctx(&world);
+        let r = finder(&ctx, Pos::new(2, 1, 50), goal).calculate(500, 2000, &SearchLimits::default(), &mut || 0);
+        assert_eq!(r.kind, ResultType::SuccessToGoal, "{:?}", r.error);
+        let path = r.path.unwrap();
+        let positions = path.positions();
+        assert_eq!(*positions.last().unwrap(), Pos::new(60, 1, 50));
+        assert!(positions.iter().any(|p| p.x == 40 && p.z == 70), "it goes through the gap");
+        assert!(positions.iter().all(|p| p.x != 40 || p.z == 70), "and never through the wall");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

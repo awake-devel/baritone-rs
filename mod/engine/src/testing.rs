@@ -99,6 +99,8 @@ pub struct TestWorld {
     pub h: i32,
     cells: Vec<u16>,
     pub loaded_below_x: i32,
+    /// The chunks a test's persistent cache holds, for the explore process: `None` is a world without a cache (a loaded chunk is explored).
+    pub cached_chunks: Option<std::collections::HashSet<(i32, i32)>>,
 }
 
 impl TestWorld {
@@ -109,7 +111,7 @@ impl TestWorld {
 
     /// Like `flat`, `h` blocks high (a multiple of 16 for the chunk scan).
     pub fn tall(w: i32, d: i32, h: i32) -> TestWorld {
-        let mut t = TestWorld { w, d, h, cells: vec![AIR; (w * d * h) as usize], loaded_below_x: i32::MAX };
+        let mut t = TestWorld { w, d, h, cells: vec![AIR; (w * d * h) as usize], loaded_below_x: i32::MAX, cached_chunks: None };
         for x in 0..w {
             for z in 0..d {
                 t.set(x, 0, z, STONE);
@@ -137,6 +139,15 @@ impl WorldView for TestWorld {
     fn chunk_loaded(&self, chunk_x: i32, chunk_z: i32) -> bool {
         // the columns the world has, in whole chunks, and the ones `loaded_below_x` keeps
         chunk_x >= 0 && chunk_z >= 0 && chunk_x * 16 < self.w && chunk_z * 16 < self.d && chunk_x * 16 < self.loaded_below_x
+    }
+    fn chunk_status(&self, chunk_x: i32, chunk_z: i32) -> crate::world::ChunkStatus {
+        use crate::world::ChunkStatus;
+        match &self.cached_chunks {
+            Some(set) if set.contains(&(chunk_x, chunk_z)) => ChunkStatus::Explored,
+            Some(_) => ChunkStatus::NotExplored,
+            None if self.chunk_loaded(chunk_x, chunk_z) => ChunkStatus::Explored,
+            None => ChunkStatus::NotExplored,
+        }
     }
     fn section_has_only_air(&self, chunk_x: i32, chunk_z: i32, section: i32) -> bool {
         (0..16).all(|yy| (0..16).all(|z| (0..16).all(|x| self.state_id(chunk_x * 16 + x, section * 16 + yy, chunk_z * 16 + z) == AIR as usize)))

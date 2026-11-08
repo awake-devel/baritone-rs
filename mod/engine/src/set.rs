@@ -333,6 +333,8 @@ fn table() -> Vec<Setting> {
         // the mine and get-to-block processes: `MineSettings`
         s("mineGoalUpdateInterval", Int(5)),
         s("mineMaxOreLocationsCount", Int(64)),
+        s("maxCachedWorldScanCount", Int(10)),
+        s("extendCacheOnThreshold", Bool(false)),
         s("minYLevelWhileMining", Int(0)),
         s("maxYLevelWhileMining", Int(2031)),
         s("allowOnlyExposedOres", Bool(false)),
@@ -348,11 +350,22 @@ fn table() -> Vec<Setting> {
         s("blacklistClosestOnFailure", Bool(true)),
         s("rightClickContainerOnArrival", Bool(true)),
         s("enterPortal", Bool(true)),
+        // the persistent chunk cache: `CacheSettings`
+        s("chunkCaching", Bool(true)),
+        s("pruneRegionsFromRAM", Bool(true)),
+        s("chunkPackerQueueMaxSize", Int(2000)),
+        s("cachedChunksExpirySeconds", Long(-1)),
+        s("repackOnAnyBlockChange", Bool(true)),
         // the follow process: `FollowSettings`
         s("followOffsetDistance", Double(0.0)),
         s("followOffsetDirection", Float(0.0)),
         s("followRadius", Int(3)),
         s("followTargetMaxDistance", Int(0)),
+        // the explore process: `ExploreSettings`
+        s("exploreChunkSetMinimumSize", Int(10)),
+        s("worldExploringChunkOffset", Int(0)),
+        s("exploreMaintainY", Int(64)),
+        s("disableCompletionCheck", Bool(false)),
         // the hotbar: `ToolSettings`
         s("autoTool", Bool(true)),
         s("assumeExternalAutoTool", Bool(false)),
@@ -669,6 +682,12 @@ impl Settings {
         e.tool = self.tool_settings();
         e.mine = self.mine_settings();
         e.follow = self.follow_settings();
+        e.explore = self.explore_settings();
+    }
+
+    /// The settings of the explore process.
+    pub fn explore_settings(&self) -> crate::settings::ExploreSettings {
+        crate::settings::ExploreSettings { explore_chunk_set_minimum_size: self.get_int("exploreChunkSetMinimumSize"), world_exploring_chunk_offset: self.get_int("worldExploringChunkOffset"), explore_maintain_y: self.get_int("exploreMaintainY"), disable_completion_check: self.get_bool("disableCompletionCheck") }
     }
 
     /// The settings of the follow process.
@@ -676,11 +695,18 @@ impl Settings {
         crate::settings::FollowSettings { follow_radius: self.get_int("followRadius"), follow_offset_distance: self.get_double("followOffsetDistance"), follow_offset_direction: self.get_float("followOffsetDirection"), follow_target_max_distance: self.get_int("followTargetMaxDistance") }
     }
 
+    /// The settings of the persistent chunk cache.
+    pub fn cache_settings(&self) -> crate::cache::CacheSettings {
+        crate::cache::CacheSettings { chunk_caching: self.get_bool("chunkCaching"), prune_regions_from_ram: self.get_bool("pruneRegionsFromRAM"), chunk_packer_queue_max_size: self.get_int("chunkPackerQueueMaxSize"), cached_chunks_expiry_seconds: self.get_long("cachedChunksExpirySeconds"), repack_on_any_block_change: self.get_bool("repackOnAnyBlockChange") }
+    }
+
     /// The settings of the mine and get-to-block processes.
     pub fn mine_settings(&self) -> crate::settings::MineSettings {
         crate::settings::MineSettings {
             mine_goal_update_interval: self.get_int("mineGoalUpdateInterval"),
             mine_max_ore_locations_count: self.get_int("mineMaxOreLocationsCount"),
+            max_cached_world_scan_count: self.get_int("maxCachedWorldScanCount"),
+            extend_cache_on_threshold: self.get_bool("extendCacheOnThreshold"),
             min_y_level_while_mining: self.get_int("minYLevelWhileMining"),
             max_y_level_while_mining: self.get_int("maxYLevelWhileMining"),
             allow_only_exposed_ores: self.get_bool("allowOnlyExposedOres"),
@@ -937,6 +963,10 @@ mod tests {
             ("followOffsetDistance", "0.0"),
             ("followOffsetDirection", "0.0"),
             ("followTargetMaxDistance", "0"),
+            ("exploreChunkSetMinimumSize", "10"),
+            ("worldExploringChunkOffset", "0"),
+            ("exploreMaintainY", "64"),
+            ("disableCompletionCheck", "false"),
         ] {
             assert_eq!(value_to_string(s.get(name)), v, "{name}");
         }

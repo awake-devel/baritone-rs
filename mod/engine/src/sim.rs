@@ -2054,3 +2054,239 @@ mod follow_tests {
         assert!(matches!(r.pathing.goal(), Some(Goal::Composite(g)) if g.len() == 2));
     }
 }
+
+#[cfg(test)]
+mod explore_tests {
+    use super::*;
+    use crate::process::explore::JsonChunkFilter;
+    use crate::process::follow::FollowFilter;
+    use std::collections::HashSet;
+
+    /// 10 x 10 chunks, the player in chunk (5, 5). The cache holds the 3 x 3 chunks around the player at first, as the game caches what it has loaded;
+    /// `cache_around` adds the chunks the player has come to, after each tick of a test that walks.
+    fn rig() -> Rig<ImmediateRunner> {
+        let mut r = Rig::new(TestWorld::flat(160, 160), (88, 1, 88));
+        r.exec.explore.explore_maintain_y = 1; // the world is one block thick
+        r.world.cached_chunks = Some(HashSet::new());
+        cache_around(&mut r);
+        r
+    }
+
+    fn cache_around(r: &mut Rig<ImmediateRunner>) {
+        let f = r.p.feet();
+        let (cx, cz) = (f.x >> 4, f.z >> 4);
+        let set = r.world.cached_chunks.as_mut().unwrap();
+        for dx in -1..=1 {
+            for dz in -1..=1 {
+                set.insert((cx + dx, cz + dz));
+            }
+        }
+    }
+
+    fn chunk(r: &Rig<ImmediateRunner>) -> (i32, i32) {
+        (r.p.feet().x >> 4, r.p.feet().z >> 4)
+    }
+
+    fn goal_chunks(r: &Rig<ImmediateRunner>) -> Vec<(i32, i32)> {
+        match r.pathing.goal() {
+            Some(Goal::Composite(g)) => g
+                .iter()
+                .map(|g| match g {
+                    Goal::XzMaintainY { x, z, .. } | Goal::Xz { x, z } => (x >> 4, z >> 4),
+                    other => panic!("{other:?}"),
+                })
+                .collect(),
+            other => panic!("no composite goal: {other:?}"),
+        }
+    }
+
+    fn manhattan(a: (i32, i32), b: (i32, i32)) -> i32 {
+        (a.0 - b.0).abs() + (a.1 - b.1).abs()
+    }
+
+    #[test]
+    fn explore_heads_for_the_nearest_chunks_the_cache_lacks() {
+        let mut r = rig();
+        r.pathing.explore(88, 88);
+        r.tick();
+        assert!(r.pathing.is_active() && r.pathing.explore_process().is_active());
+        let held = r.world.cached_chunks.clone().unwrap();
+        let chunks = goal_chunks(&r);
+        // the 3 x 3 chunks around (5, 5) are cached: rings 0 and 1 are held, and ring 2 holds only the four axis chunks (the corners of the square are in it). The ring
+        // of 2 adds 6 entries (the axis chunks are listed twice, as upstream's loop lists them), under the 10 wanted; the ring of 3 completes the set
+        assert_eq!(&chunks[..6], &[(3, 5), (3, 5), (5, 3), (5, 7), (7, 5), (7, 5)]);
+        assert!(chunks.iter().all(|c| !held.contains(c)), "a cached chunk is a goal: {chunks:?}");
+        assert_eq!(chunks.iter().map(|c| manhattan(*c, (5, 5))).min(), Some(2));
+        assert!(chunks.len() >= 10);
+    }
+
+    #[test]
+    fn explore_walks_outward_and_moves_on_as_chunks_get_cached() {
+        let mut r = rig();
+        r.pathing.explore(88, 88);
+        let start = chunk(&r);
+        let mut goals_seen: Vec<Vec<(i32, i32)>> = vec![];
+        let mut farthest = 0;
+        for _ in 0..900 {
+            let before = r.world.cached_chunks.clone().unwrap();
+            r.tick();
+            if r.pathing.explore_process().is_active() {
+                let g = goal_chunks(&r);
+                assert!(g.iter().all(|c| !before.contains(c)), "a chunk the cache held is a goal: {c:?}", c = g.iter().find(|c| before.contains(c)));
+                if goals_seen.last() != Some(&g) {
+                    goals_seen.push(g);
+                }
+            }
+            cache_around(&mut r);
+            farthest = farthest.max(manhattan(chunk(&r), start));
+        }
+        assert!(farthest >= 3, "it never left the cached area: farthest {farthest}, at {:?}", r.p.feet());
+        assert!(goals_seen.len() >= 3, "the goals did not move on: {}", goals_seen.len());
+        assert!(r.world.cached_chunks.as_ref().unwrap().len() > 30, "the cache grew by only {} chunks", r.world.cached_chunks.as_ref().unwrap().len() - 9);
+        assert!(!r.messages.iter().any(|m| m == "Failed"), "{:?}", r.messages);
+        // the player is exploring still: the process does not end while chunks remain
+        assert!(r.pathing.explore_process().is_active());
+    }
+
+    #[test]
+    fn a_filter_of_explored_chunks_is_left_alone() {
+        let mut r = rig();
+        r.pathing.apply_json_filter(JsonChunkFilter::parse(r#"[{"x":3,"z":5},{"x":5,"z":3},{"x":7,"z":5}]"#, false).unwrap());
+        assert_eq!(r.pathing.take_messages(), vec!["Loaded 3 positions"]);
+        r.pathing.explore(88, 88);
+        r.tick();
+        let chunks = goal_chunks(&r);
+        for c in [(3, 5), (5, 3), (7, 5)] {
+            assert!(!chunks.contains(&c), "{c:?} is on the filter: {chunks:?}");
+        }
+        assert_eq!(chunks[0], (5, 7), "the only axis chunk of the ring of 2 left");
+    }
+
+    #[test]
+    fn an_inverted_filter_names_the_only_chunks_to_explore_and_the_process_ends_when_the_cache_has_them() {
+        let mut r = rig();
+        // one chunk three to the east of the player, on the x axis (so listed twice by the ring)
+        r.pathing.apply_json_filter(JsonChunkFilter::parse(r#"[{"x":8,"z":5}]"#, true).unwrap());
+        r.pathing.explore(88, 88);
+        r.tick();
+        assert_eq!(goal_chunks(&r), vec![(8, 5), (8, 5)]);
+        let mut ended = None;
+        for t in 0..900 {
+            r.tick();
+            cache_around(&mut r);
+            if !r.pathing.is_active() {
+                ended = Some(t);
+                break;
+            }
+        }
+        assert!(ended.is_some(), "never ended; at {:?}, chunk {:?}", r.p.feet(), chunk(&r));
+        assert!(r.world.cached_chunks.as_ref().unwrap().contains(&(8, 5)));
+        assert_eq!(r.messages.last().map(String::as_str), Some("Explored all chunks"), "{:?}", r.messages);
+        assert!(chunk(&r).0 >= 7, "it walked east: {:?}", r.p.feet());
+        // the process is gone and the player is still: the filter stays for the next explore
+        for _ in 0..5 {
+            r.tick();
+            assert_eq!(r.intent, Intent::neutral());
+        }
+        assert!(r.pathing.explore_process().filter().is_some());
+    }
+
+    #[test]
+    fn stop_ends_exploring_at_once_and_neutral() {
+        let mut r = rig();
+        r.pathing.explore(88, 88);
+        for _ in 0..30 {
+            r.tick();
+        }
+        assert!(r.pathing.is_active() && r.pathing.is_pathing());
+        let neutral = r.pathing.stop();
+        assert_eq!(neutral, Intent::neutral());
+        assert!(!r.pathing.is_active() && !r.pathing.explore_process().is_active());
+        for _ in 0..5 {
+            r.tick();
+            assert!(!r.pathing.is_active());
+            assert_eq!(r.intent, Intent::neutral());
+        }
+    }
+
+    #[test]
+    fn goto_after_explore_takes_control_and_the_explore_is_gone() {
+        let mut r = rig();
+        r.pathing.explore(88, 88);
+        for _ in 0..25 {
+            r.tick();
+        }
+        assert!(r.pathing.explore_process().is_active());
+        r.pathing.goto(Goal::Block { x: 96, y: 1, z: 80 });
+        r.tick();
+        assert!(r.pathing.process().is_active(), "the goal process has control");
+        assert!(!r.pathing.explore_process().is_active(), "the explore process lost control");
+        r.run_until_idle(900);
+        let f = r.p.feet();
+        assert_eq!((f.x, f.z), (96, 80));
+        assert!(!r.pathing.is_active());
+    }
+
+    #[test]
+    fn explore_after_goto_takes_control_from_the_goal_process() {
+        let mut r = rig();
+        r.pathing.goto(Goal::Block { x: 150, y: 1, z: 88 });
+        for _ in 0..25 {
+            r.tick();
+        }
+        assert!(r.pathing.process().is_active());
+        r.pathing.explore(r.p.feet().x, r.p.feet().z);
+        r.tick();
+        assert!(!r.pathing.process().is_active(), "the goal process kept control");
+        assert!(r.pathing.explore_process().is_active());
+        for _ in 0..200 {
+            r.tick();
+            cache_around(&mut r);
+        }
+        assert!(r.p.feet().x < 140, "it went on to the old goal: {:?}", r.p.feet());
+    }
+
+    #[test]
+    fn follow_after_explore_takes_control_and_explore_after_follow_takes_it_back() {
+        let mut r = rig();
+        r.pathing.explore(88, 88);
+        for _ in 0..25 {
+            r.tick();
+        }
+        r.mobs = vec![EntityInfo { id: 1, kind: "minecraft:pig".to_string(), player_name: None, item: None, position: [100.5, 1.0, 88.5], living: true, alive: true }];
+        r.pathing.follow(FollowFilter::Living);
+        r.tick();
+        assert!(!r.pathing.explore_process().is_active(), "the follow process, started last, took control");
+        // a tick later the manager has dropped the process that lost control from its list of active ones (it does that when it asks the processes; so does
+        // upstream's, which is why a command typed in the very tick after a hand-over would lose to the old process)
+        r.tick();
+        r.pathing.explore(88, 88);
+        r.tick();
+        assert!(!r.pathing.follow_process().has_filter(), "explore, started last, took control from follow");
+        assert!(r.pathing.explore_process().is_active());
+    }
+
+    #[test]
+    fn a_failed_search_ends_exploring_with_failed() {
+        let mut r = rig();
+        // walled in: the chunk is all stone to the sky; breaking is off, so there is no path to any goal
+        for x in 80..97 {
+            for z in 80..97 {
+                if (x, z) != (88, 88) {
+                    for y in 1..3 {
+                        r.world.set(x, y, z, crate::testing::STONE);
+                    }
+                }
+            }
+        }
+        r.pathing.explore(88, 88);
+        for _ in 0..400 {
+            r.tick();
+            if !r.pathing.explore_process().is_active() {
+                break;
+            }
+        }
+        assert!(!r.pathing.explore_process().is_active(), "it never gave up");
+        assert!(r.messages.iter().any(|m| m == "Failed"), "{:?}", r.messages);
+    }
+}

@@ -3,7 +3,7 @@
 Each place where this port differs from upstream on purpose. The rules are in
 [PORTING-SAFETY.md](PORTING-SAFETY.md#deviations). Upstream lines are cited at the `1.21.4` commit `1b8e87c`.
 
-Entries 1 to 4 are decided and wait for the code they apply to. Entry 5 is active and has no effect on any real search. Entries 6 to 10 are active (S3) and change no chosen path that a game can reach. Entries 11 to 23 are active (S4, executor, state machine and the mod): they change when a search is cancelled (12) and what `/b stop` waits for (13), and nothing a search returns. Entries 24 to 32 are active (S4, breaking, placing, settings, commands and the glue): none changes a search; 28 changes what the executor does when the settings forbid an action that a path in progress still asks for. Entry 35 is active (free look): it changes what the player's camera does while a path runs, and nothing a search returns. Entries 36 and 37 are active (R2, engine side of `mine` and `goto <block>`): they change which process asks for a search, and no search.
+Entries 1 to 4 are active since R2 (the persistent cache, entry 41). Entry 5 is active and has no effect on any real search. Entries 6 to 10 are active (S3) and change no chosen path that a game can reach. Entries 11 to 23 are active (S4, executor, state machine and the mod): they change when a search is cancelled (12) and what `/b stop` waits for (13), and nothing a search returns. Entries 24 to 32 are active (S4, breaking, placing, settings, commands and the glue): none changes a search; 28 changes what the executor does when the settings forbid an action that a path in progress still asks for. Entry 35 is active (free look): it changes what the player's camera does while a path runs, and nothing a search returns. Entries 36 and 37 are active (R2, engine side of `mine` and `goto <block>`): they change which process asks for a search, and no search. Entry 41 (the persistent cache) changes what the search reads for chunks that are not loaded, as upstream's does. Entry 42 (`explore`) changes which process asks for a search, and no search.
 
 ## How exceptions work today
 
@@ -19,7 +19,7 @@ Fields: upstream, ours, why, changes chosen paths, decided by, expectation in th
 
 ### D1. Cached special blocks looked up 64 blocks too low
 
-- **Status:** decided, not yet ported.
+- **Status:** active (R2, `cache::chunk`; see D41).
 - **Upstream:** `ChunkPacker.pack` stores each special block with its world Y (`y + minY`, line 92).
   `CachedChunk.setSpecial` turns that into a key with `getPositionIndex` (line 191). `CachedRegion.getBlock` passes a
   Y relative to the dimension minimum (`y - dimension.minY()`, line 80), and `CachedChunk.getBlock` looks the key up
@@ -29,11 +29,11 @@ Fields: upstream, ours, why, changes chosen paths, decided by, expectation in th
 - **Why:** the lookup is wrong. Special blocks (chests, spawners, and so on) come back as their plain pathing type.
 - **Changes chosen paths:** yes.
 - **Decided by:** the owner.
-- **Comparison:** none today. It will need a test with a special block at a known height.
+- **Comparison:** none. `cache::chunk::tests::d1_a_special_block_comes_back_at_its_own_height` fails on upstream's key.
 
 ### D2. The bottom layer caution never applies
 
-- **Status:** decided, not yet ported.
+- **Status:** active (R2, `cache::chunk`; see D41).
 - **Upstream:** `CachedChunk.getBlock` returns obsidian instead of stone for solid blocks with `y < -59` in a natural
   dimension (line 222). That `y` is already relative to the dimension minimum, so it is never below -59.
   The intended caution near bedrock never happens.
@@ -41,30 +41,34 @@ Fields: upstream, ours, why, changes chosen paths, decided by, expectation in th
 - **Why:** the check was meant to discourage breaking blocks near the bottom, where bedrock may be.
 - **Changes chosen paths:** yes, near the bottom layers.
 - **Decided by:** the owner.
-- **Comparison:** none today.
+- **Comparison:** none. `cache::chunk::tests::d2_the_bottom_layers_are_cautious` fails on upstream's comparison.
 
 ### D3. Inverted flow test for water at chunk edges
 
-- **Status:** decided, not yet ported.
+- **Status:** active (R2, `cache::chunk`; see D41).
 - **Upstream:** `ChunkPacker.getPathingBlockType` handles water on the chunk border (lines 141 to 147). If the water
   has a horizontal flow it returns `WATER`, otherwise `AVOID`. The comment above the function says flowing water should
   be avoided, so the test is the wrong way round.
-- **Ours:** flowing water at the edge is `AVOID`, still water is `WATER`, as for water inside the chunk.
+- **Ours:** flowing water at the edge is `AVOID`, still water is `WATER`, as for water inside the chunk. The flow of a still block at the edge is read from the cells
+  around it, the neighbouring chunk's included (`PackSource::outside_state`): a neighbour that is flowing water, or an empty cell with water below it. Upstream asks the fluid
+  for its flow vector, which reads the same cells; this is a reading of that rule, not a copy, and it is not compared with Java.
 - **Why:** water at the edge of a chunk should be treated like water elsewhere.
 - **Changes chosen paths:** yes, around water at chunk edges.
 - **Decided by:** the owner.
-- **Comparison:** none today.
+- **Comparison:** none. `cache::chunk::tests::d3_water_at_the_chunk_edge_is_not_inverted` fails on upstream's test.
 
 ### D4. Keep region files that fail to load
 
-- **Status:** decided, not yet ported.
+- **Status:** active (R2, `cache::world`; see D41).
 - **Upstream:** `CachedRegion.load` catches any exception, prints it and goes on (lines 192 and 307). The region stays
   empty and a later save overwrites the file that could not be read.
-- **Ours:** a file that fails to load is kept as is, and the failure is reported.
+- **Ours:** a file that fails to load is kept, byte for byte: damaged data (bad magic, truncated, bad gzip, a block name this game lacks) is moved aside to `r.<x>.<z>.bcr.corrupt`
+  (`corrupt1`, ... if one exists) so the region can start empty and be saved under its own name; a file that cannot be read at all stays where it is and the region is never saved over it. Either way
+  the failure is a line in the log.
 - **Why:** one bad read should not destroy cached data.
 - **Changes chosen paths:** no. It needs no decision.
 - **Decided by:** nobody needed. Fixes with no effect on paths are made and recorded.
-- **Comparison:** none. Ordinary tests for the cache layer.
+- **Comparison:** none. `cache::world::tests::d4_a_file_that_fails_to_load_is_kept` and `a_file_in_another_blocks_table_is_kept_too` fail on upstream's behaviour.
 
 ### D5. Goal search box that ends at the largest integer
 
@@ -556,9 +560,7 @@ The port does what upstream does here; a change would change paths, so it is the
   stands with a pause request, `updateGoal`, `coalesce` with `GoalThreeBlocks`), `prune` and its filters, `searchWorld`, legit mine, `GetToBlockProcess` (goals per block, the nether portal, the chests with a block on top, the
   right click on arrival, `blacklistClosest`), and `FasterWorldScanner.scanChunkRadius` (D39: the square spiral of chunks, the sections from the player's outwards, never more than `max` hits). Defaults are upstream's.
 - **Differs from upstream:**
-  1. **No cached world.** Every block is scanned straight from the loaded chunks, as upstream does for the blocks it does not keep in its cache. Upstream finds the blocks of `CachedChunk.BLOCKS_TO_KEEP_TRACK_OF` (chests, furnaces,
-     ender chests, spawners, portals, shulker boxes, hoppers, beacons, heads, ...) only through the cache, so `goto chest` there finds chests remembered from chunks that are no longer loaded and this does not. Ores
-     are not in that list, so `mine` finds the same places. `maxCachedWorldScanCount`, `extendCacheOnThreshold`, `repack` and `scanChunk` are not ported.
+  1. ~~No cached world.~~ Gone in R2 (D41): the blocks of `BLOCKS_TO_KEEP_TRACK_OF` come from the cache, as upstream. `repack` and `scanChunk` are not ported.
   2. **The scanner.** The first version of this port copied `WorldScanner`, which `MineProcess` does not use: `BaritoneProvider.getWorldScanner()` is `FasterWorldScanner`. Corrected in R2 (D39).
   3. **Blocks and drops come from the glue.** `BlockOptionalMeta` matches by state id and item path from a `BlockIndex` the glue builds once (the block and properties of each state, and the items each block drops, from
      the loot tables). Upstream reads the registries and runs the loot tables with a netherite pickaxe and a fixed random seed. The glue should list every item the block can drop for the best case; an item the
@@ -721,3 +723,102 @@ Not tested:
   confirmed, so a difference that neither the diff reading nor the worlds showed would be missed. The `26.3` run has no
   mutation run behind it.
 - Other values of `jumpPenalty` than the three the configurations use (2, 5 and 0.25).
+
+### D41. The persistent chunk cache (R2)
+
+- **Status:** active. Engine: `mod/engine/src/cache/` (`chunk.rs` packs, `region.rs` is the file, `world.rs` the regions, `worker.rs` the threads, `view.rs` the fallback under the world view, `gzip.rs`), the settings in `set.rs`, the mine and
+  get-to-block hook in `process/mine.rs` (`search_world`). Glue: `cache_tick`, `cache_close`, `on_server_stopping` in `mod/runtime.rs`, the hook `server_stopping` (`mod/stopping.rs`). D1 to D4 are part of it.
+- **Ours, the same as upstream:** the packed chunk (2 bits per block, `x << 1 | z << 5 | y << 9` counted from the lowest Y, `BitSet` bit order), the overview (top block of each column), the 66 special blocks (`BLOCKS_TO_KEEP_TRACK_OF`), the height map,
+  regions of 32 x 32 chunks, the file (gzip, magic 456022911, the same four sections, `writeUTF` names, the `0` that means 65536 special blocks), expiry, `getLocationsOf` (widens by squared region distance and stops at the first ring that reaches the
+  count), `prune` (regions more than 1024 blocks away, in doubles), the pack queue (a newer chunk replaces the one waiting, the oldest are dropped over `chunkPackerQueueMaxSize`), the saving thread (first save after 30 s, then every 10 minutes, and when the world is
+  left), `BlockStateInterface`'s order (a loaded chunk, else the cached region, else air; `isLoaded` is loaded or cached), `MineProcess.searchWorld` (the tracked blocks from the cache, `maxCachedWorldScanCount`, `extendCacheOnThreshold`) and the settings `chunkCaching`,
+  `pruneRegionsFromRAM`, `chunkPackerQueueMaxSize`, `cachedChunksExpirySeconds`, `maxCachedWorldScanCount`, `extendCacheOnThreshold`, `repackOnAnyBlockChange`, with upstream's defaults. The search and the movement costs are not touched: the cache is a
+  `WorldView` wrapper (`cache::WithCache`) under the snapshot the search and the scans read, and under the live world the executor re-checks against.
+- **Differs from upstream:**
+  1. **D1 to D4**, the fixes the owner decided: special blocks are looked up at the Y they were stored at; the caution near the bottom compares the world Y; the flow test at a chunk edge is the right way round; a region file that fails to load is kept.
+  2. **Where the files are.** `<mod data folder>/cache/<key>/<namespace>/<dimension>_<logical height>/cache/r.<x>.<z>.bcr` (the mod data folder is `horizon-mods/.horizon-mod-data/baritone_rs/` of the game install; the code uses `native_data_dir`, no path of a home).
+     `<key>` is `sp-<world name>` for a single player world and `srv-` and a hash of the address for a server, so no address is a folder name or in a log line. Every part is made safe as a folder name (`..`, separators and anything but letters, digits, `-`, `_`, `.` are replaced), so a world or
+     dimension name cannot leave the folder. Upstream puts a server's cache under the address itself. A single player world is told apart by its name, not by its folder (the game does not give the folder to the mod); two worlds with the same name share a cache.
+  3. **Reading a Java cache.** The file format and the folder nesting are upstream's, so a `baritone/<server>/minecraft/overworld_384/cache` folder copied into a `<key>` folder is read, if every block name in it exists in this game. A name that does not (a block renamed
+     between 1.21.4 and 26.3) fails the whole region, which D4 keeps aside. Not tested with a real Java file: none was at hand; the tests build the stream by hand from upstream's source, and the gzip reader accepts any member.
+  4. **No events, so the packing is driven by the tick.** The glue compares the loaded chunks with the ones it knows: a new one is packed (upstream: `ChunkEvent` post populate). A chunk that unloads is **not** packed (upstream: pre unload): the game gives no event, and a held `Arc` of every
+     chunk makes the game copy a chunk each time it changes it in place (found in the game: a first version did, and repacked everything all the time). So the chunks within 5 chunks of the player are packed again every 4 seconds (`repackOnAnyBlockChange`, default true; upstream repacks a chunk
+     only when a block of the tracked list changed in it, from `BlockChangeEvent`), and a pack that says what the cache already holds stores nothing and does not mark the region as unsaved. A change made more than 5 chunks from the player, or less than 4 seconds before the chunk unloads, is not seen.
+  5. **The water flow at the chunk edge (D3)** is read from the cells around the block (a neighbour that is flowing water, or an empty cell with water below it) instead of from `FluidState.getFlow`. It is not compared with Java.
+  6. **The dimension** is taken from its id: the Overworld, the Nether (logical height 128, ceiling) and the End (End effects), everything else as the Overworld.
+  7. **The state of the top block** is kept as a state id in memory (the state it had when packed) and as a name on disk (the default state after a reload), as upstream keeps a `BlockState` and writes a name.
+  8. **The cache runs from the moment a world is entered**, not from the first `/b` command: the mod's state (the block table, 40 to 200 ms) is made then if no command did, and the pack thread and the saving thread start for each world and dimension. They live as long as the process, as upstream's executor
+     tasks do. `chunkCaching` off stops the files, not the packing, as upstream.
+  9. **Saving.** The regions of a world are saved one after the other (upstream: a parallel stream), and a region is locked only while its bytes are made, not while they are compressed and written. The files are written to a temporary name and renamed over the old one. The save when a world is left runs on a thread of its own and can be
+     cut off if the game quits at once. Quitting from a single player world saves everything on the server thread before the process ends (the hook `native_server_stopping`); quitting from a server does not have such a hook, so what that save had not written is lost (the 10 minute save is what is left).
+  10. **Not ported:** `renderCachedChunks` and `cachedChunksOpacity` (the cached chunks are not drawn), `pathThroughCachedOnly` (the wrapper has `cached_only`, no setting reaches it), `FindCommand`, `SaveAllCommand`, `ReloadAllCommand`, `WaypointCollection` and the waypoints, `FasterWorldScanner.repack` and `scanChunk`, and
+     nothing else of the cache: `regionLoaded` and `tryLoadFromDisk(Async)` are ported with the explore process (D42).
+- **Changes chosen paths:** yes, as upstream's cache does: the search plans through chunks the game does not have loaded. D1 to D3 change what the cached blocks say. Nothing in the search or the costs changed.
+- **Decided by:** the task for this step; D1 to D4 by the owner.
+
+### D42. `explore` and `explorefilter` (R2)
+
+- **Status:** active. Engine: `process/explore.rs` (the process, the filter, a small JSON reader), `Goal::XzMaintainY` in `goals.rs`, `WorldView::chunk_status` (`world.rs`, implemented by `cache::WithCache` in `cache/view.rs`), `CachedWorld::{region_loaded, try_load_from_disk, try_load_from_disk_async}`
+  (`cache/world.rs`), the four explore settings in `set.rs` and `settings.rs`, the two commands in `command.rs`. Glue: `cmd_explore`, `cmd_explore_filter` in `mod/runtime.rs`.
+- **Ours, the same as upstream:** the order and rules of `ExploreProcess.onTick` (a failed path ends it with `Failed`; nothing left to explore ends it with `Explored all chunks` unless `disableCompletionCheck`; a region still being read pauses it), `closestUncachedChunks` (the rings of Manhattan distance
+  from the chunk of the centre, `distanceCompleted`, the count recomputed every 10 rings, `worldExploringChunkOffset`), the goal (`GoalXZ`, or with `exploreMaintainY` not -1 one whose heuristic adds `GoalYLevel.calculate`), the filter (`isAlreadyExplored` and `countRemain` of the JSON filter, the `EitherChunk` that asks
+  the filter first and the cache second, `invert`), `explore`'s and `explorefilter`'s arguments, and the defaults of `exploreChunkSetMinimumSize` (10), `worldExploringChunkOffset` (0), `exploreMaintainY` (64) and `disableCompletionCheck` (false). The search and the costs are not touched; the process hands the manager a
+  `GoalComposite` and `FORCE_REVALIDATE_GOAL_AND_PATH`, as upstream does.
+- **Differs from upstream:**
+  1. **The file.** Upstream resolves the path against the parent of the game directory, opens whatever it names and lets Gson read it. Here the glue opens only the path the user typed (an absolute path, or one relative to the mod's data folder, `horizon-mods/.horizon-mod-data/baritone_rs/`), nothing is listed or completed, it must
+     be a regular file, and no more than 16 MiB is read (about 700,000 chunks; the read is on the game thread). Words are split at spaces, so a path with a space cannot be typed. Answers: `File not found`, `That is not a file`, `The file could not be read`, `The file is too big (over 16 MiB)`, and `Invalid JSON syntax` for text that is not a list of chunk objects.
+  2. **The reader.** Upstream's `Gson.fromJson` reads leniently (unquoted names, single quotes, comments, trailing commas and `NaN` are accepted) and throws a `NullPointerException` on `null` or on a `null` element (that is, anything not a `JsonSyntaxException` kills the command with an `IllegalStateException`). The reader here is strict
+     JSON: those texts are `Invalid JSON syntax`. It takes what Gson takes of a `MyChunkPos[]`: objects with integer `x` and `z` (a number that is whole is fine: `3.0`, `3e0`), the last of a repeated name wins, a missing one is 0, other members of any kind are skipped (nesting limited to 32 deep). A number in quotes is accepted by Gson and refused here.
+  3. **Argument errors.** The texts are upstream's (`Not enough arguments (expected at least 2)`, `Too many arguments (expected at most 2)`, `Error at argument #N: Expected RelativeGoalXZ`, `Expected either "invert" or nothing`); the argument number of a bad coordinate is the one that is wrong, where upstream's depends on how far the coordinate parser got.
+     `explorefilter` with no argument says `Not enough arguments (expected at least 1)`, where upstream says the argument is not a `RelativeFile`.
+  4. **Texts.** `Loaded N positions` is the process's own line, said before `Explore filter applied. Inverted: ...`. The desktop notification (`notificationOnExploreFinished`) and the `logDebug` line while a region loads are not ported. `displayName0` says `null` for the goals while a region is being read, where upstream would throw.
+  5. **The cache is what `ExploreProcess` asks.** A chunk is explored when the cache holds it (`BaritoneChunkCache`), as upstream. What the cache holds is what D41 packs: new chunks as they load, and the chunks within 5 chunks of the player again every 4 seconds (D41.4). A world without a cache says a loaded chunk is explored and any other is not.
+  6. **Reading a region.** `tryLoadFromDiskAsync` starts a thread of its own for each region, one at a time per region (upstream's `pendingLoads`), where upstream uses its executor.
+  7. **Not ported:** `notificationOnExploreFinished`, and `IExploreProcess` as an interface. Only the two commands start the process, as upstream's (its mine and get-to-block processes do not call it).
+- **Changes chosen paths:** no. The goal a process hands to the search is upstream's.
+- **Decided by:** the task for this step.
+
+#### Upstream findings in `ExploreProcess` (reported, not changed)
+
+- **A chunk on an axis is listed twice.** `closestUncachedChunks` takes `dz = -zval` and `+zval`; when `zval` is 0 (`dx = +-dist`: the two chunks of each ring on the centre's row, and the centre's chunk in ring 0) both give the same chunk, so the chunk is added twice and counts twice towards `exploreChunkSetMinimumSize`. With the default of 10 the first set is 18 goals (rings 0 to 2), not 10. Ported as is.
+- **An inverted filter can end a ring before the second listed chunk.** The count of wanted chunks (the number of listed chunks the cache lacks) is reached by a chunk that is listed twice by the loop above, so the goal set can hold one chunk twice and not the other one (seen in `an_inverted_filter_lists_the_chunks_not_explored_and_everything_else_is_explored`). It does no harm: the next tick asks again.
+- **`JsonChunkFilter.countRemain` asks the cache about the listed chunks every tick** with `invert`, which starts the read of their regions even if the walk is nowhere near them.
+- **The loop of `closestUncachedChunks` runs on the game thread** and is O(distance squared) each tick until `distanceCompleted` has moved past the rings that are all explored. After a long exploration the first tick with a new centre goes through every explored ring. Not measured here.
+- **`PathingControlManager.executeProcesses` keeps a process in `active` until the next pass finds it inactive.** A process that lost control and is started again in the very next tick (before the manager's pass) keeps its old place behind the process that took control, and loses (seen in `follow_after_explore_takes_control_and_explore_after_follow_takes_it_back`, which waits one tick). A typed command cannot hit this: it arrives a tick or more later.
+
+### D43. Fixes from the R2 reviews (cache)
+
+- **Status:** active (R2, `cache::{world,region,worker,mod}` and the cache tick in `mod/runtime.rs`). Each has a test named `review_N_...` (or in `cache::worker` / `cache::mod`) that fails without it. They are fixes of faults in the port or of upstream faults that do not change a
+  chosen path, so they needed no decision; where one could, it is listed under "for the owner" below.
+- **Ours, differs from upstream:**
+  1. **`prune` with `chunkCaching` off.** Upstream's `save()` prunes far regions even when it writes nothing. The port kept a region that "has unsaved changes", and with `chunkCaching` off that flag never clears, so every region stayed in memory. Now such a region is pruned (nothing could save it).
+  2. **One save at a time per world.** The timer's save and the save when the world is left (and the one at server stop) shared the temporary file names; a lock around `save` makes the second find nothing to write. Upstream's parallel saves have the same overlap.
+  3. **Folder names are unique.** A name that `sanitize_component` changed gets `.h` and a 16 digit hash of the raw name (`sp-My_World.h...`); a name that survives whole keeps upstream's plain folder. Before, "My World" and "My_World", or any two non-ASCII names of the same length, shared one cache. The dimension folders
+     use the same rule. Upstream names the folder after the server address or the world folder, so it never meets this.
+  4. **A packer that sleeps.** The packer and the saver now wait on separate condition variables: `notify_one` could wake the saver and leave the packer asleep with a chunk queued (9 of 40 trials in the review).
+  5. **A full queue is not flooded.** The glue queues a new chunk only while the queue is under half of `chunkPackerQueueMaxSize` (`WorldData::has_room`) and tries the rest next tick. Upstream's events arrive one chunk at a time; entering a world at a render distance of 32 queued 4000 chunks at once and the drop rule threw half away unpacked.
+  6. **Region files are bounded.** The unpacked size of a region file may not exceed what a full region of the dimension needs (about 75 MB at height 384) plus 4 Mi special blocks, where upstream took anything the gzip held (a 5 MB file of zeros became 1 GiB). A chunk may not list more special blocks than it has cells, a region not more than 4 Mi. A special block whose Y is outside the
+     dimension makes the file damage (D4 sets it aside). Before, an entry patched to `i32::MAX` was handed to `mine` and `goto` as a target.
+  7. **More than 65536 of one special block in a chunk.** Upstream writes the count as a short (the count modulo 65536) followed by all the entries, so the file no longer parses past that chunk (a chunk of cobweb at height 384 can do it). The port writes the first 65536 and no more (the count `0` means 65536, as upstream's reader takes it).
+  8. **A chunk outside the world border** (a region more than 58594 away) is not stored: its region id is 0, which is region (0,0)'s. `getRegion`, `getOrCreateRegion` and the updates answer "none", an empty region that is kept nowhere, and nothing.
+  9. **A region load that panics** frees its entry in `pendingLoads`; before, `explore` would wait for that region until `/b stop`.
+- **Changes chosen paths:** no, apart from 3 to 5 which decide only which chunks are cached at all (more are now) and 8, which refuses what could never be a real place.
+- **Decided by:** the task for this step.
+
+#### For the owner (reported by the reviews, not changed)
+
+- **D3 at the chunk edge looks only at air.** Minecraft's flow vector counts any neighbour that does not block motion (grass, a torch, a plant) with water below it; `edge_flow` asks for air. A still source next to short grass with water below it is cached as `WATER`, where a faithful reading of D3 says `AVOID`.
+  Fixing it changes cached types at chunk edges and so paths; D3 says what the owner decided, and the reading is not compared with Java. Not changed.
+- **Dimension folders carry the logical height only** (`<path>_<logical height>`, upstream's name). A server that changes `min_y` or `height` under the same dimension id and the same logical height shifts old data silently. A fix would add `min_y` to the folder name and so move every existing cache. Not changed.
+- **A world created again with the same name** reads the old world's cache (the game gives the mod a name, not a folder or a seed). Needs the seed or a world id from Horizon.
+- **No cap on disk or memory.** `cachedChunksExpirySeconds` is -1, nothing counts the bytes, and the folders of deleted worlds stay (69 MB in 236 files in the test instance). Memory is pruned only in `save` (every 10 minutes), a full region costs about 29 MB, an empty one 1.2 MB, and
+  `WorldProvider` keeps every opened world and its two threads for the process. Upstream is the same.
+- **Quitting on a server saves on a detached thread** (no stop hook there): up to 10 minutes of cache can be lost. Quitting from a single player world saves on the server thread, which freezes in proportion to the dirty regions (0.86 s for a full noisy region in the review).
+- **Smaller:** `/b set cachedChunksExpirySeconds <small>` deletes cached chunks at the next save with nothing kept aside; region files get the default permissions (0644); `server_key` is an unsalted hash, so a guessed address can be tested; a panic outside `catch_unwind` in the pack or save thread stops it silently.
+
+### Upstream behaviour kept, found in the R2 cache reviews (reported, not fixed)
+
+- **U22. Cache growth has no bound.** `cachedChunksExpirySeconds` defaults to -1, nothing counts bytes, the folders of old worlds stay, and regions leave memory only in `save` (every 10 minutes). Same in upstream.
+- **U23. The over-full pack queue drops the oldest chunks** (`chunkPackerQueueMaxSize`), and a dropped chunk is cached only if it is packed again. The port keeps the rule and avoids reaching it with `has_room` (D43.5).
+- **U24. The flow vector at a chunk edge counts any non-blocking neighbour**, not only air (see "For the owner" in D43). Upstream asks the fluid, so it is right there; the port's reading (D3) is narrower.
+- **U25. The cache is keyed by a name that can repeat.** Upstream keys a single player world by its folder, which is unique; the game gives the mod only the name (D41.2, D43.3), so a world made again with the same name reads the old cache.

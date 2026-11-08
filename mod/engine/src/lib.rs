@@ -20,6 +20,7 @@
 pub mod blockmeta;
 pub mod blocks;
 pub mod buttons;
+pub mod cache;
 pub mod command;
 pub mod config;
 pub mod costs;

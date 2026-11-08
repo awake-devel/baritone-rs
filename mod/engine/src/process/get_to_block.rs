@@ -338,11 +338,11 @@ mod tests {
     }
 
     /// A process that is going to `name`, with its first scan done.
-    fn going(fx: &Fixture, w: &TestWorld, p: &PlayerView, set: &ExecSettings, name: &str) -> GetToBlockProcess {
+    fn going<W: WorldView>(fx: &Fixture, w: &W, p: &PlayerView, set: &ExecSettings, name: &str) -> GetToBlockProcess {
         going_to(fx, w, p, set, if name == "chest" { chest_bom() } else { bom(name) })
     }
 
-    fn going_to(fx: &Fixture, w: &TestWorld, p: &PlayerView, set: &ExecSettings, target: BlockOptionalMeta) -> GetToBlockProcess {
+    fn going_to<W: WorldView>(fx: &Fixture, w: &W, p: &PlayerView, set: &ExecSettings, target: BlockOptionalMeta) -> GetToBlockProcess {
         let ctx = fx.ctx(w);
         let env = Env::new(&ctx, p, set, p.feet());
         let mut g = GetToBlockProcess::new();
@@ -472,6 +472,10 @@ mod tests {
         let mut w = TestWorld::flat(16, 16);
         w.set(8, 1, 5, ORE); // stands in for the chest: only its position matters
         let mut p = PlayerView::standing(7.5, 1.0, 5.5);
+        // the chest is a tracked block: it is found through the cache, as upstream finds it
+        let dir = crate::cache::testkit::temp_dir("arrive");
+        let cache = crate::cache::testkit::cache_of(&w, &["air", "stone", "chest"], dir.clone());
+        let w = crate::cache::testkit::with_cache(w, &cache);
         let ctx = fx.ctx(&w);
         let none = ProcessInputs::default();
         // a plain block: there, so done
@@ -546,5 +550,34 @@ mod tests {
         g.on_lost_control(&mut Controls::default());
         g.deliver(answer);
         assert!(!g.is_active() && g.known_locations().is_empty());
+    }
+
+    /// `goto chest` finds a chest remembered from a chunk that is not loaded any more, and the goal is its place.
+    #[test]
+    fn a_cached_chest_in_an_unloaded_chunk_is_found() {
+        use crate::cache::testkit::{cache_of, temp_dir, with_cache};
+        let fx = fixture();
+        let set = ExecSettings::default();
+        let p = PlayerView::standing(2.5, 1.0, 5.5);
+        let mut known = TestWorld::flat(64, 16);
+        known.set(40, 1, 5, ORE); // stands in for the chest
+        let dir = temp_dir("goto-chest");
+        let cache = cache_of(&known, &["air", "stone", "chest"], dir.clone());
+        let mut live = TestWorld::flat(64, 16);
+        live.loaded_below_x = 16;
+        // no cache: nothing is known
+        let bare = going(&fx, &live, &p, &set, "chest");
+        assert!(bare.known_locations().is_empty());
+        // with it: the chest, 38 blocks away, in a chunk the game does not have
+        let w = with_cache(live, &cache);
+        let ctx = fx.ctx(&w);
+        let env = Env::new(&ctx, &p, &set, p.feet());
+        let mut g = going(&fx, &w, &p, &set, "chest");
+        assert_eq!(g.known_locations(), &[Pos::new(40, 1, 5)]);
+        let mut c = Controls::default();
+        let cmd = g.on_tick(false, true, &env, &ProcessInputs::default(), &mut c);
+        assert_eq!(cmd.kind, PathingCommandType::RevalidateGoalAndPath);
+        assert!(matches!(cmd.goal, Some(Goal::GetToBlock { x: 40, y: 1, z: 5 }) | Some(Goal::Composite(_))), "{:?}", cmd.goal);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

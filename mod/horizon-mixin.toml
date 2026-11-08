@@ -121,6 +121,16 @@ bindings = [
   { name = "game", ty = "&crate::game::Game<'_>", value = "self" },
 ]
 
+# The server begins an orderly stop, which is what quitting the game from a single player world does: the chunk cache is saved while the process is alive.
+[[injection]]
+id = "server_stopping"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_server_stopping"
+helper = "stopping.rs"
+bindings = [
+  { name = "dedicated", ty = "bool", value = "dedicated" },
+]
+
 # The game's input step runs inside `tick_remote_level`, before the player moves. It turns `game.left` and `game.right` into mining and use, but
 # only with `Screen::Playing`. These two hooks set the buttons for the executor and, with the chat open, show it `Playing` for that one call.
 [[injection]]

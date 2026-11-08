@@ -392,6 +392,15 @@ def judge(out, sc, meta):
         n_rows = len(rows) - 60 if chk["kind"] in ("mine", "goto_block") else len(rows)
         ok["chat was open during the walk"] = res["chat_open_in_rows"] >= n_rows * 0.9
     ok["never died"] = not meta["died"]
+    if chk.get("probe_unloaded"):
+        # The chunk cache scenarios: the chunks of the target must have been out of the game when the command was given.
+        probes = [n[2] for n in notes if n[1] == "probe"]
+        res["probes"] = probes
+        ok["the target's chunks were not loaded when the command was given"] = bool(probes) and all(p.endswith("loaded=false") for p in probes)
+    if "min_distance_walked" in chk:
+        walked = sum(speed(rows[i], rows[i + 1]) for i in range(len(rows) - 1) if cmd is None or int(rows[i]["t"]) >= cmd and abs(fnum(rows[i + 1], "x") - fnum(rows[i], "x")) < 5 and abs(fnum(rows[i + 1], "z") - fnum(rows[i], "z")) < 5)
+        res["distance_walked_after_command"] = round(walked, 1)
+        ok[f"walked at least {chk['min_distance_walked']} blocks after the command"] = walked >= chk["min_distance_walked"]
     if chk.get("blocks_changed") == 0 and meta.get("blocks_changed") is not None:
         ok["blocks changed = 0"] = meta["blocks_changed"] == 0
         res["watch_cells"] = meta.get("watch_cells")
@@ -427,6 +436,12 @@ def judge(out, sc, meta):
         searches = read_kv_lines(os.path.join(out, name + ".searches.txt"))
         good = [s for s in searches if s["cancelled"] == "false" and s["kind"] in ("SuccessToGoal", "SuccessSegment")]
         res["successful_searches"] = len(good)
+        if "first_search_min_positions" in chk:
+            after = [x for x in searches if int(x["t"].split("=")[-1]) >= (cmd or 0) and x["cancelled"] == "false" and x["kind"] in ("SuccessToGoal", "SuccessSegment")]
+            first_n = int(after[0]["positions"]) if after else 0
+            res["first_search_positions"] = first_n
+            res["first_search_kind"] = after[0]["kind"] if after else None
+            ok[f"the first path made after the command has more than {chk['first_search_min_positions']} positions (planned beyond the loaded chunks)"] = first_n > chk["first_search_min_positions"]
         if "min_segments" in chk:
             ok[f"more than one segment (>= {chk['min_segments']} searches that gave a path)"] = len(good) >= chk["min_segments"]
         if "min_searches_after" in chk:
@@ -571,6 +586,25 @@ def judge(out, sc, meta):
         res["ticks_after_the_stop"] = len(rows) - ts
         ok["the run went on at least 200 ticks past the stop"] = len(rows) - ts >= 200
         ok["the mod did not move the player after the stop"] = math.hypot(fnum(byt[ts], "x") - fnum(rows[-1], "x"), fnum(byt[ts], "z") - fnum(rows[-1], "z")) < 0.5
+    elif kind == "explore":
+        ts = chk["stop_tick"]
+        byt = {int(r["t"]): r for r in rows}
+        sx, sz = fnum(rows[0], "x"), fnum(rows[0], "z")
+        dist = {t: math.hypot(fnum(r, "x") - sx, fnum(r, "z") - sz) for t, r in byt.items()}
+        cmd0 = cmd or 0
+        early = max([d for t, d in dist.items() if t <= cmd0 + 400] or [0.0])
+        late = max([d for t, d in dist.items() if cmd0 + 400 < t <= ts] or [0.0])
+        total = sum(speed(rows[i], rows[i + 1]) for i in range(len(rows) - 1) if int(rows[i]["t"]) <= ts)
+        res["explore"] = {"walked": round(total, 1), "max_distance_first_400_ticks": round(early, 1), "max_distance_after": round(late, 1),
+                          "distance_at_stop": round(dist.get(ts, 0.0), 1), "distance_every_200_ticks": [round(dist[t], 1) for t in sorted(dist) if t % 200 == 0]}
+        ok[f"walked at least {chk['min_distance_walked']} blocks"] = total >= chk["min_distance_walked"]
+        ok[f"got at least {chk['min_far']} blocks away from the start"] = max(early, late) >= chk["min_far"]
+        ok["went farther in the later part than in the first 400 ticks"] = late > early
+        ok["keys released at the stop tick"] = byt[ts]["forced"] == "0"
+        ok["no keys and no path from the stop tick on"] = all(r["forced"] == "0" and r["pathing"] == "0" for r in rows if int(r["t"]) >= ts)
+        ok["said 'ok canceled' or similar at the stop"] = any(n[0] >= ts and n[1] == "chat" and "cancel" in n[2].lower() for n in notes)
+        a, b = byt[min(ts + 30, len(rows) - 1)], rows[-1]
+        ok["stood still from 30 ticks after the stop"] = math.hypot(fnum(a, "x") - fnum(b, "x"), fnum(a, "z") - fnum(b, "z")) < 0.05
     elif kind == "stop":
         ts = chk["stop_tick"]
         byt = {int(r["t"]): r for r in rows}
@@ -628,11 +662,12 @@ def main():
     ap.add_argument("--no-far", action="store_true", help="leave out the 1500-block scenario")
     ap.add_argument("--world", help="name of the new world: must start with l3- and must not exist (default: l3-<time>)")
     ap.add_argument("--judge-only", action="store_true")
+    ap.add_argument("--controls", action="store_true", help="also play the cache scenarios with chunkCaching off; they are expected to fail")
     ap.add_argument("--timeout", type=int, default=3600, help="seconds to wait for the whole run")
     ap.add_argument("--report", help="write the metadata-only summary here")
     args = ap.parse_args()
     out = os.path.abspath(args.out)
-    scs = scenarios.all_scenarios(include_far=not args.no_far)
+    scs = scenarios.all_scenarios(include_far=not args.no_far, controls=args.controls)
     if args.only:
         scs = [s for s in scs if any(s["name"].startswith(p) for p in args.only)]
     status = "judged earlier files"
@@ -661,7 +696,7 @@ def main():
         failed = [k for k, v in r["checks"].items() if not v]
         print(f"{r['status'].upper():8} {r['scenario']:34} ticks={r.get('ticks')} {('failed: ' + '; '.join(failed)) if failed else ''} {' '.join(r['notes'])[:160]}")
     if args.report:
-        keep = ("scenario", "chat", "status", "ticks", "blocks", "estimated_vs_actual_ticks", "slot_start", "slot_end", "slot_restored_after_the_path", "hotbar_start", "hotbar_end", "ticks_from_command_to_arrival", "command_tick", "arrived_tick", "distance_to_goal_xz", "min_health", "successful_searches", "items_end", "container_open_ticks", "ores_broken", "distance_to_block_xz", "ticks_from_command_to_done", "chat_lines", "speed_the_tick_before_the_stop", "ticks_until_still", "coasting_distance_blocks", "follow")
+        keep = ("scenario", "chat", "status", "ticks", "blocks", "estimated_vs_actual_ticks", "slot_start", "slot_end", "slot_restored_after_the_path", "hotbar_start", "hotbar_end", "ticks_from_command_to_arrival", "command_tick", "arrived_tick", "distance_to_goal_xz", "min_health", "successful_searches", "items_end", "container_open_ticks", "ores_broken", "distance_to_block_xz", "ticks_from_command_to_done", "probes", "distance_walked_after_command", "first_search_positions", "first_search_kind", "explore", "chat_lines", "speed_the_tick_before_the_stop", "ticks_until_still", "coasting_distance_blocks", "follow")
         slim = [{k: r[k] for k in keep if k in r} | {"failed_checks": [k for k, v in r["checks"].items() if not v]} for r in results]
         rep = {"horizon_revision": HORIZON_REVISION, "instance": INSTANCE, "run": status, "scenarios": slim, "overall_timing": summary["overall_timing"]}
         with open(args.report, "w") as f:

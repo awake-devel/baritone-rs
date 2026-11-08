@@ -9,7 +9,8 @@
 //   * `on_command`: `/b goto` (coordinates or a block), `mine`, `goal`, `path`, `eta`, `set`, `stop`, `help`, `trace`. `suggest_provider`: the words after `/b` for the chat box.
 //   * `on_primitives`: the path, drawn in the world.
 //   * `on_level_gone`: the level was dropped, or the connection ends.
-// With no goal ever given, the mod does nothing at all: no thread, no tables, no key touched.
+// With no goal ever given, the mod touches no key and walks nowhere. It does read the chunks the game loads, in a world: the persistent chunk cache
+// (`cache_tick`, docs/deviations.md D41) packs them on a thread of its own and saves them to the mod's data folder, as upstream's does.
 //
 // The block table comes from `baritone_rs_facts` (mod/glue/state_facts.rs, the file tools/facts-compare also compiles).
 // The test-only scenario trigger at the end does nothing unless BARITONE_RS_SCENARIO_DIR is set.
@@ -17,7 +18,9 @@ use super::{Game, Screen};
 use baritone_engine::blocks::{Direction, State};
 use baritone_engine::buttons::Buttons;
 use baritone_engine::blockmeta::{BlockIndex, StateEntry};
-use baritone_engine::command::{complete_blocks, complete_follow, eta_command, follow_command, goal_command, goal_to_string, goto_block, goto_goal, mine_command, path_command, GoalAction, GotoError, PathAction, PlayerRef};
+use baritone_engine::cache::worker::{PackJob, WorldData, WorldProvider};
+use baritone_engine::cache::{CacheEnv, CacheReader, CachedWorld, Dimension, PackSource, WithCache};
+use baritone_engine::command::{complete_blocks, complete_follow, eta_command, explore_command, explore_filter_command, follow_command, goal_command, goal_to_string, goto_block, goto_goal, mine_command, path_command, GoalAction, GotoError, PathAction, PlayerRef};
 use baritone_engine::config::Config;
 use baritone_engine::exec::movements::GameFacts;
 use baritone_engine::exec::state::{CancelReason, PlayerView};
@@ -48,7 +51,7 @@ use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 pub const ID: &str = "baritone_rs";
 pub const NAME: &str = "baritone-rs";
 pub const VERSION: &str = "0.1.0";
-pub const DESCRIPTION: &str = "Pathfinding. /b goto <x> <y> <z> or <block>, /b mine <block>, /b follow <entities>, /b goal, /b path, /b eta, /b set, /b stop. Walks, sprints, breaks and places blocks. Parkour and swimming are off.";
+pub const DESCRIPTION: &str = "Pathfinding. /b goto <x> <y> <z> or <block>, /b mine <block>, /b follow <entities>, /b explore [x z], /b explorefilter <file> [invert], /b goal, /b path, /b eta, /b set, /b stop. Walks, sprints, breaks and places blocks. Parkour and swimming are off.";
 
 const PREFIX: &str = "[baritone-rs]";
 
@@ -96,6 +99,9 @@ impl WorldView for Snapshot {
         self.height
     }
 }
+
+/// What the search and the scans read: the snapshot of the loaded chunks with the persistent cache under it (`BlockStateInterface`).
+type CSnapshot = WithCache<Snapshot>;
 
 /// The live world, for the executor's rechecks on the game thread. It shares no chunk copy with the worker.
 struct Live<'a> {
@@ -153,6 +159,8 @@ struct Base {
     states: Vec<State>,
     default_of: Vec<usize>,
     paths: Vec<String>,
+    /// Per state: the block is a `TallGrassBlock`, `DoublePlantBlock` or `FlowerBlock` (`ChunkPacker.getPathingBlockType` calls those air).
+    air_like: Vec<bool>,
     /// The blocks, their states and what they drop, for `mine` and `goto <block>`.
     index: BlockIndex,
 }
@@ -166,7 +174,7 @@ struct Scanner {
 
 struct ScanRequest {
     job: ScanJob,
-    snapshot: Snapshot,
+    snapshot: CSnapshot,
     tables: Arc<Tables>,
     border: Border,
 }
@@ -209,7 +217,9 @@ struct CompletionWorld {
 static COMPLETION_WORLD: Mutex<CompletionWorld> = Mutex::new(CompletionWorld { types: Vec::new(), players: Vec::new() });
 
 struct Mod {
-    pathing: Pathing<Worker<Snapshot>, Snapshot>,
+    pathing: Pathing<Worker<CSnapshot>, CSnapshot>,
+    /// The names and flags the chunk cache packs with, made from the block table.
+    cache_env: Arc<CacheEnv>,
     tables: Arc<Tables>,
     base: Base,
     scanner: Scanner,
@@ -480,9 +490,12 @@ fn build_base(game: &Game<'_>) -> Result<Base, String> {
     let mut states = Vec::with_capacity(n);
     let mut default_of = Vec::with_capacity(n);
     let mut paths = Vec::with_capacity(n);
+    let mut air_like = Vec::with_capacity(n);
     for (i, &is_land) in land.iter().enumerate() {
         let id = BlockStateId(i as u32);
         states.push(state_from_horizon(&src, id, is_land));
+        let f = facts.get(id);
+        air_like.push(f.has_class("TallGrassBlock") || f.has_class("DoublePlantBlock") || f.has_class("FlowerBlock"));
         let desc = registry.state(id).ok_or_else(|| format!("state {i} is not in the registry"))?;
         default_of.push(registry.default_state(&desc.name).map_or(i, |d| d.0 as usize));
         paths.push(desc.name.strip_prefix("minecraft:").unwrap_or(&desc.name).to_string());
@@ -490,7 +503,7 @@ fn build_base(game: &Game<'_>) -> Result<Base, String> {
     log::info!("{PREFIX} block facts of {n} states read in {} ms", started.elapsed().as_millis());
     let index = build_index(game, registry);
     log::info!("{PREFIX} block index (states and drops) ready in {} ms", started.elapsed().as_millis());
-    Ok(Base { states, default_of, paths, index })
+    Ok(Base { states, default_of, paths, air_like, index })
 }
 
 /// The name the engine keeps a block under (`BlockUtils.blockToString`): the path for `minecraft:`, the whole name otherwise.
@@ -671,7 +684,13 @@ fn ensure_started(game: &Game<'_>) -> Result<(), String> {
     let look_settings = settings.look_settings();
     // The real table is made from the hotbar just below; this one only holds the place.
     let tables = Arc::new(Tables::new(base.states.clone(), Config::upstream_defaults(), vec![0.0; base.states.len()]));
-    let mut m = Mod { pathing, tables, base, scanner, sig: None, settings, settings_rev, ts, exec, look_settings, look: LookState::new(), dim: game.dim.id(), target: None, was_active: false, auto_jump_saved: None, reported_cancel: None, unsprint: false };
+    let cache_env = {
+        // magma blocks are left to the setting at each pack, so the table is made as if walking on them were allowed
+        let mut cfg = Config::upstream_defaults();
+        cfg.allow_walk_on_magma = true;
+        Arc::new(CacheEnv::new(&base.states, &base.default_of, &base.air_like, &|s: &State| baritone_engine::movement::helper::avoid_walking_into(s, &cfg)))
+    };
+    let mut m = Mod { pathing, cache_env, tables, base, scanner, sig: None, settings, settings_rev, ts, exec, look_settings, look: LookState::new(), dim: game.dim.id(), target: None, was_active: false, auto_jump_saved: None, reported_cancel: None, unsprint: false };
     let food = game.player.as_ref().map_or(20, |p| p.health.food.food);
     refresh_tables(game, &mut m, &read_hotbar(game), food);
     let mut s = state();
@@ -757,6 +776,7 @@ pub(super) fn on_level_gone(window: bool, why: &str) {
     if !window {
         return;
     }
+    cache_close(why);
     if let Some(m) = state().as_mut() {
         if m.busy() {
             log::info!("{PREFIX} stopped: {why}");
@@ -775,6 +795,7 @@ pub(super) fn on_tick(game: &mut Game<'_>) {
     end_silent_look(game);
     register_completion(game);
     refresh_completion_players(game);
+    cache_tick(game);
     let began = std::time::Instant::now();
     tick_path(game);
     PATH_TICK_US.store(began.elapsed().as_micros() as u64, std::sync::atomic::Ordering::Relaxed);
@@ -870,8 +891,9 @@ fn tick_path(game: &mut Game<'_>) {
     while let Ok(result) = m.scanner.rx.try_recv() {
         m.pathing.deliver_scan(result, &m.tables.cfg, &m.exec);
     }
+    let reader = cache_reader();
     let out = {
-        let live = Live { world: &game.world, registry, falling: falling_positions(game) };
+        let live = WithCache::new(Live { world: &game.world, registry, falling: falling_positions(game) }, reader.clone());
         let inv = GameInv { items: game.items(), facts: game.res.facts(), hb: &hotbar, main: &game.inventory, main_infos: OnceCell::new() };
         let facts = GameFacts { reach: game.block_reach, nether: game.dim.id() == "minecraft:the_nether", aim: baritone_engine::look::AimProcessor::new(m.exec.mouse_sensitivity) };
         let env = TickEnv { tables: &m.tables, world: &live, border, player: &view, exec: &m.exec, inv: &inv, game: facts };
@@ -883,7 +905,7 @@ fn tick_path(game: &mut Game<'_>) {
                 log.remove(0);
             }
             log.push((began.elapsed().as_micros() as u64, snap.chunks.len()));
-            snap
+            WithCache::new(snap, reader.clone())
         };
         m.pathing.tick(&env, &mut snapshot)
     };
@@ -895,7 +917,7 @@ fn tick_path(game: &mut Game<'_>) {
     if !jobs.is_empty() {
         let began = std::time::Instant::now();
         for job in jobs {
-            let snapshot = Snapshot::take(&game.world, registry.len());
+            let snapshot = WithCache::new(Snapshot::take(&game.world, registry.len()), reader.clone());
             scan_died |= m.scanner.tx.send(ScanRequest { job, snapshot, tables: Arc::clone(&m.tables), border }).is_err();
         }
         log::info!("{PREFIX} scan requested, chunks copied in {} us", began.elapsed().as_micros());
@@ -999,6 +1021,263 @@ fn tick_path(game: &mut Game<'_>) {
     drop(guard);
     for line in lines {
         say(game, &line);
+    }
+}
+
+// ---------------------------------------------------------------- the chunk cache
+
+/// One loaded chunk, for the packer thread. The chunk is an `Arc` the game copies on write, so this is the chunk as it was when it was queued.
+struct GlueChunk {
+    chunk: Arc<Chunk>,
+    min_y: i32,
+    air: usize,
+    limit: usize,
+    /// The chunks to the west, east, north and south, for the water flow at the edge (D3).
+    next: [Option<Arc<Chunk>>; 4],
+}
+
+impl PackSource for GlueChunk {
+    fn state(&self, x: i32, y: i32, z: i32) -> usize {
+        known_state(self.chunk.get(x, y + self.min_y, z) as usize, self.limit, self.air)
+    }
+    fn section_has_only_air(&self, section: usize) -> bool {
+        self.chunk.sections.get(section).is_none_or(|s| s.is_uniform(self.air as u32))
+    }
+    fn fill_section(&self, section: usize, out: &mut [usize; 4096]) {
+        let mut cells = [0u32; 4096];
+        if let Some(s) = self.chunk.sections.get(section) {
+            s.unpack(&mut cells);
+        }
+        for (slot, v) in out.iter_mut().zip(cells.iter()) {
+            *slot = known_state(*v as usize, self.limit, self.air);
+        }
+    }
+    fn outside_state(&self, x: i32, y: i32, z: i32) -> Option<usize> {
+        let (n, cx, cz) = match (x, z) {
+            (-1, 0..=15) => (0, 15, z),
+            (16, 0..=15) => (1, 0, z),
+            (0..=15, -1) => (2, x, 15),
+            (0..=15, 16) => (3, x, 0),
+            _ => return None,
+        };
+        let c = self.next[n].as_ref()?;
+        Some(known_state(c.get(cx, y + self.min_y, cz) as usize, self.limit, self.air))
+    }
+}
+
+/// The chunks within this many chunks of the player are packed again every `REPACK_EVERY` (`repackOnAnyBlockChange`).
+const REPACK_RADIUS: i32 = 5;
+const REPACK_EVERY: std::time::Duration = std::time::Duration::from_secs(4);
+
+/// The cached world in use, with the chunks that are loaded.
+struct ActiveCache {
+    /// Of the world or server, and the dimension: when either changes the cache is closed and another opened.
+    key: String,
+    dim: &'static str,
+    data: Arc<WorldData>,
+    /// The chunks that are loaded, and when each was last queued for packing. No chunk is held here: a held `Arc` would make the game copy the chunk
+    /// each time it changes one in place.
+    tracked: HashMap<(i32, i32), std::time::Instant>,
+    settings_rev: u64,
+    opened: std::time::Instant,
+    ticks: u64,
+}
+
+struct CacheHost {
+    provider: WorldProvider,
+    active: Option<ActiveCache>,
+}
+
+static CACHE: Mutex<Option<CacheHost>> = Mutex::new(None);
+/// Microseconds the last cache tick took on the game thread, and the largest since the world was entered.
+static CACHE_TICK_US: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static CACHE_TICK_MAX_US: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+fn cache_host() -> MutexGuard<'static, Option<CacheHost>> {
+    CACHE.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// A reader of the cached world in use, for a snapshot. `None` outside a world.
+fn cache_reader() -> Option<CacheReader> {
+    cache_host().as_ref()?.active.as_ref().map(|a| CacheReader::new(Arc::clone(&a.data.world)))
+}
+
+/// Leaving the world, or the dimension: the cache is saved on a thread of its own (`WorldData.onClose`) and the chunks being tracked are forgotten.
+/// Upstream packs nothing that unloads after the new world is up, so nothing is packed here either.
+fn cache_close(why: &str) {
+    let Some(host) = cache_host().as_mut().and_then(|h| h.active.take()) else {
+        return;
+    };
+    log::info!("{PREFIX} cache closed ({why}): {} chunks tracked, {} regions in memory, {} waiting to be packed", host.tracked.len(), host.data.world.region_count(), host.data.pending());
+    host.data.world.set_player(None);
+    host.data.on_close();
+}
+
+/// The server begins an orderly stop (`native_server_stopping`): every cached world is saved now, on this thread, because the process may end as soon as the stop is over.
+/// A save from `cache_close` runs on a thread of its own and can be cut off by the end of the process. The files are written whole or not at all, so a cut-off save only
+/// loses what it had not written.
+pub(super) fn on_server_stopping() {
+    let worlds = cache_host().as_ref().map(|h| h.provider.all()).unwrap_or_default();
+    for w in worlds {
+        let began = std::time::Instant::now();
+        let report = w.world.save();
+        for note in w.world.take_notes() {
+            log::info!("{PREFIX} {note}");
+        }
+        log::info!("{PREFIX} cache saved at the server stop: {} regions, {} bytes, {} failed, {} ms", report.saved, report.bytes, report.failed, began.elapsed().as_millis());
+    }
+}
+
+/// The folder of the world or server, named so that no address is in it: a singleplayer world by its name, a server by a hash of its address.
+fn cache_world_key(game: &Game<'_>) -> Option<String> {
+    if let Some(i) = game.integrated.as_ref() {
+        return Some(baritone_engine::cache::singleplayer_key(&i.world_name));
+    }
+    let address = game.remote.as_ref().map(|r| r.session.address.clone())?;
+    Some(baritone_engine::cache::server_key(&address))
+}
+
+/// The cache's part of a tick, whatever the mod is doing: opens the cached world of the player's world and dimension, packs the chunks that came or
+/// went, and repacks the ones that changed. The packing and the saving run on their own threads.
+fn cache_tick(game: &mut Game<'_>) {
+    let in_world = game.player.is_some() && game.native_on(ID);
+    if !in_world {
+        cache_close("not in a world");
+        return;
+    }
+    let began = std::time::Instant::now();
+    let Some(key) = cache_world_key(game) else {
+        cache_close("no world key");
+        return;
+    };
+    let dim = game.dim.id();
+    // the chunk table the cache packs with comes with the mod's state, which is made here if no command did
+    // (the guard of `state()` must be gone before `ensure_started` takes it: a `match` on it would keep it to the end)
+    let have = state().as_ref().map(|m| Arc::clone(&m.cache_env));
+    let env = match have {
+        Some(e) => e,
+        None => {
+            if let Err(e) = ensure_started(game) {
+                static SAID: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+                if !SAID.swap(true, std::sync::atomic::Ordering::Relaxed) {
+                    log::warn!("{PREFIX} the chunk cache cannot start: {e}");
+                }
+                return;
+            }
+            let made = state().as_ref().map(|m| Arc::clone(&m.cache_env));
+            match made {
+                Some(e) => e,
+                None => return,
+            }
+        }
+    };
+    let (min_y, height) = (game.world.bottom_y(), game.world.top_y() - game.world.bottom_y());
+    let dimension = Dimension::from_id(dim, min_y, height);
+    let rev = SETTINGS_REV.load(std::sync::atomic::Ordering::SeqCst);
+    let cache_settings = with_settings(game, |st, _| (st.cache_settings(), st.get_bool("allowWalkOnMagmaBlocks")));
+    let data_dir = game.native_data_dir(ID).join("cache");
+    let mut guard = cache_host();
+    let host = guard.get_or_insert_with(|| CacheHost { provider: WorldProvider::new(), active: None });
+    if host.active.as_ref().is_some_and(|a| a.key != key || a.dim != dim) {
+        drop(guard);
+        cache_close("another world or dimension");
+        guard = cache_host();
+    }
+    let host = guard.get_or_insert_with(|| CacheHost { provider: WorldProvider::new(), active: None });
+    if host.active.is_none() {
+        let dir = data_dir.join(&key).join(baritone_engine::cache::dimension_folder(dim, dimension.logical_height)).join("cache");
+        let opened = host.provider.open(dir.clone(), || {
+            let clock: Box<dyn Fn() -> i64 + Send + Sync> = Box::new(|| std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_millis() as i64));
+            Arc::new(CachedWorld::new(dir.clone(), dimension, Arc::clone(&env), cache_settings.0.clone(), clock))
+        });
+        match opened {
+            Ok(data) => {
+                log::info!("{PREFIX} cache opened for {key} {dim}: {} regions in memory", data.world.region_count());
+                host.active = Some(ActiveCache { key: key.clone(), dim, data, tracked: HashMap::new(), settings_rev: 0, opened: std::time::Instant::now(), ticks: 0 });
+            }
+            Err(e) => {
+                log::warn!("{PREFIX} the chunk cache cannot start its threads: {e}");
+                return;
+            }
+        }
+    }
+    let Some(active) = host.active.as_mut() else { return };
+    active.ticks += 1;
+    if active.settings_rev != rev {
+        active.data.world.set_settings(cache_settings.0.clone());
+        active.data.set_allow_walk_on_magma(cache_settings.1);
+        active.settings_rev = rev;
+    }
+    // where the player is, for the pruning of far regions
+    if active.ticks % 20 == 1 {
+        if let Some(p) = game.player.as_ref() {
+            active.data.world.set_player(Some((p.position.x.floor() as i32, p.position.z.floor() as i32)));
+        }
+    }
+    let repack = cache_settings.0.repack_on_any_block_change;
+    let limit = game.pack.assets.registry.len();
+    let air = game.world.air.0 as usize;
+    let now = std::time::Instant::now();
+    let queue = |data: &WorldData, key: (i32, i32), chunk: &Arc<Chunk>, world: &World| {
+        let next = [(key.0 - 1, key.1), (key.0 + 1, key.1), (key.0, key.1 - 1), (key.0, key.1 + 1)].map(|k| world.chunks.get(&k).cloned());
+        data.queue_for_packing(PackJob { chunk_x: key.0, chunk_z: key.1, source: Box::new(GlueChunk { chunk: Arc::clone(chunk), min_y, air, limit, next }) });
+    };
+    // chunks that came (`ChunkEvent` post populate)
+    for (k, c) in game.world.chunks.iter() {
+        if c.min_y() != min_y {
+            continue; // the chunk of another dimension, while the level is being replaced
+        }
+        if !active.tracked.contains_key(k) {
+            if !active.data.has_room() {
+                break; // the rest wait for the next tick: a full queue would throw its oldest chunks away unpacked
+            }
+            queue(&active.data, *k, c, &game.world);
+            active.tracked.insert(*k, now);
+        }
+    }
+    // The game gives no event for a changed block, and a held chunk would be copied at each change, so the chunks around the player are packed again from
+    // time to time (docs/deviations.md D41); a pack that says what the cache holds already stores nothing. A chunk that goes is not packed: it is gone.
+    if repack {
+        if let Some(p) = game.player.as_ref() {
+            let (pcx, pcz) = ((p.position.x.floor() as i32) >> 4, (p.position.z.floor() as i32) >> 4);
+            for dx in -REPACK_RADIUS..=REPACK_RADIUS {
+                for dz in -REPACK_RADIUS..=REPACK_RADIUS {
+                    let k = (pcx + dx, pcz + dz);
+                    if let (Some(c), Some(t)) = (game.world.chunks.get(&k), active.tracked.get_mut(&k)) {
+                        if now.duration_since(*t) >= REPACK_EVERY {
+                            queue(&active.data, k, c, &game.world);
+                            *t = now;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    active.tracked.retain(|k, _| game.world.chunks.contains_key(k));
+    for note in active.data.world.take_notes() {
+        log::info!("{PREFIX} {note}");
+    }
+    let us = began.elapsed().as_micros() as u64;
+    CACHE_TICK_US.store(us, std::sync::atomic::Ordering::Relaxed);
+    if active.ticks == 1 {
+        // the first tick can include making the block table, when no command did
+        log::info!("{PREFIX} cache: first tick {us} us");
+    } else {
+        CACHE_TICK_MAX_US.fetch_max(us, std::sync::atomic::Ordering::Relaxed);
+    }
+    if active.ticks % 1200 == 0 {
+        let (packed, dropped) = active.data.counts();
+        let (unchanged, pack_us, pack_max_us) = active.data.pack_stats();
+        log::info!(
+            "{PREFIX} cache: {} chunks tracked, {packed} packed ({unchanged} unchanged, {} us each on average, longest {pack_max_us} us), {dropped} dropped, {} waiting, {} regions in memory, {} unsaved; game-thread tick {us} us (largest since the first {} us); open {} s",
+            active.tracked.len(),
+            pack_us / packed.max(1),
+            active.data.pending(),
+            active.data.world.region_count(),
+            active.data.world.unsaved_regions(),
+            CACHE_TICK_MAX_US.load(std::sync::atomic::Ordering::Relaxed),
+            active.opened.elapsed().as_secs()
+        );
     }
 }
 
@@ -1206,6 +1485,7 @@ fn help_lines() -> Vec<String> {
     lines.push("/b trace - One log line per tick while a path runs, for bug reports".to_string());
     lines.push("/b goto <block>, /b mine [quantity] <block> [<block>...]: blocks by name (minecraft: is optional), also with properties, as stone or oak_stairs[facing=east]".to_string());
     lines.push("/b follow entities | players | entity <type...> | player <name...>: follow those (entity types by id, as pig or minecraft:pig). /b stop ends it.".to_string());
+    lines.push("/b explore [x z]: walk to the closest chunks the cache lacks, around you or around x z. /b explorefilter <file> [invert]: a JSON list [{\"x\":0,\"z\":0},...] of chunks (not blocks) to count as explored, or with invert as the only ones not explored; a relative path is in the mod data folder.".to_string());
     lines.push("/b goto <x> <y> <z> | <x> <z> | <y>, /b goal [x y z | clear], /b set <name> [value] | list | modified | reset | toggle | save | load".to_string());
     lines.push("A ~ in front of a number is relative to you. Tab completes the commands, the settings and their values.".to_string());
     lines
@@ -1229,6 +1509,8 @@ pub(super) fn on_command(game: &mut Game<'_>, command: &str, ran: &mut bool) {
         Some("goto") => cmd_goto(game, rest),
         Some("mine") => cmd_mine(game, rest),
         Some("follow") => cmd_follow(game, rest),
+        Some("explore") => cmd_explore(game, rest),
+        Some("explorefilter") => cmd_explore_filter(game, rest),
         Some("goal") => cmd_goal(game, rest),
         Some("path") => cmd_path(game, rest),
         Some("eta") => cmd_eta(game, rest),
@@ -1371,6 +1653,83 @@ fn cmd_follow(game: &mut Game<'_>, args: &[&str]) {
     if let Some(error) = &outcome.error {
         say(game, error);
     }
+}
+
+/// `/b explore [x z]`: `ExploreProcess`.
+fn cmd_explore(game: &mut Game<'_>, args: &[&str]) {
+    let Some(feet) = start_and_feet(game) else {
+        return;
+    };
+    match explore_command(args, feet) {
+        Ok(request) => {
+            if let Some(m) = state().as_mut() {
+                m.dim = game.dim.id();
+                m.reported_cancel = None;
+                m.target = None;
+                m.pathing.explore(request.x, request.z);
+            }
+            say(game, &request.message(censor(game)));
+        }
+        Err(e) => say(game, &e),
+    }
+}
+
+/// The biggest file `explorefilter` reads. 16 MiB is about 700 000 chunks; the file is read on the game thread, so it is kept small.
+const MAX_FILTER_FILE: u64 = 16 << 20;
+
+/// Reads the file the user named, and only that: a path as typed (a relative one is in the mod's data folder), which must be a regular file. Nothing else is opened or listed.
+fn read_filter_file(path: &std::path::Path) -> Result<String, String> {
+    use std::io::Read;
+    let meta = std::fs::metadata(path).map_err(|e| if e.kind() == std::io::ErrorKind::NotFound { "File not found".to_string() } else { "The file could not be read".to_string() })?;
+    if !meta.is_file() {
+        return Err("That is not a file".to_string());
+    }
+    if meta.len() > MAX_FILTER_FILE {
+        return Err(format!("The file is too big (over {} MiB)", MAX_FILTER_FILE >> 20));
+    }
+    let file = std::fs::File::open(path).map_err(|_| "The file could not be read".to_string())?;
+    let mut bytes = Vec::new();
+    // the size can grow after the check: read no more than the limit plus one byte
+    file.take(MAX_FILTER_FILE + 1).read_to_end(&mut bytes).map_err(|_| "The file could not be read".to_string())?;
+    if bytes.len() as u64 > MAX_FILTER_FILE {
+        return Err(format!("The file is too big (over {} MiB)", MAX_FILTER_FILE >> 20));
+    }
+    String::from_utf8(bytes).map_err(|_| baritone_engine::process::explore::INVALID_JSON.to_string())
+}
+
+/// `/b explorefilter <file> [invert]`: `ExploreProcess.applyJsonFilter`.
+fn cmd_explore_filter(game: &mut Game<'_>, args: &[&str]) {
+    if start_and_feet(game).is_none() {
+        return;
+    }
+    let (name, invert) = match explore_filter_command(args) {
+        Ok(r) => r,
+        Err(e) => {
+            say(game, &e);
+            return;
+        }
+    };
+    let path = std::path::Path::new(&name);
+    let path = if path.is_absolute() { path.to_path_buf() } else { game.native_data_dir(ID).join(path) };
+    let filter = match read_filter_file(&path).and_then(|text| baritone_engine::process::JsonChunkFilter::parse(&text, invert)) {
+        Ok(f) => f,
+        Err(e) => {
+            say(game, &e);
+            return;
+        }
+    };
+    let lines = {
+        let mut guard = state();
+        let Some(m) = guard.as_mut() else {
+            return;
+        };
+        m.pathing.apply_json_filter(filter);
+        m.pathing.take_messages()
+    };
+    for line in &lines {
+        say(game, line);
+    }
+    say(game, &format!("Explore filter applied. Inverted: {invert}"));
 }
 
 /// The entities `FollowProcess` can see: the living ones the game simulates and the dropped items, never the player itself. Bounded: past
@@ -1941,7 +2300,7 @@ fn evaluate(name: &str, s: &Scn) -> String {
 // Without the variable none of this runs.
 //
 // Spec: {"out": dir, "scenarios": [{"name", "chat", "prep": [console lines], "tp": console line or null, "wait_loaded": [[x, z]],
-// "watch": [x0, y0, z0, x1, y1, z1] or null, "events": [{"t", "console" | "command" | "chat": "open" | "close" | "rebase": true}],
+// "watch": [x0, y0, z0, x1, y1, z1] or null, "events": [{"t", "console" | "command" | "chat": "open" | "close" | "rebase": true, "probe": [x, z]}],
 // "end": ticks, "stop_when": "arrived" | "idle" | "never", "slot": hotbar slot at the start or absent, "after": [commands run when it is
 // over]}]}; an event {"t", "set": command} is a setup command that does not start the clock.
 
@@ -2205,6 +2564,11 @@ fn l3_run_tick(game: &mut Game<'_>, sc: &serde_json::Value, s: &mut L3) {
             Some("open") => game.open_chat_method(""),
             Some("close") if game.screen == Screen::Chat => game.close_chat(super::chat::ChatExit::Intentional),
             _ => {}
+        }
+        if let Some(p) = e["probe"].as_array().filter(|p| p.len() == 2) {
+            // Whether the game holds the chunk of a block column right now (for the cache scenarios: it must have been unloaded).
+            let (x, z) = (p[0].as_i64().unwrap_or(0) as i32, p[1].as_i64().unwrap_or(0) as i32);
+            s.notes += &format!("{t}\tprobe\t{x},{z} loaded={}\n", game.world.loaded(x, z));
         }
         if e["rebase"].as_bool() == Some(true) && sc["watch"].as_array().is_some_and(|a| a.len() == 6) {
             s.baseline = l3_watch(game, &sc["watch"]);

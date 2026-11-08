@@ -614,6 +614,143 @@ Whole suite timing: median mod tick 34 microseconds, max 13.4 ms; median search 
 **Left out.** `explore`, the cache (`cache` / `explorefilter` and the world cache), and `FollowProcess.pickup` has no command, as upstream. Other players were not tested in the game (single player has none), nor were `followOffsetDistance` / `followOffsetDirection`, dropped items as targets, or a server. Mob targets in L3 are NoAI mobs the scenario teleports; the judge takes their positions from the scenario's schedule, not from the game.
 This section does not say the gate passed: the owner's session runs the gate.
 
+### R2: the persistent chunk cache
+
+**What works.** Every chunk the client loads is packed on a thread of its own (2 bits per block, the top block of each column, the 66 special blocks, a height map), kept in regions of 32 x 32 chunks and saved to `r.<x>.<z>.bcr` files in upstream's format (gzip). The search reads a block in a chunk that is
+not loaded from its cached region and plans through it (`cache::WithCache` under the snapshot, the scans and the executor's live world; no search or cost code changed). `mine` and `goto <block>` take the blocks of upstream's tracked list from the cache
+(`maxCachedWorldScanCount`, `extendCacheOnThreshold`). D1 to D4 (the owner's fixes) are in, each with a test that fails on upstream's behaviour. The seven cache settings are `/b set` settings with upstream's defaults. Everything is in D41 (docs/deviations.md), with the list of what differs and what is not ported.
+
+**What ran, and where.**
+
+- Unit and simulator tests (`cargo test --workspace`, 34 tests in `cache::`, plus 3 in `astar`, `mine` and `get_to_block` and a changed one): pack and unpack of random chunks (bit layout, rebuilt from their bytes, same answers at 3000 random cells each); the stream layout checked byte by byte against upstream's source
+  (magic, interleaved flags, `writeUTF`, timestamps, the `0` count); gzip (the standard CRC check value, a member from another encoder, damage and the size limit); region save and load round trips through real files; D1 (a chest comes back at its own height), D2 (obsidian below world Y -59, stone at -59),
+  D3 (still water at the chunk edge is water, with flowing water beyond the edge it is avoided), D4 (garbage in a region file is kept byte for byte as `.corrupt`, a second one as `.corrupt1`, a file whose block names this game lacks is kept too); the pack queue (a newer chunk replaces the one waiting, the oldest are dropped); expiry;
+  pruning (far saved regions leave memory, unsaved ones stay, a region 29 million blocks away does not overflow); `getLocationsOf` (widens by squared distance, stops at the maximum); folder names that cannot leave their folder; a server key that hides the address; the search on the simulator
+  (`astar::a_cached_region_beyond_the_loaded_chunks_is_planned_through`: nothing from x = 16 on is loaded, the cache knows a wall with a gap, the search without the cache ends at the border and with it reaches the goal through the gap and never through the wall); `mine` (tracked blocks only from the cache, the
+  count, `extendCacheOnThreshold`, an untracked block only from the loaded chunks); `goto chest` with the chest in a chunk that is not loaded (found, and the goal is its place).
+- In the game (single player, instance `baritone-test`, new worlds `l3-cache-2` and `l3-cache-3`, built by hand through the console: a stone road 441 blocks long at y 200 with the chunks force-loaded, so the walk is the same every time), through the control socket only, three builds of the glue (the first hung, see below; the second showed the repacking problem; the third is
+  the one these numbers are from):
+  walked 400 blocks along the road (`/b goto`), so that the start chunks unloaded (render distance 16); the cache wrote region files; `/b goto furnace` with the furnace in a chunk the game did not have: found (`scan GetToBlock ... found 1`) and walked 393 blocks back through the unloaded chunks to the furnace
+  (to within 1 block, about 70 s); quit from the world and started the game again: the regions were read from the files; a region file is written when the world is left or the game quits (`native_server_stopping`).
+
+**L3 with the cache on (a partial run, final build).** 13 scenarios (`s01`, `s05`, `m01` to `m05`, each with the chat closed and open where the suite has both): 12 passed and one failed, `m02_mine_quantity_chat0` (the second ore was broken as well: the first ore's drop was picked up 60 ticks late, so the quantity
+was not reached yet when the next ore was planned). Run again, `m02` passed 6 times in 3 more runs (both chat variants). The failure was not reproduced and I did not find its cause; it is not shown to come from the cache, and not shown to be unrelated. The other 54 scenarios were not run with the cache.
+
+**Numbers** (one machine, the game's performance build, render distance 16, about 1057 chunks loaded).
+
+| What | Result |
+|---|---|
+| Pack of one chunk (384 high, on the pack thread) | 0.9 to 1.5 ms on average, the longest 9.7 ms. About 16,000 packs in 7 minutes, 87 % of them of chunks the cache already held unchanged (the repack of the chunks near the player), so nothing was stored for them |
+| Game thread, per tick | 111 to 135 microseconds; the largest after the first tick 9.7 ms (the burst of 1000 chunks at the start); the first tick 192 ms when no command had run (it made the block table: 94 and 138 ms for the facts and the index in the two builds I read) |
+| Save | 4 regions (747 KB) in 331 ms; 8 regions (2.1 MB) in 743 ms; 6 regions (1.7 MB) in 729 ms. About 0.1 s a region. A full region of 600 chunks is 480 to 535 KB (a chunk is 24 KiB in memory, about 0.8 KB in the file) |
+| Load | 607 chunks in 124 ms, 511 in 108 ms, 319 in 66 ms, 262 in 60 ms (about 0.2 ms a chunk) |
+| `goto furnace`, 393 blocks away, chunks not loaded | the scan answered in 0 ms; the player walked the whole way along a path planned through cached chunks (about 5.6 blocks a second) and stood next to the furnace |
+
+**Found in the game, and fixed.**
+
+- The first glue hung the game thread: `cache_tick` matched on `state()` and called `ensure_started` (which takes the same lock) in an arm; the guard of a `match` scrutinee lives to the end of the match. Fixed (the guard is taken in a `let` first). Nothing in the unit tests could show it: it needs the game.
+- Holding every chunk's `Arc` (to pack it when it unloads) made the game copy a chunk each time it changed it in place, so every chunk looked changed all the time and was packed again every 2 seconds (7,500 packs a minute, none useful). The glue holds no chunk now; chunks near the player are packed again every 4 seconds and an unchanged one stores nothing (D41.4).
+- Quitting the game did not save: the process ended before the saving thread. The server-stop hook saves on the calling thread now (D41.9). Checked: quit from a single player world wrote all the changed regions before the process ended, and the next start read them.
+
+**Not verified, and open.**
+
+- `goto ender_chest` found nothing in the game, with an ender chest next to the player and in the cache (checked by reading the region file with a script), while `chest`, `furnace`, `hopper`, `spawner`, `beacon`, `jukebox`, `enchanting_table`, `anvil` and `cobweb` were found. The cause is not the cache:
+  the instance's `settings.txt` has `blocksToDisallowBreaking ender_chest` (written by an earlier session before this work), so `MineProcess.plausibleToBreak` drops it, as it should. I found this only after the experiments; I did not run the same `goto` with the list emptied, and I left the setting as it was.
+- A Java Baritone cache file was never read (none at hand), nor was a server world (D41.2 hashes its address; the code path is the same but only single player worlds were run). The flow test at the chunk edge (D3) is not compared with Java. `repackOnAnyBlockChange` as built (D41.4) differs from upstream. The L3 suite was run only in part with the cache (above).
+- The cache is on for every world from the first tick. The CPU cost on the pack thread is about 8 % of one core while the chunks around the player are packed again; if that is too much, a longer repack interval is a constant (`REPACK_EVERY` in `mod/runtime.rs`).
+
+**Upstream findings** (reported, not changed except D1 to D4).
+
+- `BlockStateInterface.getUncached` looks a block up with `y + minY` and `CachedRegion.getBlock` subtracts `minY` again: consistent, but `CachedChunk.setSpecial` is not (D1).
+- `CachedWorld.getLocationsOf` stops at the first ring that reaches `maximum`, so a player standing in a region with many chests never sees the chests of the next region (`goto chest` with 19 chests in the player's region found only those; the neighbours' were not asked). Same here.
+- `CachedWorld.queueForPacking` keeps the `LevelChunk` itself, so a chunk packed later is packed as it is by then, not as it was when queued; here the job holds the chunk as it was queued, which for a chunk the game copies on write is the same thing a moment later.
+- The save thread of a world and its packer thread are never stopped (upstream: executor tasks that live as long as the JVM); the same here.
+
+### R2: `explore` and `explorefilter`
+
+**What works.** `/b explore [x z]` walks to the closest chunks the cache lacks, ring by ring from the chunk of the centre, and moves on as the walk caches new chunks; `/b explorefilter <file> [invert]` reads a JSON list of chunks (`[{"x":0,"z":0},...]`) that count as explored, or with `invert` as the only ones that
+are not. `/b stop` and the other processes take control from it as they do from the others. The four settings (`exploreChunkSetMinimumSize`, `worldExploringChunkOffset`, `exploreMaintainY`, `disableCompletionCheck`) are `/b set` settings with upstream's defaults. The search and the costs are not touched; a new goal
+(`Goal::XzMaintainY`, upstream's anonymous `GoalXZ`) is added. Everything that differs is in D42 (docs/deviations.md), with the upstream findings.
+
+**What ran, and where.**
+
+- Unit and simulator tests (`cargo test --workspace`, 351 engine tests; 34 more than before this step): the process on a fake cache (the first set is the 18 goals of rings 0 to 2 with the repeated axis chunks, held chunks are skipped, `distanceCompleted` moves only over rings with nothing in them, the goals move on as chunks are
+  held, a region not read yet pauses and then continues, the chunk offset and the set size, `exploreMaintainY` -1, `Failed`, losing control keeps the filter); the filter (explored list added to the cache, inverted list: only listed chunks are goals and the process ends with `Explored all chunks` when the cache has them, `disableCompletionCheck`, the count
+  stops at the set size, a repeated chunk counts twice); the JSON reader (the accepted shapes, 26 texts that must be refused without a panic, nesting of 100,000 levels, 200,000 chunks read in well under 2 s); the commands (arguments, errors, completion, the help list); the goal; the cache side (a region on disk answers `Unknown` and a
+  thread reads it, then explored or not; one read per region however often it is asked). On the simulator (a 160 x 160 world with a cache that grows around the player): the nearest chunks are goals, the player walks out and the goals change (900 ticks, never a cached chunk as a goal), a filter and an inverted filter (the process ends at the
+  chunk and the player stands still), `/b stop` (neutral at once), `goto` after `explore` and `explore` after `goto`, `follow` and `explore` in both orders, and a walled-in start that ends with `Failed`.
+- In the game (single player, instance `baritone-test`, new world `l3-explore-1`, difficulty set to peaceful with the console, survival, render distance 16, driven through the control socket only; one build of the glue, no change after it), two runs of the game:
+  1. `/b explore` for 70 s from (-39, 10): the player walked at least 270 blocks (the sum of the chords between samples taken every 4 s, so a lower bound; at least 3.8 blocks a second) and was at most 77 blocks from the centre. It does not go straight out: with the loaded area already cached, the nearest unexplored chunks by Manhattan distance from the centre are 17 chunks away on the
+     four axes, so it goes from one to the next as walking loads chunks (west, south-east, north, north-west in this run). `/b stop`: `ok canceled`, and it stood where it was in the next sample. The cache went from 1057 chunks (754 KB, in 4 regions, saved 30 s after the start) to 1487 chunks (1,043 KB, the same 4 regions) at the
+     quit: 430 more chunks. No new region file (the walk stayed inside regions -1..0). Pack thread: 5,290 packs, 63 % of them of chunks the cache already held; the game-thread tick of the cache was 114 us, 596 us at the largest while exploring.
+  2. The next start read the 4 regions back (433, 398, 320 and 336 chunks, 96, 91, 70 and 73 ms) and the commands were tried: every wrong form gave its message (no argument, a missing file, a directory, bad JSON, a bad word after the path, too many words, one coordinate, a non-number), a relative path was found in the mod's data folder, and an
+     absolute one was read. With a list holding one chunk the cache already had, `explore` ended at once with `Explored all chunks`. With a chunk 10 chunks beyond the loaded area, inverted: the player walked 138 blocks north in about 44 s, the chunk was cached when it loaded, the process said `Explored all chunks`, and the player stood still
+     (checked for the remaining 45 s of sampling). The game was closed by the control socket after each run (the process ended; nothing left running).
+
+**Not verified, and open.**
+
+- The full L3 suite (66 scenarios) was not run with this step; `explore` has no L3 scenario. No server world was run. No Java cache or Java `explore` run was compared: the order of the goals is read from the source and tested, not compared with a running Baritone.
+- The run was 70 s and 44 s; a long exploration (thousands of explored chunks, where `closestUncachedChunks` goes through many rings on the game thread each tick) was not run, nor was a Nether or End world.
+- In the first run, one path ended with `the path was cancelled: MovementImpossible` and the process recalculated; I did not look into why.
+- A `/b explore` that goes through water, lava or over a drop was not set up; the walk met trees, hills and a stream on its way and was not hurt (health 20 throughout, peaceful).
+
+### R2: cache and explore
+
+The result of the R2 steps that follow `follow`: the persistent chunk cache (D41), `explore` and `explorefilter` (D42), six cache and explore scenarios in L3, two independent reviews, and the fixes after them (D43). This section does not say the gate passed: the
+owner's session runs the gate.
+
+**What works.**
+
+- The cache: every loaded chunk is packed off the game thread, kept in regions, saved in upstream's file format, read back on the next start, and used by the search for chunks that are not loaded (`cache::WithCache` under the snapshot; no search or cost code changed).
+  `goto <block>` and `mine` find the 66 tracked blocks in the cache. Seven cache settings with upstream's defaults.
+- `explore` and `explorefilter`: the nearest chunks the cache lacks, ring by ring, with the four explore settings; a filter file (JSON list of chunks, optionally inverted). Nothing in the search changed.
+- The two cache hooks the mod needs from Horizon: the pinned `native_server_stopping` (saves when a single player world is quit).
+
+**L3 in the game** (single player, instance `baritone-test`, one run in a new world, build with the review fixes, 2168 s; report `reports/l3-66f3981.json`, status `finished`).
+
+| Group | Scenarios | Passed |
+|---|---|---|
+| `s` (walk, sprint, descend, parkour, goal and path commands, the long walks) | 20 | 20 |
+| `b` (break and place, tools, fluids, falling blocks) | 28 | 28 |
+| `m` (mine and `goto <block>`) | 10 | 10 |
+| `f` (follow) | 8 | 8 |
+| `c` (cache: `c01` goto a chest whose chunk is unloaded, `c02` goto across cached chunks, `c03` explore) | 6 | 6 |
+| **All** | **72** | **72** |
+
+Final L3 pass count: **72 of 72**, from a run that finished. The earlier run on the build before the fixes was also 72 of 72 (`full3`); no scenario that passed before failed in this one, so there was no rerun. Numbers of this run: search median of medians 4.5 ms (largest 1.8 s,
+the 1500-block `s10`), snapshot 111 us (largest 1.2 ms), mod tick median 33 us (largest 11.8 ms). Cache in the game: 0 chunks dropped from the pack queue in every log line (36 of them); the first game-thread tick of the cache 164 ms (it makes the block table when no
+command did); the save of 12 regions (5.3 MB) when the world was left took 2.7 s on the server thread (D43 "for the owner").
+
+**D1 to D4 as applied** (the owner's decisions, each with a test that fails on upstream's behaviour; D41 and docs/deviations.md have the text).
+
+- D1: a special block is stored and looked up at the same Y (upstream looks 64 blocks too low in the Overworld). `d1_a_special_block_comes_back_at_its_own_height`.
+- D2: the caution near the bottom layers compares the world Y (upstream's test could never be true). `d2_the_bottom_layers_are_cautious`.
+- D3: water at a chunk edge is not inverted: still water is `WATER`, flowing is `AVOID`; the flow is read from the cells around, the neighbouring chunk's included. Not compared with Java; narrower than the game's rule (review finding 2, open, for the owner). `d3_...`.
+- D4: a region file that fails to load is moved aside (`.corrupt`), not written over. `d4_a_file_that_fails_to_load_is_kept`, `a_file_in_another_blocks_table_is_kept_too`.
+
+**Reviews and fixes.** Two independent reviews of the branch: one against upstream (line by line, with scratch tests), one for safety (fuzz of the loader, 3000 mutated regions with no panic, thread and lock reading, measurements). Neither found a difference in the search or the costs.
+Fixed (D43), each with a test that fails without it:
+
+- the packer and saver shared a condition variable, so a queued chunk could wait with the packer asleep (reproduced by the review in 9 of 40 trials): `a_chunk_queued_while_both_threads_wait_is_always_packed`; checked to fail on the old code;
+- two saves of one world could write the same temporary files; one lock: `review_3_...`; `prune` kept every region with `chunkCaching` off: `review_1_...`; both checked to fail on the old code;
+- two worlds whose names sanitise alike shared one cache folder: `names_that_sanitise_alike_get_folders_of_their_own`;
+- a region file could unpack to a gigabyte and list special blocks without limit or outside the dimension: `review_4_...`, `review_8_...`;
+- more than 65536 of one special block corrupted the file: `review_6_...`; a chunk outside the world border landed in region (0,0): `review_7_...`; a region load that panicked blocked `explore` for that region: `review_10_...`;
+- a world entered at a far render distance queued thousands of chunks at once and the over-full rule dropped half unpacked: `WorldData::has_room` and the glue (unit test `the_queue_has_room_until_half_the_limit`; the glue is read and run in L3, not unit tested).
+
+**Limits, kept or left to the owner** (D43 "For the owner", U22 to U25). D3 looks at air only; the dimension folder carries only the logical height; a world made again with the same name reads the old cache; no bound on disk and memory growth; quitting on a server saves on a
+detached thread (up to 10 minutes can be lost); quitting from a single player world freezes the server thread for the save; a chunk is not packed when it unloads and a change more than 5 chunks from the player is missed (D41.4); file permissions are the default.
+
+**What is left out.** Rendering of cached chunks (`renderCachedChunks`), `pathThroughCachedOnly`, `find`, `saveall`, `reloadall`, waypoints, `FasterWorldScanner.repack` and `scanChunk`, `notificationOnExploreFinished` (D41.10, D42.7).
+
+**Not verified.**
+
+- No Java cache file was read (the format is from source and hand-built streams), no server world, no Nether or End run, no long exploration with thousands of explored chunks.
+- The review fixes for the glue (`singleplayer_key`, `has_room`) ran in L3 only through the world names of the scenarios (all plain, so unchanged folders) and a render distance of 16; a name with a space, and a far render distance, were not run in the game.
+- The earlier `m02_mine_quantity_chat0` failure did not come back in `full1`, `full3` or this run; its cause is still unknown.
+- `c03_explore` checks movement and a safe stop, not the cache growth. `goto ender_chest` depends on the instance's `blocksToDisallowBreaking ender_chest`, left as it was.
+- The gate (the owner's session) has not been run on this branch.
+
 ## Reports
 
 A comparison writes a small JSON report: the upstream commit, the game version, the Java and Rust versions, hashes of the

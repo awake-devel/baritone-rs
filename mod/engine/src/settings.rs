@@ -56,6 +56,27 @@ pub struct ExecSettings {
     pub mine: MineSettings,
     /// The settings of the follow process.
     pub follow: FollowSettings,
+    /// The settings of the explore process.
+    pub explore: ExploreSettings,
+}
+
+/// The settings `ExploreProcess` reads. Defaults are upstream's (`Settings.java` at 1b8e87c).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ExploreSettings {
+    /// `exploreChunkSetMinimumSize`, default 10: how many of the closest unexplored chunks make the goal.
+    pub explore_chunk_set_minimum_size: i32,
+    /// `worldExploringChunkOffset`, default 0: the goal is this many chunks further out than the middle of the chunk.
+    pub world_exploring_chunk_offset: i32,
+    /// `exploreMaintainY`, default 64: the height to keep on the way; -1 for none.
+    pub explore_maintain_y: i32,
+    /// `disableCompletionCheck`, default false: do not stop when no chunk is left to explore.
+    pub disable_completion_check: bool,
+}
+
+impl Default for ExploreSettings {
+    fn default() -> Self {
+        ExploreSettings { explore_chunk_set_minimum_size: 10, world_exploring_chunk_offset: 0, explore_maintain_y: 64, disable_completion_check: false }
+    }
 }
 
 /// The settings `FollowProcess` reads. Defaults are upstream's (`Settings.java` at 1b8e87c).
@@ -77,14 +98,18 @@ impl Default for FollowSettings {
     }
 }
 
-/// The settings `MineProcess` and `GetToBlockProcess` read. Defaults are upstream's (`Settings.java` at 1b8e87c). `notificationOnMineFail` and
-/// `maxCachedWorldScanCount` / `extendCacheOnThreshold` (the cached world) are not here: see docs/deviations.md.
+/// The settings `MineProcess` and `GetToBlockProcess` read. Defaults are upstream's (`Settings.java` at 1b8e87c). `notificationOnMineFail` is not
+/// here: see docs/deviations.md.
 #[derive(Clone, Debug, PartialEq)]
 pub struct MineSettings {
     /// `mineGoalUpdateInterval`, default 5: ticks between two scans of the world. 0 never scans again after the first.
     pub mine_goal_update_interval: i32,
     /// `mineMaxOreLocationsCount`, default 64.
     pub mine_max_ore_locations_count: i32,
+    /// `maxCachedWorldScanCount`, default 10: after this many places of the block in the cache, the search stops widening.
+    pub max_cached_world_scan_count: i32,
+    /// `extendCacheOnThreshold`, default false: when the cache gave fewer places than the maximum, scan the loaded world too.
+    pub extend_cache_on_threshold: bool,
     /// `minYLevelWhileMining`, default 0: relative to the world's lowest Y.
     pub min_y_level_while_mining: i32,
     /// `maxYLevelWhileMining`, default 2031.
@@ -122,6 +147,8 @@ impl Default for MineSettings {
         MineSettings {
             mine_goal_update_interval: 5,
             mine_max_ore_locations_count: 64,
+            max_cached_world_scan_count: 10,
+            extend_cache_on_threshold: false,
             min_y_level_while_mining: 0,
             max_y_level_while_mining: 2031,
             allow_only_exposed_ores: false,
@@ -167,6 +194,7 @@ impl Default for ExecSettings {
             tool: ToolSettings::default(),
             mine: MineSettings::default(),
             follow: FollowSettings::default(),
+            explore: ExploreSettings::default(),
         }
     }
 }

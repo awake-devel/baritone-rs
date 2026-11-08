@@ -78,54 +78,56 @@ BlockStateInterface	get0(int,int,int)	missing	1b8e87c	4e908620206a7c99
 BlockStateInterface	getBlock	missing	1b8e87c	03bdbff6f1a0ed4e		
 BlockStateInterface	getFromChunk(LevelChunk,int,int,int)	missing	1b8e87c	958980b714941679		
 BlockStateInterface	getFromChunk(LevelChunkSection[],int,int,int)	missing	1b8e87c	432785696527061b		
-BlockStateInterface	getUncached	missing	1b8e87c	2077484bf5878c40		
-BlockStateInterface	isLoaded	redesign	1b8e87c	cea78bc4c6b82cb7		The glue implements `WorldView::is_loaded` with its cache. The default is the live check.
+BlockStateInterface	getUncached	redesign	1b8e87c	2077484bf5878c40		`cache::view::WithCache::state_id`: a loaded chunk first, then the cached region, then the live answer (air). `pathThroughCachedOnly` is `cached_only` there, not a setting.
+BlockStateInterface	isLoaded	redesign	1b8e87c	cea78bc4c6b82cb7		`cache::view::WithCache::is_loaded`: loaded, or held by the cache.
 BlockStateInterface	releaseCache	missing	1b8e87c	57e630960605fef8		
 BlockStateInterface	worldContainsLoadedChunk	redesign	1b8e87c	9a51597ac6b0d5b9	cost-compare	`WorldView::contains_loaded_chunk`; S4 connects it to the live world.
-CachedChunk	<init>	later	1b8e87c	eb24195f9a2d5dfa		Persistent cache: after the processes; the first release has no cache.
-CachedChunk	calculateHeightMap()	later	1b8e87c	6f7af279998a8511		Persistent cache: after the processes; the first release has no cache.
-CachedChunk	calculateHeightMap(BitSet,int,int[])	later	1b8e87c	066b69000bb06c68		Persistent cache: after the processes; the first release has no cache.
-CachedChunk	getAbsoluteBlocks	later	1b8e87c	2244e24f64f1628e		Persistent cache: after the processes; the first release has no cache.
-CachedChunk	getBlock	later	1b8e87c	fa8638ad8b10a551		Persistent cache: after the processes; the first release has no cache.
-CachedChunk	getOverview	later	1b8e87c	0b47e315ea1ac57f		Persistent cache: after the processes; the first release has no cache.
-CachedChunk	getPositionIndex	later	1b8e87c	34ded41d5f16cd8b		Persistent cache: after the processes; the first release has no cache.
-CachedChunk	getRelativeBlocks	later	1b8e87c	bdbaace8106a15b3		Persistent cache: after the processes; the first release has no cache.
-CachedChunk	getType	later	1b8e87c	c7ef64171855c51c		Persistent cache: after the processes; the first release has no cache.
-CachedChunk	setSpecial	later	1b8e87c	c6d96c9e497dfaee		Persistent cache: after the processes; the first release has no cache.
-CachedChunk	size	later	1b8e87c	02953bab02d75011		Persistent cache: after the processes; the first release has no cache.
-CachedChunk	sizeInBytes	later	1b8e87c	b8713658205f61be		Persistent cache: after the processes; the first release has no cache.
-CachedChunk	toByteArray	later	1b8e87c	8b4a16fb1a4216b4		Persistent cache: after the processes; the first release has no cache.
-CachedChunk	validateSize	later	1b8e87c	0b24412be80abe8d		Persistent cache: after the processes; the first release has no cache.
-CachedRegion	<init>	later	1b8e87c	f428ad287793f0af		Persistent cache: after the processes; the first release has no cache.
-CachedRegion	getBlock	later	1b8e87c	28a971c16580d156		Persistent cache: after the processes; the first release has no cache.
-CachedRegion	getLocationsOf	later	1b8e87c	710ac34fb669e321		Persistent cache: after the processes; the first release has no cache.
-CachedRegion	getRegionFile	later	1b8e87c	a721a4f5c7f8004b		Persistent cache: after the processes; the first release has no cache.
-CachedRegion	getX	later	1b8e87c	293ea3ee7de690f8		Persistent cache: after the processes; the first release has no cache.
-CachedRegion	getZ	later	1b8e87c	0fd631fcad3c2544		Persistent cache: after the processes; the first release has no cache.
-CachedRegion	isCached	later	1b8e87c	36148b3152a6f4ea		Persistent cache: after the processes; the first release has no cache.
-CachedRegion	load	later	1b8e87c	82f623df99dbf5bb		Persistent cache: after the processes; the first release has no cache.
-CachedRegion	mostRecentlyModified	later	1b8e87c	a802981a3bee4a90		Persistent cache: after the processes; the first release has no cache.
-CachedRegion	removeExpired	later	1b8e87c	3c738fdea79814b2		Persistent cache: after the processes; the first release has no cache.
-CachedRegion	save	later	1b8e87c	68f464f885c726ef		Persistent cache: after the processes; the first release has no cache.
-CachedRegion	updateCachedChunk	later	1b8e87c	75e2d09e20114310		Persistent cache: after the processes; the first release has no cache.
-CachedWorld	<init>	later	1b8e87c	f5cc871b7ca18d75		Persistent cache: after the processes; the first release has no cache.
-CachedWorld	allRegions	later	1b8e87c	d468ad4b312f7afe		Persistent cache: after the processes; the first release has no cache.
-CachedWorld	getLocationsOf	later	1b8e87c	40683497df2be41a		Persistent cache: after the processes; the first release has no cache.
-CachedWorld	getOrCreateRegion	later	1b8e87c	79a4adb2610b364c		Persistent cache: after the processes; the first release has no cache.
-CachedWorld	getRegion	later	1b8e87c	66cb00579dd9fd56		Persistent cache: after the processes; the first release has no cache.
-CachedWorld	getRegionID	later	1b8e87c	0292180e79f4f6d6		Persistent cache: after the processes; the first release has no cache.
-CachedWorld	guessPosition	later	1b8e87c	74ca3b19f330d93b		Persistent cache: after the processes; the first release has no cache.
-CachedWorld	isCached	later	1b8e87c	63cc8c78b508f9be		Persistent cache: after the processes; the first release has no cache.
-CachedWorld	isRegionInWorld	later	1b8e87c	0daf662dc7802581		Persistent cache: after the processes; the first release has no cache.
-CachedWorld	prune	later	1b8e87c	b9a6b7c6382e8616		Persistent cache: after the processes; the first release has no cache.
-CachedWorld	queueForPacking	later	1b8e87c	135fb9ee8d9365d5		Persistent cache: after the processes; the first release has no cache.
-CachedWorld	regionLoaded	later	1b8e87c	fd1a3034ea5b9cc6		Persistent cache: after the processes; the first release has no cache.
-CachedWorld	reloadAllFromDisk	later	1b8e87c	bd2a3312249f0c63		Persistent cache: after the processes; the first release has no cache.
-CachedWorld	save	later	1b8e87c	f2b649b26364410d		Persistent cache: after the processes; the first release has no cache.
-CachedWorld	tryLoadFromDisk	later	1b8e87c	766e71d0611b41f8		Persistent cache: after the processes; the first release has no cache.
-CachedWorld	tryLoadFromDiskAsync	later	1b8e87c	ede917a9fb6ad660		Persistent cache: after the processes; the first release has no cache.
-CachedWorld	updateCachedChunk	later	1b8e87c	c75e3dd6a2acf8fe		Persistent cache: after the processes; the first release has no cache.
-CachedWorld.PackerThread	run	later	1b8e87c	ce55a3cfc29553ad		Persistent cache: after the processes; the first release has no cache.
+CacheFiles	<init>	drop	1b8e87c	abf1c65f1e3327c6		Static class.
+CacheFiles	moveIntoPlace	port	1b8e87c	bf17c50a6cb47f23		`CachedWorld::save_region`: the temporary file is renamed over the old one; `std::fs::rename` replaces atomically on the file systems the game runs on.
+CachedChunk	<init>	redesign	1b8e87c	eb24195f9a2d5dfa		`cache::chunk::CachedChunk::new`. Takes the dimension; the special blocks are keyed by the Y they are looked up with (D1). A block name the game does not know is an error, as `stringToBlockRequired` throws.
+CachedChunk	calculateHeightMap()	port	1b8e87c	6f7af279998a8511		`CachedChunk::calculate_height_map`. The same heights; walked a layer at a time and a layer of zeros skipped, instead of upstream's word tricks.
+CachedChunk	calculateHeightMap(BitSet,int,int[])	port	1b8e87c	066b69000bb06c68		Folded into `calculate_height_map`.
+CachedChunk	getAbsoluteBlocks	port	1b8e87c	2244e24f64f1628e		`CachedChunk::absolute_blocks`.
+CachedChunk	getBlock	port	1b8e87c	fa8638ad8b10a551		`CachedChunk::get_block`. The obsidian caution compares the world Y (D2). `None` is upstream's `null`.
+CachedChunk	getOverview	port	1b8e87c	0b47e315ea1ac57f		`CachedChunk::overview`: state ids, not `BlockState`s.
+CachedChunk	getPositionIndex	port	1b8e87c	34ded41d5f16cd8b		`cache::chunk::get_position_index`.
+CachedChunk	getRelativeBlocks	port	1b8e87c	bdbaace8106a15b3		`CachedChunk::relative_blocks`.
+CachedChunk	getType	port	1b8e87c	c7ef64171855c51c		`CachedChunk::get_type`.
+CachedChunk	setSpecial	redesign	1b8e87c	c6d96c9e497dfaee		Inside `CachedChunk::new`, with the key of D1.
+CachedChunk	size	port	1b8e87c	02953bab02d75011		`cache::chunk::size`.
+CachedChunk	sizeInBytes	port	1b8e87c	b8713658205f61be		`cache::chunk::size_in_bytes`.
+CachedChunk	toByteArray	port	1b8e87c	8b4a16fb1a4216b4		`CachedChunk::to_byte_array`: the full size, not cut after the last set bit.
+CachedChunk	validateSize	redesign	1b8e87c	0b24412be80abe8d		A check in `CachedChunk::new`.
+CachedRegion	<init>	redesign	1b8e87c	f428ad287793f0af		`cache::region::CachedRegion::new`. The dimension is passed to the calls that need it.
+CachedRegion	getBlock	port	1b8e87c	28a971c16580d156		`CachedRegion::get_block`.
+CachedRegion	getLocationsOf	port	1b8e87c	710ac34fb669e321		`CachedRegion::get_locations_of`.
+CachedRegion	getRegionFile	port	1b8e87c	a721a4f5c7f8004b		`cache::region::region_file`: `r.<x>.<z>.bcr`.
+CachedRegion	getX	drop	1b8e87c	293ea3ee7de690f8		The region has public `x` and `z`.
+CachedRegion	getZ	drop	1b8e87c	0fd631fcad3c2544		The region has public `x` and `z`.
+CachedRegion	isCached	port	1b8e87c	36148b3152a6f4ea		`CachedRegion::is_cached`.
+CachedRegion	load	redesign	1b8e87c	82f623df99dbf5bb		`CachedRegion::deserialize` reads the stream; `CachedWorld::load_region` reads the file and decides what a failure does (D4).
+CachedRegion	mostRecentlyModified	port	1b8e87c	a802981a3bee4a90		`CachedRegion::most_recently_modified`.
+CachedRegion	removeExpired	port	1b8e87c	3c738fdea79814b2		`CachedRegion::remove_expired`. Quiet: upstream prints a line for each chunk.
+CachedRegion	save	redesign	1b8e87c	68f464f885c726ef		`CachedRegion::serialize` makes the stream; `CachedWorld::save_region` compresses and writes it. The region is locked only while the bytes are made.
+CachedRegion	updateCachedChunk	port	1b8e87c	75e2d09e20114310		`CachedRegion::update_cached_chunk`.
+CachedWorld	<init>	redesign	1b8e87c	f5cc871b7ca18d75		`cache::world::CachedWorld::new`; the two threads of the constructor are `WorldData::start`.
+CachedWorld	allRegions	redesign	1b8e87c	d468ad4b312f7afe		`CachedWorld::all_regions`.
+CachedWorld	getLocationsOf	port	1b8e87c	40683497df2be41a		`CachedWorld::get_locations_of`, reached through `WorldView::cached_locations`.
+CachedWorld	getOrCreateRegion	port	1b8e87c	79a4adb2610b364c		`CachedWorld::get_or_create_region`.
+CachedWorld	getRegion	port	1b8e87c	66cb00579dd9fd56		`CachedWorld::get_region`.
+CachedWorld	getRegionID	port	1b8e87c	0292180e79f4f6d6		`CachedWorld::region_id`.
+CachedWorld	guessPosition	redesign	1b8e87c	74ca3b19f330d93b		`CachedWorld::guess_position`: the glue tells the world where the player is (`set_player`) instead of the world asking every Baritone.
+CachedWorld	isCached	port	1b8e87c	63cc8c78b508f9be		`CachedWorld::is_cached`.
+CachedWorld	isRegionInWorld	redesign	1b8e87c	0daf662dc7802581		Inside `CachedWorld::region_id`.
+CachedWorld	prune	port	1b8e87c	b9a6b7c6382e8616		`CachedWorld::prune`. A region with unsaved changes (a save that failed) is kept.
+CachedWorld	queueForPacking	redesign	1b8e87c	135fb9ee8d9365d5		`WorldData::queue_for_packing`: the job holds the chunk as it was queued (the game copies chunks on write); a newer one for the same position replaces it.
+CachedWorld	regionLoaded	port	1b8e87c	fd1a3034ea5b9cc6		`CachedWorld::region_loaded`.
+CachedWorld	reloadAllFromDisk	port	1b8e87c	bd2a3312249f0c63		`CachedWorld::reload_all_from_disk`. No command runs it yet (`reloadall`).
+CachedWorld	save	port	1b8e87c	f2b649b26364410d		`CachedWorld::save`. The regions are saved one after the other on the saving thread, not in a parallel stream.
+CachedWorld	tryLoadFromDisk	port	1b8e87c	766e71d0611b41f8		`CachedWorld::try_load_from_disk`. Blocks: only a thread that is not the game thread calls it.
+CachedWorld	tryLoadFromDiskAsync	port	1b8e87c	ede917a9fb6ad660		`CachedWorld::try_load_from_disk_async`: a thread per region read, one at a time per region (`pendingLoads`), where upstream uses its executor.
+CachedWorld	updateCachedChunk	port	1b8e87c	c75e3dd6a2acf8fe		`CachedWorld::update_cached_chunk`.
+CachedWorld.PackerThread	run	port	1b8e87c	ce55a3cfc29553ad		`cache::worker::packer`: the oldest chunks are dropped when the queue is over `chunkPackerQueueMaxSize`; a panic in one pack does not stop the thread.
 CalculationContext	<init>(IBaritone)	missing	1b8e87c	f791e3815f131fcf		
 CalculationContext	<init>(IBaritone,boolean)	missing	1b8e87c	2871e2e611c1dbf6		
 CalculationContext	<init>(IBaritone,boolean,Level,WorldData,BlockStateInterface,ToolSet,boolean,boolean,boolean,int,float)	redesign	1b8e87c	40c99304f837bec9	cost-compare	Settings arrive as Config. Only the waterWalkSpeed computation is translated, in Ctx::new.
@@ -143,10 +145,10 @@ CalculationContext	newMiningKeys	missing	1b8e87c	4434c52d5c8de6b0
 CalculationContext	placeBucketCost	redesign	1b8e87c	16684b5f7de384fa	cost-compare	Returns placeBlockCost upstream; Config.place_penalty serves both.
 CalculationContext	releaseSearchCaches	missing	1b8e87c	0075d1545b6ceace		
 CalculationContext	waterSpeedMultiplier	redesign	1b8e87c	0a6e6f423e18b25c	cost-compare	The enchantment lookup is not translated; the multiplier arrives as Config.water_mult.
-ChunkPacker	<init>	later	1b8e87c	a3f1fd36dead1050		Persistent cache: after the processes; the first release has no cache.
-ChunkPacker	getPathingBlockType	later	1b8e87c	4a65e6e31454cfc3		Persistent cache: after the processes; the first release has no cache.
-ChunkPacker	pack	later	1b8e87c	5851b3cea208d4dc		Persistent cache: after the processes; the first release has no cache.
-ChunkPacker	pathingTypeToBlock	later	1b8e87c	b961cfc04aad98b2		Persistent cache: after the processes; the first release has no cache.
+ChunkPacker	<init>	drop	1b8e87c	a3f1fd36dead1050		Static class.
+ChunkPacker	getPathingBlockType	port	1b8e87c	4a65e6e31454cfc3		`cache::chunk::pathing_block_type`. The flow test at the chunk edge is not inverted (D3).
+ChunkPacker	pack	port	1b8e87c	5851b3cea208d4dc		`cache::chunk::pack`. The chunk comes through `PackSource`; a section is read whole instead of cell by cell.
+ChunkPacker	pathingTypeToBlock	port	1b8e87c	b961cfc04aad98b2		`cache::chunk::path_type_to_block`.
 CustomGoalProcess	<init>	redesign	1b8e87c	abce76fb4c4963cf		`CustomGoalProcess::new`.
 CustomGoalProcess	displayName0	drop	1b8e87c	e53eb30222b7b304		Display name for the chat.
 CustomGoalProcess	getGoal	port	1b8e87c	b54c19de1948e51d		
@@ -162,26 +164,26 @@ CutoffPath	getGoal	port	1b8e87c	50a9d398a5a822ff	search-compare	One `Path` struc
 CutoffPath	getNumNodesConsidered	port	1b8e87c	4657048dd65c49a6	search-compare	One `Path` struct stands for Path, CutoffPath and SplicedPath.
 CutoffPath	movements	port	1b8e87c	9ff71a2ec2408a25	search-compare	One `Path` struct stands for Path, CutoffPath and SplicedPath.
 CutoffPath	positions	port	1b8e87c	b7e64f7afa055602	search-compare	One `Path` struct stands for Path, CutoffPath and SplicedPath.
-ExploreProcess	<init>	later	1b8e87c	51c9f51cc44c1095		Process: next after the first release (mine, follow, explore, in that order).
-ExploreProcess	applyJsonFilter	later	1b8e87c	ada0b134c95bc29d		Process: next after the first release (mine, follow, explore, in that order).
-ExploreProcess	calcFilter	later	1b8e87c	200fe40bf3ea908c		Process: next after the first release (mine, follow, explore, in that order).
-ExploreProcess	closestUncachedChunks	later	1b8e87c	e2d394ceb4c4607e		Process: next after the first release (mine, follow, explore, in that order).
-ExploreProcess	createGoal	later	1b8e87c	04aa92d40e3004ad		Process: next after the first release (mine, follow, explore, in that order).
-ExploreProcess	displayName0	later	1b8e87c	54f6306e7185d24c		Process: next after the first release (mine, follow, explore, in that order).
-ExploreProcess	explore	later	1b8e87c	4b2030fb845c3305		Process: next after the first release (mine, follow, explore, in that order).
-ExploreProcess	isActive	later	1b8e87c	570f58cddeafceac		Process: next after the first release (mine, follow, explore, in that order).
-ExploreProcess	onLostControl	later	1b8e87c	1d23f2a59c6c7270		Process: next after the first release (mine, follow, explore, in that order).
-ExploreProcess	onTick	later	1b8e87c	652a5f19d5c4523f		Process: next after the first release (mine, follow, explore, in that order).
-ExploreProcess.BaritoneChunkCache	countRemain	later	1b8e87c	e7b615a5a2ed3d00		Process: next after the first release (mine, follow, explore, in that order).
-ExploreProcess.BaritoneChunkCache	isAlreadyExplored	later	1b8e87c	8bda3db4029ff9fd		Process: next after the first release (mine, follow, explore, in that order).
-ExploreProcess.EitherChunk	<init>	later	1b8e87c	7cf29b5ffb37f075		Process: next after the first release (mine, follow, explore, in that order).
-ExploreProcess.EitherChunk	countRemain	later	1b8e87c	946d9d3dc75e5619		Process: next after the first release (mine, follow, explore, in that order).
-ExploreProcess.EitherChunk	isAlreadyExplored	later	1b8e87c	b1e8b8fd84dc69bc		Process: next after the first release (mine, follow, explore, in that order).
-ExploreProcess.IChunkFilter	countRemain	later	1b8e87c	8ecc364d8ff5ec65		Process: next after the first release (mine, follow, explore, in that order).
-ExploreProcess.IChunkFilter	isAlreadyExplored	later	1b8e87c	dc670bf5d24b3a66		Process: next after the first release (mine, follow, explore, in that order).
-ExploreProcess.JsonChunkFilter	<init>	later	1b8e87c	8866e4d1f070f2b7		Process: next after the first release (mine, follow, explore, in that order).
-ExploreProcess.JsonChunkFilter	countRemain	later	1b8e87c	01f45c8c68717029		Process: next after the first release (mine, follow, explore, in that order).
-ExploreProcess.JsonChunkFilter	isAlreadyExplored	later	1b8e87c	ab870a6ee4f61fc2		Process: next after the first release (mine, follow, explore, in that order).
+ExploreProcess	<init>	redesign	1b8e87c	51c9f51cc44c1095		`ExploreProcess::new`.
+ExploreProcess	applyJsonFilter	port	1b8e87c	ada0b134c95bc29d		`ExploreProcess::apply_json_filter`. The file is read by the glue (D42) and the filter is made by `JsonChunkFilter::parse`; the `Loaded N positions` line is the process's.
+ExploreProcess	calcFilter	port	1b8e87c	200fe40bf3ea908c		The either-filter is not built: `is_already_explored` and `count_remain` look at the filter and then at the cache.
+ExploreProcess	closestUncachedChunks	port	1b8e87c	e2d394ceb4c4607e		`ExploreProcess::closest_uncached_chunks`. Same loop, including the repeated chunk on the x axis (`dz = -0` and `+0`).
+ExploreProcess	createGoal	port	1b8e87c	04aa92d40e3004ad		`create_goal`: the anonymous `GoalXZ` is `Goal::XzMaintainY`.
+ExploreProcess	displayName0	port	1b8e87c	54f6306e7185d24c		`ExploreProcess::display_name`; where upstream would throw while a region is being read, it says `null`.
+ExploreProcess	explore	port	1b8e87c	4b2030fb845c3305		`ExploreProcess::explore`; `Pathing::explore` is the call the command makes.
+ExploreProcess	isActive	port	1b8e87c	570f58cddeafceac		`ExploreProcess::is_active`.
+ExploreProcess	onLostControl	port	1b8e87c	1d23f2a59c6c7270		`ExploreProcess::on_lost_control`.
+ExploreProcess	onTick	port	1b8e87c	652a5f19d5c4523f		`ExploreProcess::on_tick`. The desktop notifications (`notificationOnExploreFinished`) are not ported.
+ExploreProcess.BaritoneChunkCache	countRemain	port	1b8e87c	e7b615a5a2ed3d00		Cited on `count_remain`: the value is `i32::MAX`.
+ExploreProcess.BaritoneChunkCache	isAlreadyExplored	port	1b8e87c	8bda3db4029ff9fd		`WorldView::chunk_status`, implemented by `cache::WithCache`.
+ExploreProcess.EitherChunk	<init>	redesign	1b8e87c	7cf29b5ffb37f075		No object: see `calcFilter`.
+ExploreProcess.EitherChunk	countRemain	port	1b8e87c	946d9d3dc75e5619		`ExploreProcess::count_remain`.
+ExploreProcess.EitherChunk	isAlreadyExplored	port	1b8e87c	b1e8b8fd84dc69bc		`ExploreProcess::is_already_explored`.
+ExploreProcess.IChunkFilter	countRemain	redesign	1b8e87c	8ecc364d8ff5ec65		No trait: the filter is a struct and the cache is asked through `WorldView`.
+ExploreProcess.IChunkFilter	isAlreadyExplored	redesign	1b8e87c	dc670bf5d24b3a66		No trait: the filter is a struct and the cache is asked through `WorldView`.
+ExploreProcess.JsonChunkFilter	<init>	redesign	1b8e87c	8866e4d1f070f2b7		`JsonChunkFilter::parse` reads the text, with its own small JSON reader (D42); the glue reads the file.
+ExploreProcess.JsonChunkFilter	countRemain	port	1b8e87c	01f45c8c68717029		`JsonChunkFilter::count_remain`.
+ExploreProcess.JsonChunkFilter	isAlreadyExplored	port	1b8e87c	ab870a6ee4f61fc2		`JsonChunkFilter::is_already_explored`. Alone it answers `Unknown` for a chunk it is not sure about, as upstream's does.
 FasterWorldScanner	collectChunkSections	port	1b8e87c	b467b8d1491697f6		`scan::scan_chunk_internal`. The sections from the player's outwards, at most `max` hits (D39).
 FasterWorldScanner	getChunkRange	port	1b8e87c	c64e1dd8b35c8186		`scan::get_chunk_range`.
 FasterWorldScanner	getIncludedFilterIndices	drop	1b8e87c	d70cbed037b46a68		A speed-up over the palette; the engine matches state ids cell by cell.
@@ -390,7 +392,7 @@ MineProcess	onTick	port	1b8e87c	0d0ecbfe538be9c0		The scan every `mineGoalUpdate
 MineProcess	plausibleToBreak	port	1b8e87c	06fa4e8ad7df7348		
 MineProcess	prune	port	1b8e87c	de619a8735cd2833		
 MineProcess	rescan	redesign	1b8e87c	331d08932c23a091		`make_job` and `deliver`: the scan is a `ScanJob` a thread runs, and its answer comes in by generation.
-MineProcess	searchWorld	port	1b8e87c	99dcb3bcc2205f55		There is no cached world: every block is scanned (D37).
+MineProcess	searchWorld	port	1b8e87c	99dcb3bcc2205f55		The tracked blocks come from the cache, `maxCachedWorldScanCount` of them, around the player's region; `extendCacheOnThreshold` is read (D37 item 1 is gone).
 MineProcess	updateGoal	port	1b8e87c	cbb8423378b658fd		
 MineProcess	updateLoucaSystem	port	1b8e87c	b8f5b17a012d301b		
 MineProcess.GoalThreeBlocks	<init>	redesign	1b8e87c	c043b903eea393fb		`Goal::ThreeBlocks`.
@@ -808,6 +810,17 @@ VecUtils	distanceToCenter	port	1b8e87c	7a84293414eddb5d
 VecUtils	entityDistanceToCenter	redesign	1b8e87c	a19306296a36b9eb		`distance_to_center` with the player's position.
 VecUtils	entityFlatDistanceToCenter	redesign	1b8e87c	877e6850cca4e05d		`distance_to_center` with the player's position.
 VecUtils	getBlockPosCenter	port	1b8e87c	bbf006dfca711cca		
+WorldData	<init>	redesign	1b8e87c	b8e9fb414476f7fd		`cache::worker::WorldData::start`: the cached world and its two threads. No waypoints (`WaypointCollection` is later).
+WorldData	getCachedWorld	drop	1b8e87c	ea5b1afd8a69d33b		`WorldData.world` is public.
+WorldData	getWaypoints	later	1b8e87c	b3be1d04cfa7f2d1		Waypoints are not ported.
+WorldData	onClose	port	1b8e87c	ad6c490de6bc6f95		`WorldData::on_close`.
+WorldProvider	<init>	redesign	1b8e87c	aabdbc9ee6b202be		`cache::worker::WorldProvider` (the `worldCache` map) and the glue (`cache_tick` in `mod/runtime.rs`).
+WorldProvider	closeWorld	redesign	1b8e87c	9d09e5854b0fbdec		`cache_close` in the glue.
+WorldProvider	detectAndHandleBrokenLoading	redesign	1b8e87c	37380a8fd06c8a3e		`cache_tick` checks the world and the dimension each tick, so a broken event is not possible.
+WorldProvider	getCurrentWorld	redesign	1b8e87c	b71454d4f869a9cf		`cache_reader` and `cache_tick` in the glue.
+WorldProvider	getSaveDirectories	redesign	1b8e87c	e7c8708ab9ed710d		`cache_world_key` and the mod data folder: a singleplayer world by its name, a server by a hash of its address (D41).
+WorldProvider	getWorldDataDirectory	port	1b8e87c	33bdb26661a0efdd		`cache::dimension_folder`: `<namespace>/<path>_<logical height>`, each part made safe as a folder name.
+WorldProvider	initWorld	redesign	1b8e87c	d7a22c6063372942		`cache_tick` in the glue.
 WorldScanner	repack(IPlayerContext)	drop	1b8e87c	02ace948cef59822		The cached world is not ported (D37).
 WorldScanner	repack(IPlayerContext,int)	drop	1b8e87c	00113c50527d6227		The cached world is not ported (D37).
 WorldScanner	scanChunk	later	1b8e87c	b23da48219ad93e2		Used by the builder and the cache; `scan_chunk_radius` is the scan the mine process makes.

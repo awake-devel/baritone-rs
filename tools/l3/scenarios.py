@@ -43,6 +43,9 @@ class Area:
             "clear @p",
             "forceload remove all",
             f"forceload add {x0 - 16} {z0 - 16} {x1 + 16} {z1 + 16}",
+            # The run lasts half an hour. The clear weather from its start ran out and snow fell in a cold biome (2026-11-08, 11 scenarios failed
+            # on snow layers and nothing else), so every scenario clears the weather again.
+            "weather clear 1000000",
         ]
         self.lines += clear(*self.box)
 
@@ -667,9 +670,92 @@ def follow_scenarios():
     return out
 
 
-def all_scenarios(include_far=True):
+# ---------------------------------------------------------------- the chunk cache and explore (R2)
+
+def cache_visits(x0, z0, visits):
+    """Console `tp` events that stand the player in a place for a while, so that the cache (which packs the chunks within five chunks of the
+    player every four seconds) holds the chunks there, then move on. `visits` is [(tick, x, z)]."""
+    return [{"t": t, "console": tp(x0 + dx, SKY + 1, z0 + dz)} for t, dx, dz in visits]
+
+
+def c01_goto_chest_cached(chat, x0=12000, z0=3000, seen=True):
+    """`b goto trapped_chest` to a chest whose chunk the game has unloaded. A 400 long stone strip with a chest 6 blocks from the start; the player stays
+    there 150 ticks (the cache packs the chunks), is moved 390 blocks away (beyond the render distance of 16 chunks, so the client drops the
+    chunk), and a probe at tick 290 records that the chest's chunk is not loaded. Then `b goto trapped_chest`: the only place that still knows the chest is
+    the cache. The player must walk back (about 390 blocks) to within 2.2 blocks of it, open it, and not break it. With `seen` False (the
+    control) the player starts at the far end and never goes near the chest, so the cache cannot know it and the goto must fail.
+    (`chunkCaching` off is no control: it only stops the files, as upstream.)"""
+    a = Area(x0, z0, x0 + 400, z0 + 8)
+    a.add(*floor(x0, z0, x0 + 400, z0 + 8))
+    chest = (x0 + 6, SKY + 1, z0 + 4)
+    a.add(f"setblock {chest[0]} {chest[1]} {chest[2]} minecraft:trapped_chest")
+    a.add(*kit("iron_pickaxe"))
+    events = cache_visits(x0, z0, [(150, 395.5, 4.5)]) if seen else []
+    events += [{"t": 290, "probe": [chest[0], chest[2]]}, {"t": 300, "command": "b goto trapped_chest"}]
+    name = "c01_goto_chest_cached" if seen else "c01x_control_not_seen"
+    start = (x0 + 2.5, SKY + 1, z0 + 4.5) if seen else (x0 + 395.5, SKY + 1, z0 + 4.5)
+    return scenario(
+        f"{name}_chat{int(chat)}", chat, a, start,
+        with_chat(chat, events),
+        end=4200, stop_when="idle",
+        check={"kind": "goto_block", "block": chest, "radius": 2.2, "limit_ticks": 2600, "plan": {"break": 0, "place": 0}, "no_health_loss": True,
+               "intact": [chest], "opens_container": True, "last_path_may_be_unused": True, "tool_damage_equals_broken": "iron_pickaxe",
+               "probe_unloaded": True, "min_distance_walked": 350},
+        watch=(x0, SKY - 2, z0, x0 + 12, SKY + 6, z0 + 8), slot=5)
+
+
+def c02_goto_across_cached(chat, x0=14000, z0=3000, seen=True):
+    """A `b goto X Y Z` whose path crosses chunks that are only in the cache. A 410 long strip, 17 wide, with a wall across it at 320 (z0 to
+    z0+14, the gap is at z0+15 and z0+16). `allowBreak` is off, so the way is round the wall. The player visits the wall and the goal (140 ticks
+    each), so the cache holds them, and goes back to the start; at tick 590 the wall's and the goal's chunks are probed (not loaded). The goal
+    is 400 blocks away. The first search must give a path longer than 290 positions: the loaded world ends about 273 blocks from the start, so
+    only the cache can let it plan past that. Arrive within a block, wall untouched."""
+    a = Area(x0, z0, x0 + 410, z0 + 16)
+    a.add(*floor(x0, z0, x0 + 410, z0 + 16))
+    a.add(f"fill {x0 + 320} {SKY + 1} {z0} {x0 + 320} {SKY + 3} {z0 + 14} minecraft:stone")
+    goal = (x0 + 400, SKY + 1, z0 + 1)
+    events = cache_visits(x0, z0, [(150, 316.5, 8.5), (300, 400.5, 1.5), (450, 2.5, 1.5)]) if seen else []
+    events += ([{"t": 290, "rebase": True}] if seen else []) + [{"t": 590, "probe": [x0 + 320, z0 + 4]}, {"t": 591, "probe": [goal[0], goal[2]]},
+               {"t": 600, "command": f"b goto {goal[0]} {goal[1]} {goal[2]}"}]
+    name = "c02_goto_across_cached" if seen else "c02x_control_not_seen"
+    return scenario(
+        f"{name}_chat{int(chat)}", chat, a, (x0 + 2.5, SKY + 1, z0 + 1.5),
+        with_chat(chat, events),
+        end=4600, stop_when="arrived",
+        check={"kind": "arrive", "goal": goal, "limit_ticks": 2800, **({"blocks_changed": 0} if seen else {}), "no_health_loss": True, "probe_unloaded": True,
+               "first_search_min_positions": 290, "min_distance_walked": 400},
+        watch=(x0 + 310, SKY - 2, z0, x0 + 330, SKY + 6, z0 + 16) if seen else None, settings={"allowBreak": False})
+
+
+def c03_explore(chat):
+    """`b explore` for 1200 ticks on natural terrain (where the previous scenario left the player), then `b stop`. The player must walk
+    (at least 150 blocks in all), get away from the start (the farthest point at least 40 blocks off, and farther in the second half than in the
+    first 400 ticks), lose no health, and stand still after the stop with the keys released."""
+    sc = scenario(
+        f"c03_explore_chat{int(chat)}", chat, None, None,
+        with_chat(chat, [{"t": 10, "command": "b explore"}, {"t": 1210, "command": "b stop"}]),
+        end=1450, stop_when="never",
+        check={"kind": "explore", "stop_tick": 1210, "no_health_loss": True, "min_distance_walked": 150, "min_far": 40},
+        wait_loaded=[])
+    # spreadplayers puts the player on dry ground at a random spot (it avoids water and lava): the first run ended its explore in a lake, and the
+    # next scenario began on the lake bed and drowned a little, which says nothing about explore.
+    sc["tp"] = "execute in minecraft:overworld run spreadplayers 0 0 100 400 false @p"
+    return sc
+
+
+def cache_scenarios(controls=False):
+    out = []
+    for chat in (False, True):
+        d = 600 if chat else 0
+        out += [c01_goto_chest_cached(chat, x0=12000 + d), c02_goto_across_cached(chat, x0=14000 + d)]
+    if controls:
+        out += [c01_goto_chest_cached(False, x0=13200, seen=False), c02_goto_across_cached(False, x0=15200, seen=False)]
+    return out
+
+
+def all_scenarios(include_far=True, controls=False):
     # The natural-terrain ones come first, at the spawn, before any world building moves the player away.
-    out = [s05_natural_300(False)]
+    out = [s05_natural_300(False), c03_explore(False), c03_explore(True)]
     if include_far:
         out.append(s10_far(False))
     for chat in (False, True):
@@ -679,5 +765,6 @@ def all_scenarios(include_far=True):
     out += [s06_sealed(False), s06_sealed(True)]
     out += new_scenarios()
     out += mine_scenarios()
+    out += cache_scenarios(controls)
     out += follow_scenarios()
     return out

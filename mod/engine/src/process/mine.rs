@@ -94,11 +94,24 @@ pub(super) fn dist_sq(a: Pos, b: Pos) -> f64 {
     dx * dx + dy * dy + dz * dz
 }
 
-/// `MineProcess.searchWorld`: There is no cached world, so every block is "untracked" and read from the loaded chunks (docs/deviations.md D37).
+/// `MineProcess.searchWorld`: the blocks the cache keeps track of (chests, spawners, portals, ...) come from the cached world, around the player's region,
+/// at most `maxCachedWorldScanCount` of them; the others, and those too when `extendCacheOnThreshold` is on and fewer than `max` were found, come from
+/// the loaded chunks. A world without a cache (`WorldView::cached_locations` gives none) finds the tracked blocks only in the loaded chunks, below.
 #[allow(clippy::too_many_arguments)]
 fn search_world<W: WorldView>(ctx: &Ctx<'_, W>, ms: &MineSettings, filter: &BlockOptionalMetaLookup, max: i32, already_known: &[Pos], blacklist: &[Pos], dropped: &mut Vec<Pos>, feet: Pos, block_pos: Pos) -> Vec<Pos> {
-    let mut locs = prune(ctx, ms, vec![], filter, max, blacklist, dropped, block_pos);
-    if !filter.blocks().is_empty() {
+    let mut locs: Vec<Pos> = vec![];
+    let mut untracked = false;
+    for bom in filter.blocks() {
+        let block = bom.block();
+        if crate::cache::keeps_track_of(block) {
+            // maxRegionDistanceSq 2 means adjacent directly or adjacent diagonally; nothing further than that
+            locs.extend(ctx.world.cached_locations(block, ms.max_cached_world_scan_count, feet.x, feet.z, 2));
+        } else {
+            untracked = true;
+        }
+    }
+    let mut locs = prune(ctx, ms, locs, filter, max, blacklist, dropped, block_pos);
+    if untracked || (ms.extend_cache_on_threshold && (locs.len() as i64) < i64::from(max)) {
         locs.extend(scan_chunk_radius(ctx.world, feet, filter, max, 32)); // maxSearchRadius is NOT sq
     }
     locs.extend(already_known.iter().copied());
@@ -1021,5 +1034,60 @@ mod tests {
             other => panic!("{other:?}"),
         }
         let _ = (AIR, Rotation::new(0.0, 0.0));
+    }
+
+    /// A block table in which state 2 (the fixture's ore) is a chest, and a lookup for it.
+    fn chest_lookup() -> BlockOptionalMetaLookup {
+        use crate::blockmeta::{BlockIndex, BlockOptionalMeta, StateEntry};
+        let e = |b: &str| StateEntry { block: b.to_string(), props: vec![] };
+        BlockOptionalMetaLookup::new(vec![BlockOptionalMeta::parse("chest", &BlockIndex::new(vec![e("air"), e("stone"), e("chest")], Default::default())).unwrap()])
+    }
+
+    /// `MineProcess.searchWorld`: the blocks the cache tracks come from the cached world around the player's region, the others from the loaded chunks.
+    #[test]
+    fn tracked_blocks_come_from_the_cache_and_extend_cache_on_threshold_adds_the_loaded_world() {
+        use crate::cache::testkit::{cache_of, temp_dir, with_cache};
+        let fx = fixture();
+        // the cache knows two chests, in two regions: x = 40 (region 0) and x = 600 (region 1)
+        let mut known = TestWorld::flat(640, 32);
+        known.set(40, 1, 8, ORE);
+        known.set(600, 1, 8, ORE);
+        let dir = temp_dir("mine");
+        let cache = cache_of(&known, &["air", "stone", "chest"], dir.clone());
+        // the game has the chunks up to x = 32 loaded, and a chest of its own in them that the cache has not heard of
+        let mut live = TestWorld::flat(640, 32);
+        live.set(10, 1, 8, ORE);
+        live.loaded_below_x = 32;
+        let w = with_cache(live, &cache);
+        let ctx = fx.ctx(&w);
+        let p = standing(4.5, 1.0, 8.5);
+        let scan = |set: &ExecSettings| {
+            let env = Env::new(&ctx, &p, set, p.feet());
+            let mut m = MineProcess::new();
+            m.mine(0, Some(chest_lookup()), &fx.cfg);
+            m.take_initial_scan(&env, &ProcessInputs::default()).unwrap().run(&ctx).locations
+        };
+        let base = ExecSettings::default();
+        assert_eq!(scan(&base), vec![Pos::new(40, 1, 8), Pos::new(600, 1, 8)], "from the cache only, in unloaded chunks, nearest first");
+        let mut s = base.clone();
+        s.mine.max_cached_world_scan_count = 1;
+        assert_eq!(scan(&s), vec![Pos::new(40, 1, 8)], "the search stops widening at the first region that reaches the count");
+        s.mine.extend_cache_on_threshold = true;
+        assert_eq!(scan(&s), vec![Pos::new(10, 1, 8), Pos::new(40, 1, 8)], "fewer than max from the cache: the loaded chunks are scanned too");
+        let mut s = base.clone();
+        s.mine.extend_cache_on_threshold = true;
+        s.mine.mine_max_ore_locations_count = 2;
+        assert_eq!(scan(&s), vec![Pos::new(40, 1, 8), Pos::new(600, 1, 8)], "as many as max from the cache: no extra scan");
+        // a block the cache does not track is read from the loaded chunks only
+        let mut live = TestWorld::flat(640, 32);
+        live.set(10, 1, 8, ORE);
+        live.loaded_below_x = 32;
+        let w2 = with_cache(live, &cache);
+        let ctx2 = fx.ctx(&w2);
+        let env = Env::new(&ctx2, &p, &base, p.feet());
+        let mut m = MineProcess::new();
+        m.mine(0, Some(lookup(&["diamond_ore"])), &fx.cfg);
+        assert_eq!(m.take_initial_scan(&env, &ProcessInputs::default()).unwrap().run(&ctx2).locations, vec![Pos::new(10, 1, 8)]);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

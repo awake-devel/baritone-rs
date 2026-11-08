@@ -7,6 +7,7 @@
 // and takes their results, and never waits for one. Each search has a generation number. A result whose generation is not the one in
 // progress is dropped, and a search that was cancelled never installs a path.
 use super::custom_goal::{CustomGoalProcess, PathingCommand, PathingCommandType};
+use super::explore::{ExploreProcess, JsonChunkFilter};
 use super::follow::{FollowEnv, FollowFilter, FollowProcess};
 use super::get_to_block::GetToBlockProcess;
 use super::mine::{MineProcess, ScanJob, ScanKind, ScanResult};
@@ -196,17 +197,19 @@ enum ProcId {
     Mine,
     GetToBlock,
     Follow,
+    Explore,
 }
 
-const PROCESSES: [ProcId; 4] = [ProcId::CustomGoal, ProcId::Mine, ProcId::GetToBlock, ProcId::Follow];
+const PROCESSES: [ProcId; 5] = [ProcId::CustomGoal, ProcId::Mine, ProcId::GetToBlock, ProcId::Follow, ProcId::Explore];
 
-/// `PathingBehavior` with `PathingControlManager` and the processes it drives: `CustomGoalProcess`, `MineProcess`, `GetToBlockProcess`, `FollowProcess`.
+/// `PathingBehavior` with `PathingControlManager` and the processes it drives: `CustomGoalProcess`, `MineProcess`, `GetToBlockProcess`, `FollowProcess`, `ExploreProcess`.
 pub struct Pathing<R: SearchRunner<S>, S> {
     runner: R,
     process: CustomGoalProcess,
     mine: MineProcess,
     get_to_block: GetToBlockProcess,
     follow: FollowProcess,
+    explore: ExploreProcess,
     /// The player's position and the follow settings of the tick in progress (or the last): `FollowProcess.isActive` reads them outside a tick.
     player_position: [f64; 3],
     follow_settings: crate::settings::FollowSettings,
@@ -259,6 +262,7 @@ impl<R: SearchRunner<S>, S> Pathing<R, S> {
             mine: MineProcess::new(),
             get_to_block: GetToBlockProcess::new(),
             follow: FollowProcess::new(),
+            explore: ExploreProcess::new(),
             player_position: [0.0; 3],
             follow_settings: crate::settings::FollowSettings::default(),
             aim: AimProcessor::new(0.5),
@@ -338,6 +342,22 @@ impl<R: SearchRunner<S>, S> Pathing<R, S> {
         self.follow.pickup(items);
     }
 
+    /// `ExploreProcess.explore`, what `/b explore` does: from now the explore process wants control, around the block column `(center_x, center_z)`.
+    pub fn explore(&mut self, center_x: i32, center_z: i32) {
+        self.last_cancel = None;
+        self.explore.explore(center_x, center_z);
+    }
+
+    /// `ExploreProcess.applyJsonFilter`, what `/b explorefilter` does once the file is read.
+    pub fn apply_json_filter(&mut self, filter: JsonChunkFilter) {
+        self.explore.apply_json_filter(filter);
+    }
+
+    /// The explore process, for the HUD and the tests.
+    pub fn explore_process(&self) -> &ExploreProcess {
+        &self.explore
+    }
+
     /// The follow process, for the HUD and the tests.
     pub fn follow_process(&self) -> &FollowProcess {
         &self.follow
@@ -375,6 +395,7 @@ impl<R: SearchRunner<S>, S> Pathing<R, S> {
         let mut out = std::mem::take(&mut self.messages);
         out.extend(self.mine.take_messages());
         out.extend(self.get_to_block.take_messages());
+        out.extend(self.explore.take_messages());
         out
     }
 
@@ -470,7 +491,7 @@ impl<R: SearchRunner<S>, S> Pathing<R, S> {
 
     /// Whether a process wants control: the goal process holds a goal (`goto`, `goal`), or `mine` or `goto <block>` runs.
     pub fn is_active(&self) -> bool {
-        self.process.is_active() || self.mine.is_active() || self.get_to_block.is_active() || self.follow.is_active(&self.follow_env())
+        self.process.is_active() || self.mine.is_active() || self.get_to_block.is_active() || self.follow.is_active(&self.follow_env()) || self.explore.is_active()
     }
 
     /// `PathingBehavior.getCurrent`:
@@ -646,6 +667,7 @@ impl<R: SearchRunner<S>, S> Pathing<R, S> {
             ProcId::Mine => self.mine.on_lost_control(),
             ProcId::GetToBlock => self.get_to_block.on_lost_control(&mut self.controls),
             ProcId::Follow => self.follow.on_lost_control(),
+            ProcId::Explore => self.explore.on_lost_control(),
         }
     }
 
@@ -656,6 +678,7 @@ impl<R: SearchRunner<S>, S> Pathing<R, S> {
             ProcId::Mine => self.mine.is_active(),
             ProcId::GetToBlock => self.get_to_block.is_active(),
             ProcId::Follow => self.follow.is_active(&self.follow_env()),
+            ProcId::Explore => self.explore.is_active(),
         }
     }
 
@@ -668,6 +691,7 @@ impl<R: SearchRunner<S>, S> Pathing<R, S> {
             ProcId::Mine => self.mine.on_tick(calc_failed, safe, &env, &self.inputs, &mut self.controls),
             ProcId::GetToBlock => Some(self.get_to_block.on_tick(calc_failed, safe, &env, &self.inputs, &mut self.controls)),
             ProcId::Follow => Some(self.follow.on_tick(&self.follow_env())),
+            ProcId::Explore => self.explore.on_tick(calc_failed, tk.ctx.world, &tk.env.exec.explore),
         }
     }
 

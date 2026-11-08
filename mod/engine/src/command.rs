@@ -334,7 +334,8 @@ pub fn goal_to_string(goal: &Goal, censor: bool) -> String {
     let c = |v: i32| if censor { "<censored>".to_string() } else { v.to_string() };
     match goal {
         Goal::Block { x, y, z } => format!("GoalBlock{{x={},y={},z={}}}", c(*x), c(*y), c(*z)),
-        Goal::Xz { x, z } => format!("GoalXZ{{x={},z={}}}", c(*x), c(*z)),
+        // the anonymous `GoalXZ` of the explore process prints as its superclass does
+        Goal::Xz { x, z } | Goal::XzMaintainY { x, z, .. } => format!("GoalXZ{{x={},z={}}}", c(*x), c(*z)),
         Goal::YLevel { level } => format!("GoalYLevel{{y={}}}", c(*level)),
         other => format!("{other:?}"),
     }
@@ -397,6 +398,57 @@ pub fn path_command(args: &[&str], has_goal: bool) -> Result<PathAction, Command
     Ok(if has_goal { PathAction::Path } else { PathAction::NoGoal })
 }
 
+/// What `explore` asks for: the block column to explore around, and the line it says.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ExploreRequest {
+    pub x: i32,
+    pub z: i32,
+}
+
+impl ExploreRequest {
+    /// `ExploreCommand`'s `Exploring from GoalXZ{...}`; `censor` is `censorCoordinates`.
+    pub fn message(&self, censor: bool) -> String {
+        format!("Exploring from {}", goal_to_string(&Goal::Xz { x: self.x, z: self.z }, censor))
+    }
+}
+
+/// Upstream's `ExploreCommand.execute`: no arguments explores from the player's column; two (`RelativeGoalXZ`, `~` for the player's) explore from there.
+/// Any other number of arguments is refused as `requireExactly(2)` does.
+pub fn explore_command(args: &[&str], feet: Pos) -> Result<ExploreRequest, CommandError> {
+    if args.is_empty() {
+        return Ok(ExploreRequest { x: feet.x, z: feet.z });
+    }
+    if args.len() < 2 {
+        return Err("Not enough arguments (expected at least 2)".to_string());
+    }
+    require_max(args, 2)?;
+    // `RelativeGoalXZ` fails on the first coordinate that is not one: the error names that argument
+    for (i, a) in args.iter().enumerate() {
+        if relative_coordinate(a, 0.0).is_none() {
+            return Err(invalid_type(i, "RelativeGoalXZ"));
+        }
+    }
+    match relative_goal_xz(args, feet) {
+        Some(Goal::Xz { x, z }) => Ok(ExploreRequest { x, z }),
+        _ => Err(invalid_type(0, "RelativeGoalXZ")),
+    }
+}
+
+/// Upstream's `ExploreFilterCommand.execute`, up to the reading of the file: the path as typed and whether the list is inverted. The word after the path must be
+/// `invert` (any case) or nothing.
+pub fn explore_filter_command(args: &[&str]) -> Result<(String, bool), CommandError> {
+    require_max(args, 2)?;
+    let Some(path) = args.first() else {
+        return Err("Not enough arguments (expected at least 1)".to_string());
+    };
+    let invert = match args.get(1) {
+        None => false,
+        Some(w) if w.eq_ignore_ascii_case("invert") => true,
+        Some(_) => return Err(invalid_type(1, "either \"invert\" or nothing")),
+    };
+    Ok(((*path).to_string(), invert))
+}
+
 const ETA_UNITS: [&str; 5] = ["seconds", "minutes", "hours", "days", "weeks"];
 const ETA_TICKS_PER_UNIT: [i32; 5] = [20, 1200, 72000, 1728000, 12096000];
 
@@ -439,8 +491,18 @@ pub fn eta_command(args: &[&str], in_control: bool, segment: Option<f64>, goal: 
 }
 
 /// The commands of this port, with the names they answer to and the short description `HelpCommand` lists.
-pub const COMMANDS: &[(&[&str], &str)] =
-    &[(&["goal"], "Set or clear the goal"), (&["goto"], "Go to a coordinate or block"), (&["mine"], "Mine some blocks"), (&["follow"], "Follow entity things"), (&["path"], "Start heading towards the goal"), (&["cancel", "stop"], "Cancel what Baritone is currently doing"), (&["eta"], "View the current ETA"), (&["set", "setting", "settings"], "View or change settings")];
+pub const COMMANDS: &[(&[&str], &str)] = &[
+    (&["goal"], "Set or clear the goal"),
+    (&["goto"], "Go to a coordinate or block"),
+    (&["mine"], "Mine some blocks"),
+    (&["follow"], "Follow entity things"),
+    (&["explore"], "Explore things"),
+    (&["explorefilter"], "Explore chunks from a json"),
+    (&["path"], "Start heading towards the goal"),
+    (&["cancel", "stop"], "Cancel what Baritone is currently doing"),
+    (&["eta"], "View the current ETA"),
+    (&["set", "setting", "settings"], "View or change settings"),
+];
 
 /// Every name a command answers to, in the order of [`COMMANDS`].
 pub fn command_names() -> Vec<&'static str> {
@@ -466,6 +528,24 @@ pub fn complete(before: &[&str], current: &str, settings: &crate::set::Settings)
             if rest.is_empty() {
                 v.extend(["reset", "clear", "none", "~"].iter().map(|s| s.to_string()));
             } else if rest.len() < 3 && rest.iter().all(|a| relative_coordinate(a, 0.0).is_some()) {
+                v.push("~".to_string());
+            }
+            v.retain(|s| starts(s));
+            v
+        }
+        "explorefilter" => {
+            // upstream completes a file name for the first word (the glue does not list files) and nothing for the second
+            let mut v: Vec<String> = vec![];
+            if rest.len() == 1 {
+                v.push("invert".to_string());
+            }
+            v.retain(|s| starts(s));
+            v
+        }
+        "explore" => {
+            // upstream: with at most two words typed, a `~` for the coordinate being typed
+            let mut v: Vec<String> = vec![];
+            if rest.len() < 2 && rest.iter().all(|a| relative_coordinate(a, 0.0).is_some()) {
                 v.push("~".to_string());
             }
             v.retain(|s| starts(s));
@@ -762,5 +842,44 @@ mod tests {
         assert!(complete_follow(&["entity", "pig"], "co", &p, &t).contains(&"minecraft:cow".to_string()));
         assert!(complete_follow(&["entity", "nothing"], "co", &p, &t).is_empty());
         assert!(complete_follow(&["entities"], "", &p, &t).is_empty(), "a group takes no more words");
+    }
+
+    #[test]
+    fn explore_takes_no_arguments_or_two_coordinates() {
+        assert_eq!(explore_command(&[], feet()), Ok(ExploreRequest { x: 100, z: -20 }));
+        assert_eq!(explore_command(&["10", "-3"], feet()), Ok(ExploreRequest { x: 10, z: -3 }));
+        assert_eq!(explore_command(&["~30", "~"], feet()), Ok(ExploreRequest { x: 130, z: -20 }));
+        assert_eq!(explore_command(&["10.9", "-0.1"], feet()), Ok(ExploreRequest { x: 10, z: -1 }), "floored, as GoalXZ's coordinates are");
+        assert_eq!(explore_command(&["1k", "2m"], feet()), Ok(ExploreRequest { x: 1000, z: 2_000_000 }));
+        assert_eq!(explore_command(&["10"], feet()), Err("Not enough arguments (expected at least 2)".to_string()));
+        assert_eq!(explore_command(&["1", "2", "3"], feet()), Err("Too many arguments (expected at most 2)".to_string()));
+        assert_eq!(explore_command(&["1", "x"], feet()), Err("Error at argument #2: Expected RelativeGoalXZ".to_string()));
+        assert_eq!(explore_command(&["x", "1"], feet()), Err("Error at argument #1: Expected RelativeGoalXZ".to_string()));
+        assert_eq!(ExploreRequest { x: 5, z: -7 }.message(false), "Exploring from GoalXZ{x=5,z=-7}");
+        assert_eq!(ExploreRequest { x: 5, z: -7 }.message(true), "Exploring from GoalXZ{x=<censored>,z=<censored>}");
+    }
+
+    #[test]
+    fn explorefilter_takes_a_path_and_optionally_invert() {
+        assert_eq!(explore_filter_command(&["chunks.json"]), Ok(("chunks.json".to_string(), false)));
+        assert_eq!(explore_filter_command(&["chunks.json", "invert"]), Ok(("chunks.json".to_string(), true)));
+        assert_eq!(explore_filter_command(&["chunks.json", "INVERT"]), Ok(("chunks.json".to_string(), true)));
+        assert_eq!(explore_filter_command(&[]), Err("Not enough arguments (expected at least 1)".to_string()));
+        assert_eq!(explore_filter_command(&["a", "b"]), Err("Error at argument #2: Expected either \"invert\" or nothing".to_string()));
+        assert_eq!(explore_filter_command(&["a", "invert", "x"]), Err("Too many arguments (expected at most 2)".to_string()));
+    }
+
+    #[test]
+    fn explore_commands_complete_and_are_listed() {
+        let s = crate::set::Settings::new();
+        assert_eq!(complete(&["explore"], "", &s), ["~"]);
+        assert_eq!(complete(&["explore", "5"], "", &s), ["~"]);
+        assert!(complete(&["explore", "5", "6"], "", &s).is_empty());
+        assert_eq!(complete(&["explorefilter", "f.json"], "", &s), ["invert"]);
+        assert_eq!(complete(&["explorefilter", "f.json"], "in", &s), ["invert"]);
+        assert!(complete(&["explorefilter"], "", &s).is_empty());
+        let names = command_names();
+        assert!(names.contains(&"explore") && names.contains(&"explorefilter"));
+        assert!(complete(&[], "explore", &s).contains(&"explorefilter".to_string()));
     }
 }

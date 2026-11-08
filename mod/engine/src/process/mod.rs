@@ -1,9 +1,10 @@
 // baritone-rs engine: the processes and the pathing state machine. LGPL-3.0-or-later, see lib.rs.
 //
 // `custom_goal` is `CustomGoalProcess` (the process behind `goto`), `mine` is `MineProcess`, `get_to_block` is `GetToBlockProcess`
-// (`goto <block>`) and `follow` is `FollowProcess`. `pathing` is `PathingBehavior` with `PathingControlManager`: the process manager that hands control to one process
+// (`goto <block>`) and `follow` is `FollowProcess` and `explore` is `ExploreProcess`. `pathing` is `PathingBehavior` with `PathingControlManager`: the process manager that hands control to one process
 // at a time, and the search running behind the `SearchRunner` trait.
 pub mod custom_goal;
+pub mod explore;
 pub mod follow;
 pub mod get_to_block;
 pub mod mine;
@@ -12,6 +13,7 @@ pub mod pathing;
 use crate::pos::Pos;
 
 pub use custom_goal::{CustomGoalProcess, PathingCommand, PathingCommandType};
+pub use explore::{ExploreProcess, JsonChunkFilter};
 pub use follow::{FollowFilter, FollowProcess};
 pub use get_to_block::GetToBlockProcess;
 pub use mine::{MineProcess, ScanJob, ScanKind, ScanResult};

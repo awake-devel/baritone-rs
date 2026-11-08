@@ -98,6 +98,9 @@ SCOPE = [
     MAIN + "cache/CachedRegion.java",
     MAIN + "cache/CachedWorld.java",
     MAIN + "cache/ChunkPacker.java",
+    MAIN + "cache/CacheFiles.java",
+    MAIN + "cache/WorldData.java",
+    MAIN + "cache/WorldProvider.java",
 ]
 
 

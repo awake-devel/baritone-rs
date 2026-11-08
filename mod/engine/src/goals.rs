@@ -33,6 +33,13 @@ pub enum Goal {
         x: i32,
         z: i32,
     },
+    /// The anonymous `GoalXZ` of `ExploreProcess.createGoal`: it is in the goal at the column whatever the height is, and its heuristic adds
+    /// `GoalYLevel.calculate(exploreMaintainY, y)`, to try and keep that height on the way. It prints as a `GoalXZ`.
+    XzMaintainY {
+        x: i32,
+        z: i32,
+        level: i32,
+    },
     YLevel {
         level: i32,
     },
@@ -176,7 +183,7 @@ impl Goal {
             // `GoalBlock.isInGoal`
             Goal::Block { x: gx, y: gy, z: gz } => x == *gx && y == *gy && z == *gz,
             // `GoalXZ.isInGoal`
-            Goal::Xz { x: gx, z: gz } => x == *gx && z == *gz,
+            Goal::Xz { x: gx, z: gz } | Goal::XzMaintainY { x: gx, z: gz, .. } => x == *gx && z == *gz,
             // `GoalYLevel.isInGoal`
             Goal::YLevel { level } => y == *level,
             // `GoalTwoBlocks.isInGoal`
@@ -261,6 +268,12 @@ impl Goal {
                 let x_diff = x.wrapping_sub(*gx);
                 let z_diff = z.wrapping_sub(*gz);
                 goal_xz_calculate(x_diff as f64, z_diff as f64, s)
+            }
+            // `ExploreProcess.createGoal`'s anonymous `GoalXZ.heuristic`: `super.heuristic(x, y, z) + GoalYLevel.calculate(level, y)`
+            Goal::XzMaintainY { x: gx, z: gz, level } => {
+                let x_diff = x.wrapping_sub(*gx);
+                let z_diff = z.wrapping_sub(*gz);
+                goal_xz_calculate(x_diff as f64, z_diff as f64, s) + goal_y_level_calculate(*level, y)
             }
             // `GoalYLevel.heuristic`
             Goal::YLevel { level } => goal_y_level_calculate(*level, y),
@@ -580,5 +593,22 @@ mod tests {
         assert!(run.is_in_goal(9, 5, 9, &s()) && !never.is_in_goal(9, 5, 9, &s()));
         assert_eq!(never.heuristic(9, 5, 9, &s()), run.heuristic(9, 5, 9, &s()));
         assert_eq!(never.heuristic_inside(&s()), f64::NEG_INFINITY);
+    }
+
+    /// `ExploreProcess.createGoal`'s anonymous `GoalXZ`: in the goal at the column whatever the height, and the heuristic adds the pull towards the level.
+    #[test]
+    fn the_explore_goal_is_in_the_column_at_any_height_and_pulls_towards_its_level() {
+        let g = Goal::XzMaintainY { x: 8, z: 8, level: 64 };
+        let plain = Goal::Xz { x: 8, z: 8 };
+        for y in [-60, 0, 64, 300] {
+            assert!(g.is_in_goal(8, y, 8, &s()));
+            assert!(!g.is_in_goal(9, y, 8, &s()) && !g.is_in_goal(8, y, 7, &s()));
+        }
+        for (x, y, z) in [(0, 64, 0), (0, 70, 20), (-30, 10, 4), (8, 64, 8)] {
+            assert_eq!(g.heuristic(x, y, z, &s()), plain.heuristic(x, y, z, &s()) + goal_y_level_calculate(64, y), "{x} {y} {z}");
+        }
+        assert_eq!(g.heuristic(8, 64, 8, &s()), 0.0, "at the level in the column");
+        assert!(g.heuristic(8, 10, 8, &s()) > 0.0 && g.heuristic(8, 100, 8, &s()) > 0.0);
+        assert_eq!(g.heuristic_inside(&s()), 0.0, "the interface default");
     }
 }
