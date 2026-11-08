@@ -13,7 +13,8 @@ pub(super) const F_FLOWING: u8 = 2;
 pub(super) const F_AVOID: u8 = 4;
 pub(super) const F_AIRLIKE: u8 = 8;
 pub(super) const F_MAGMA: u8 = 16;
-pub(super) const F_AIR: u8 = 32;
+/// Fluid-empty and not in `#blocks_fluid_flow`: the neighbour `FlowingFluid.getFlow` looks below for water (D3).
+pub(super) const F_PASSABLE_DRY: u8 = 32;
 
 /// Names and default states.
 #[derive(Debug)]
@@ -87,8 +88,8 @@ impl CacheEnv {
             if s.air || air_like.get(i).copied().unwrap_or(false) {
                 f |= F_AIRLIKE;
             }
-            if s.air {
-                f |= F_AIR;
+            if s.fluid_empty && !s.blocks_fluid_flow {
+                f |= F_PASSABLE_DRY;
             }
             flags.push(f);
             if super::keeps_track_of(&s.name) {
@@ -112,7 +113,7 @@ impl CacheEnv {
     }
 
     pub(super) fn flags(&self, state: usize) -> u8 {
-        self.flags.get(state).copied().unwrap_or(F_AIR | F_AIRLIKE)
+        self.flags.get(state).copied().unwrap_or(F_PASSABLE_DRY | F_AIRLIKE)
     }
 
     /// The special block (by name) a state belongs to, if `BLOCKS_TO_KEEP_TRACK_OF` holds its block.
@@ -145,10 +146,12 @@ pub mod fixture {
     pub const SPAWNER: usize = 12;
     pub const SLAB: usize = 13;
     pub const CHEST2: usize = 14;
+    /// Waterlogged and not solid.
+    pub const SEAGRASS: usize = 15;
 
     pub fn states() -> Vec<State> {
         let mk = |name: &str| State { name: name.to_string(), block: Block::from_name(name), ..Default::default() };
-        let mut v = vec![mk("air"), mk("stone"), mk("water"), mk("water"), mk("lava"), mk("chest"), mk("short_grass"), mk("dirt"), mk("bedrock"), mk("obsidian"), mk("netherrack"), mk("end_stone"), mk("spawner"), mk("stone_slab"), mk("chest")];
+        let mut v = vec![mk("air"), mk("stone"), mk("water"), mk("water"), mk("lava"), mk("chest"), mk("short_grass"), mk("dirt"), mk("bedrock"), mk("obsidian"), mk("netherrack"), mk("end_stone"), mk("spawner"), mk("stone_slab"), mk("chest"), mk("seagrass")];
         v[AIR].air = true;
         v[WATER].fluid = Fluid::Water;
         v[WATER].fluid_empty = false;
@@ -164,6 +167,15 @@ pub mod fixture {
         v[LAVA].fluid_flowing_kind = true;
         v[LAVA].fluid_amount = 8;
         v[SLAB].slab = true;
+        v[SEAGRASS].fluid = Fluid::Water;
+        v[SEAGRASS].fluid_source = true;
+        v[SEAGRASS].fluid_flowing_kind = true;
+        v[SEAGRASS].fluid_amount = 8;
+        v[SEAGRASS].waterlogged = true;
+        // `#blocks_fluid_flow` holds the blocks that stop motion: everything here but air, grass and the fluids
+        for i in [STONE, CHEST, DIRT, BEDROCK, OBSIDIAN, NETHERRACK, END_STONE, SPAWNER, SLAB, CHEST2] {
+            v[i].blocks_fluid_flow = true;
+        }
         for s in &mut v {
             s.fluid_empty = s.fluid == Fluid::None;
         }

@@ -123,6 +123,7 @@ public class FactsDump {
                 {"wooden_door", "" + b(k instanceof DoorBlock && DoorBlock.isWoodenDoor(s))}, {"pathfindable", "" + b(s.isPathfindable(PathComputationType.LAND))},
                 {"shape_full", "" + b(shapeFull(s))},
                 {"waterlogged", "" + b(s.hasProperty(BlockStateProperties.WATERLOGGED) && s.getValue(BlockStateProperties.WATERLOGGED))},
+                {"blocks_fluid_flow", "" + b(s.is(net.minecraft.tags.BlockTags.BLOCKS_FLUID_FLOW))},
                 {"top_sturdy", "" + b(topSturdy(s))},
                 {"replaceable", "" + b(s.canBeReplaced())}, {"falling_free", "" + b(FallingBlock.isFree(s))}, {"frost_melt", "" + b(s == FrostedIceBlock.meltsInto())},
                 {"fluid", fluid(f)}, {"fluid_empty", "" + b(f.isEmpty())}, {"fluid_amount", "" + f.getType().getAmount(f)}, {"fluid_source", "" + b(f.isSource())},

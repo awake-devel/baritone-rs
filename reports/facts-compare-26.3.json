@@ -7,15 +7,15 @@
   "mob-data.json": "23fe8263fa109b4080effaecb44a518d0a539f1416955ed00f2b7c23e48c3724"
  },
  "horizon_commit": "66f3981f522b24c250b21523a70080965b940424",
- "injected_errors": "103 errors: 97 caught, 6 missed (0 unlisted), 0 did not build",
- "inputs": "a40c6c606bdb032b5ab294bac6926f6ee13f8834083d248653831bd11f1dad53",
+ "injected_errors": "104 errors: 98 caught, 6 missed (0 unlisted), 0 did not build",
+ "inputs": "64a00725a0106faef0ed17227dc855f5e2c94d0373edc4572b2fcb5f15f7e59c",
  "minecraft_version": "26.3",
  "results": {
   "different": 0,
   "explained": 0,
   "explained_changing_an_answer": 0,
-  "facts_compared": 1786150,
-  "facts_equal": 1786150,
+  "facts_compared": 1821873,
+  "facts_equal": 1821873,
   "identity_problems": 0,
   "states": 35723,
   "unexplained": 0

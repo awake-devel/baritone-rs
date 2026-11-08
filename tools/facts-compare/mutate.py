@@ -25,7 +25,7 @@ RULES = [
     (r'!src\.behaviours', lambda m: 'src.behaviours'),
     (r'state_flags::(\w+)', lambda m: 'state_flags::SOLID'),
     (r'Direction::Up\)', lambda m: 'Direction::Down)'),
-    (r'"minecraft:(fire|water)"', lambda m: '"minecraft:nothing"'),
+    (r'"minecraft:(fire|water|blocks_fluid_flow)"', lambda m: '"minecraft:nothing"'),
     (r'"minecraft:(incorrect_for_diamond_tool|mineable/pickaxe)"', lambda m: '"minecraft:nothing"'),
     (r'prop\("(\w+)"\)', lambda m: 'prop("nothing")'),
     (r'on\("(\w+)"\)', lambda m: 'on("nothing")'),

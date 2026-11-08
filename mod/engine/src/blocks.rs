@@ -201,6 +201,8 @@ pub struct State {
     /// `Block.isShapeFullBlock(state.getCollisionShape(null, null))`, false where that throws.
     pub shape_full: bool,
     pub waterlogged: bool,
+    /// Whether the block is in the tag `#minecraft:blocks_fluid_flow` (a Minecraft tag, not an upstream method): what `FlowingFluid.getFlow` treats as a wall when it looks for a drop beside the fluid.
+    pub blocks_fluid_flow: bool,
     /// `state.isFaceSturdy(.., Direction.UP)`.
     pub top_sturdy: bool,
     pub replaceable: bool,

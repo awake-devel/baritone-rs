@@ -2,7 +2,7 @@
 //
 // A packed chunk: 2 bits per block (`PathingBlockType`), the top block of each column, the special blocks, a heightmap. The index of a block in the
 // bits is `x << 1 | z << 5 | y << 9` with `y` counted from the dimension's lowest Y, the bit order of Java's `BitSet`, so the bytes are upstream's.
-use super::palette::{CacheEnv, F_AIR, F_AIRLIKE, F_AVOID, F_FLOWING, F_MAGMA, F_WATER};
+use super::palette::{CacheEnv, F_AIRLIKE, F_AVOID, F_FLOWING, F_MAGMA, F_PASSABLE_DRY, F_WATER};
 use crate::pos::Pos;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -268,7 +268,8 @@ pub trait PackSource {
     }
 }
 
-/// D3: whether a still water block on the chunk's edge has a horizontal flow: a neighbour that is flowing water, or an empty neighbour with water below it.
+/// D3: whether a still water block on the chunk's edge has a horizontal flow: a neighbour that is flowing water, or a neighbour with no fluid that is not in `#blocks_fluid_flow` (air, short grass, a torch, a flower) with water below it. A
+/// waterlogged neighbour has a fluid, so it does not count.
 /// Upstream asks the fluid for its flow vector, which reads the chunk next door; this reads the same cells.
 fn edge_flow(src: &dyn PackSource, env: &CacheEnv, x: i32, y: i32, z: i32, height: i32) -> bool {
     for (dx, dz) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
@@ -287,7 +288,7 @@ fn edge_flow(src: &dyn PackSource, env: &CacheEnv, x: i32, y: i32, z: i32, heigh
         if f & F_WATER != 0 && f & F_FLOWING != 0 {
             return true;
         }
-        if f & F_AIR != 0 {
+        if f & F_PASSABLE_DRY != 0 {
             if let Some(below) = at(y - 1) {
                 if env.flags(below) & F_WATER != 0 {
                     return true;
@@ -541,6 +542,34 @@ pub(super) mod tests {
         let mut d = Cells::new(384);
         d.set(8, 100, 8, WATER);
         assert_eq!(pack(&d, 0, 0, &dim, &env, false, 0).get_type(get_position_index(8, 100, 8)), PathingBlockType::Water);
+    }
+
+    /// D3: the neighbour beyond the edge that lets water run off is any dry block outside `#blocks_fluid_flow`, not only air.
+    #[test]
+    fn d3_edge_flow_counts_dry_non_blocking_neighbours() {
+        let env = env();
+        let dim = overworld();
+        let at = (15, 100, 3);
+        let typ = |beside: usize, below: usize| {
+            let mut c = Cells::new(384);
+            c.set(at.0, at.1, at.2, WATER);
+            c.outside.insert((16, 100, 3), beside);
+            c.outside.insert((16, 99, 3), below);
+            pack(&c, 0, 0, &dim, &env, false, 0).get_type(get_position_index(at.0, at.1, at.2))
+        };
+        // air and short grass (not in the tag) with water below: the water runs off
+        assert_eq!(typ(AIR, WATER), PathingBlockType::Avoid);
+        assert_eq!(typ(GRASS, WATER), PathingBlockType::Avoid);
+        // the same with nothing wet below
+        assert_eq!(typ(GRASS, AIR), PathingBlockType::Water);
+        assert_eq!(typ(GRASS, STONE), PathingBlockType::Water);
+        // a solid block beside it (in the tag) does not
+        assert_eq!(typ(STONE, WATER), PathingBlockType::Water);
+        assert_eq!(typ(CHEST, WATER), PathingBlockType::Water);
+        // a waterlogged non-solid block has a fluid, so it is not a dry neighbour
+        assert_eq!(typ(SEAGRASS, WATER), PathingBlockType::Water);
+        // lava beside it is neither
+        assert_eq!(typ(LAVA, WATER), PathingBlockType::Water);
     }
 
     #[test]

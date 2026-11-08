@@ -74,6 +74,7 @@ pub fn state_from_horizon(src: &Sources<'_>, id: BlockStateId, land: bool) -> St
         // Horizon reads those over an empty level, where a shulker box is full. The comparison holds this for all states.
         shape_full: raw.flags & state_flags::FULL_COLLISION != 0 && !src.behaviours.data(id).dynamic_shape,
         waterlogged: on("waterlogged"),
+        blocks_fluid_flow: in_tag("minecraft:blocks_fluid_flow"),
         top_sturdy: src.behaviours.is_face_sturdy(id, horizon_core::geometry::Direction::Up),
         replaceable: raw.flags & state_flags::REPLACEABLE != 0,
         falling_free: raw.flags & (state_flags::AIR | state_flags::LIQUID | state_flags::REPLACEABLE) != 0 || in_tag("minecraft:fire"),

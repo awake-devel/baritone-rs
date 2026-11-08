@@ -50,8 +50,10 @@ Fields: upstream, ours, why, changes chosen paths, decided by, expectation in th
   has a horizontal flow it returns `WATER`, otherwise `AVOID`. The comment above the function says flowing water should
   be avoided, so the test is the wrong way round.
 - **Ours:** flowing water at the edge is `AVOID`, still water is `WATER`, as for water inside the chunk. The flow of a still block at the edge is read from the cells
-  around it, the neighbouring chunk's included (`PackSource::outside_state`): a neighbour that is flowing water, or an empty cell with water below it. Upstream asks the fluid
-  for its flow vector, which reads the same cells; this is a reading of that rule, not a copy, and it is not compared with Java.
+  around it, the neighbouring chunk's included (`PackSource::outside_state`): a neighbour that is flowing water, or a neighbour with no fluid that is not in the block tag
+  `#blocks_fluid_flow` (air, short grass, a torch, a flower) with water below it. A waterlogged neighbour has a fluid, so it does not count. This is what `FlowingFluid.getFlow` does for the cases
+  that matter here (26.3: it asks that tag, which holds the blocks that stop motion and the signs; older versions asked `blocksMotion()`). Upstream asks the fluid for its flow vector, which reads the same
+  cells; this is a reading of that rule, not a copy. It does not model the cancelling of two opposite flows. The block fact `blocks_fluid_flow` is compared with Java for every block state (`tools/facts-compare`); the rule itself is not.
 - **Why:** water at the edge of a chunk should be treated like water elsewhere.
 - **Changes chosen paths:** yes, around water at chunk edges.
 - **Decided by:** the owner.
@@ -807,18 +809,17 @@ Not tested:
 
 #### For the owner (reported by the reviews, not changed)
 
-- **D3 at the chunk edge looks only at air.** Minecraft's flow vector counts any neighbour that does not block motion (grass, a torch, a plant) with water below it; `edge_flow` asks for air. A still source next to short grass with water below it is cached as `WATER`, where a faithful reading of D3 says `AVOID`.
-  Fixing it changes cached types at chunk edges and so paths; D3 says what the owner decided, and the reading is not compared with Java. Not changed.
+- **D3 at the chunk edge looked only at air.** Minecraft's flow vector counts any neighbour that does not block flow (grass, a torch, a plant) with water below it; `edge_flow` asked for air. **Done**, fixed on the owner's decision (2026-11-08): `edge_flow` now uses the fact `blocks_fluid_flow` (see D3). Cached types at chunk edges, and so paths, change for such cells.
 - **Dimension folders carry the logical height only** (`<path>_<logical height>`, upstream's name). A server that changes `min_y` or `height` under the same dimension id and the same logical height shifts old data silently. A fix would add `min_y` to the folder name and so move every existing cache. Not changed.
-- **A world created again with the same name** reads the old world's cache (the game gives the mod a name, not a folder or a seed). Needs the seed or a world id from Horizon.
-- **No cap on disk or memory.** `cachedChunksExpirySeconds` is -1, nothing counts the bytes, and the folders of deleted worlds stay (69 MB in 236 files in the test instance). Memory is pruned only in `save` (every 10 minutes), a full region costs about 29 MB, an empty one 1.2 MB, and
+- **A world created again with the same name** reads the old world's cache (the game gives the mod a name, not a folder or a seed). Needs the seed or a world id from Horizon. **Owner (2026-11-08): kept as a known edge case, not fixed for now.**
+- **No cap on disk or memory.** `cachedChunksExpirySeconds` is -1, nothing counts the bytes, and the folders of deleted worlds stay (69 MB in 236 files in the test instance). **Owner (2026-11-08): not a concern, kept as is.** Memory is pruned only in `save` (every 10 minutes), a full region costs about 29 MB, an empty one 1.2 MB, and
   `WorldProvider` keeps every opened world and its two threads for the process. Upstream is the same.
-- **Quitting on a server saves on a detached thread** (no stop hook there): up to 10 minutes of cache can be lost. Quitting from a single player world saves on the server thread, which freezes in proportion to the dirty regions (0.86 s for a full noisy region in the review).
+- **Quitting on a server saves on a detached thread** (no stop hook there): up to 10 minutes of cache can be lost. Quitting from a single player world saves on the server thread, which freezes in proportion to the dirty regions (0.86 s for a full noisy region in the review). **Owner (2026-11-08): kept as a known edge case.** Nothing is lost when the player disconnects and stays in the game a few seconds; region files are written to a temporary file and moved into place, so a cut save never corrupts them.
 - **Smaller:** `/b set cachedChunksExpirySeconds <small>` deletes cached chunks at the next save with nothing kept aside; region files get the default permissions (0644); `server_key` is an unsalted hash, so a guessed address can be tested; a panic outside `catch_unwind` in the pack or save thread stops it silently.
 
 ### Upstream behaviour kept, found in the R2 cache reviews (reported, not fixed)
 
 - **U22. Cache growth has no bound.** `cachedChunksExpirySeconds` defaults to -1, nothing counts bytes, the folders of old worlds stay, and regions leave memory only in `save` (every 10 minutes). Same in upstream.
 - **U23. The over-full pack queue drops the oldest chunks** (`chunkPackerQueueMaxSize`), and a dropped chunk is cached only if it is packed again. The port keeps the rule and avoids reaching it with `has_room` (D43.5).
-- **U24. The flow vector at a chunk edge counts any non-blocking neighbour**, not only air (see "For the owner" in D43). Upstream asks the fluid, so it is right there; the port's reading (D3) is narrower.
+- **U24. The flow vector at a chunk edge counts any non-blocking neighbour**, not only air (see "For the owner" in D43). Upstream asks the fluid, so it is right there. **Fixed** (2026-11-08): the port's reading (D3) now counts the same neighbours.
 - **U25. The cache is keyed by a name that can repeat.** Upstream keys a single player world by its folder, which is unique; the game gives the mod only the name (D41.2, D43.3), so a world made again with the same name reads the old cache.
