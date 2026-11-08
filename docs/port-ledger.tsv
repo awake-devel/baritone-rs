@@ -34,6 +34,40 @@ BinaryHeapOpenSet	removeLowest	port	1b8e87c	4cc67b3e28f567da	search-compare	An e
 BinaryHeapOpenSet	siftUp	port	1b8e87c	e55f80167b7a8549	search-compare	
 BinaryHeapOpenSet	size	port	1b8e87c	22996621ae0759a4	search-compare	
 BinaryHeapOpenSet	update	port	1b8e87c	98fbae3ac199902a	search-compare	
+BlockOptionalMeta	<init>(Block)	redesign	1b8e87c	4dabdf8f70b54ac3		`BlockOptionalMeta::from_block`. The glue gives the blocks in a `BlockIndex`.
+BlockOptionalMeta	<init>(String)	redesign	1b8e87c	a9144cfbb6496976		`BlockOptionalMeta::parse`. Same pattern and same texts for an invalid selector, name or pair; an unknown property is a message instead of a `NullPointerException` (D37).
+BlockOptionalMeta	castToIProperty	drop	1b8e87c	ea4f92941a53fc83		Java generics.
+BlockOptionalMeta	drops	redesign	1b8e87c	903f8ca3c3b08c76		The glue gives the items each block drops (`BlockIndex::new`), from the loot tables; the engine does not read loot tables.
+BlockOptionalMeta	getAllBlockStates	port	1b8e87c	faea387437cc8794		In id order.
+BlockOptionalMeta	getAnyBlockState	port	1b8e87c	fe8672cc4329951a		The lowest id; upstream takes the first of a hash set.
+BlockOptionalMeta	getBlock	port	1b8e87c	c11bea5bf4fa59f7		The name, not the `Block`.
+BlockOptionalMeta	getDrops	drop	1b8e87c	04945437f8642e47		Loot tables: the glue's (see `drops`).
+BlockOptionalMeta	getStackHashes	redesign	1b8e87c	6e90a37d7f00b5f4		`BlockOptionalMeta::build` keeps the item paths of the drops; the engine compares paths, not hashes.
+BlockOptionalMeta	getStateHashes	drop	1b8e87c	7933fadb753b5a67		States are compared by id.
+BlockOptionalMeta	getStates	redesign	1b8e87c	421744d4778da294		`BlockOptionalMeta::build`: the block's state ids with the wanted properties.
+BlockOptionalMeta	getVanillaServerPack	drop	1b8e87c	22a9a138aa6bc6e4		Loot tables: the glue's.
+BlockOptionalMeta	matches(Block)	port	1b8e87c	1d250692544cb647		
+BlockOptionalMeta	matches(BlockState)	port	1b8e87c	77f1ebf230e5f6a0		By state id.
+BlockOptionalMeta	matches(ItemStack)	port	1b8e87c	e953e4a7835caf39		By item path; upstream's hash minus the damage is the item.
+BlockOptionalMeta	parseProperties	redesign	1b8e87c	2ccf1a6a63f3772c		Inside `BlockOptionalMeta::parse`.
+BlockOptionalMeta	stackHashes	port	1b8e87c	ee2808678e32ef6a		The item paths.
+BlockOptionalMeta	toString	port	1b8e87c	d1398aafa5efdf6f		`Display`.
+BlockOptionalMeta.ServerLevelStub	<init>	drop	1b8e87c	87921b5cda38531f		Loot tables: the glue gives the drops of each block.
+BlockOptionalMeta.ServerLevelStub	enabledFeatures	drop	1b8e87c	729e44af192f2cf5		Loot tables: the glue gives the drops of each block.
+BlockOptionalMeta.ServerLevelStub	fastCreate	drop	1b8e87c	c9de9e3ac87ddf47		Loot tables: the glue gives the drops of each block.
+BlockOptionalMeta.ServerLevelStub	getUnsafe	drop	1b8e87c	d454a1ff054620dd		Loot tables: the glue gives the drops of each block.
+BlockOptionalMeta.ServerLevelStub	holder	drop	1b8e87c	4e2b970c0203193c		Loot tables: the glue gives the drops of each block.
+BlockOptionalMeta.ServerLevelStub	load	drop	1b8e87c	e57c02ec8f03265a		Loot tables: the glue gives the drops of each block.
+BlockOptionalMeta.ServerLevelStub	registryAccess	drop	1b8e87c	d1e9f4e5b2ea66e9		Loot tables: the glue gives the drops of each block.
+BlockOptionalMetaLookup	<init>(Block...)	drop	1b8e87c	aeae5df999b43060		`BlockOptionalMetaLookup::new` takes selectors.
+BlockOptionalMetaLookup	<init>(BlockOptionalMeta...)	redesign	1b8e87c	bec10b60733877d3		`BlockOptionalMetaLookup::new`.
+BlockOptionalMetaLookup	<init>(List)	drop	1b8e87c	06e509b4e608e528		`BlockOptionalMetaLookup::new` takes selectors.
+BlockOptionalMetaLookup	<init>(String...)	redesign	1b8e87c	8d4a4c9773b076c5		`BlockOptionalMetaLookup::from_names`.
+BlockOptionalMetaLookup	blocks	port	1b8e87c	0aeea5593013039f		
+BlockOptionalMetaLookup	has(Block)	port	1b8e87c	a33beb0435c59a31		By name.
+BlockOptionalMetaLookup	has(BlockState)	port	1b8e87c	ca11d5933ad0f455		By state id.
+BlockOptionalMetaLookup	has(ItemStack)	port	1b8e87c	65304dc4f5f5809a		By item path.
+BlockOptionalMetaLookup	toString	port	1b8e87c	eaf8231c6193edeb		`Display`.
 BlockStateInterface	<init>(BetterWorldBorder,int,int)	missing	1b8e87c	1eda20ba48aae6ec		
 BlockStateInterface	<init>(IPlayerContext)	missing	1b8e87c	0539aaf67088d815		
 BlockStateInterface	<init>(IPlayerContext,boolean)	missing	1b8e87c	527c461524f246fa		
@@ -148,6 +182,18 @@ ExploreProcess.IChunkFilter	isAlreadyExplored	later	1b8e87c	dc670bf5d24b3a66		Pr
 ExploreProcess.JsonChunkFilter	<init>	later	1b8e87c	8866e4d1f070f2b7		Process: next after the first release (mine, follow, explore, in that order).
 ExploreProcess.JsonChunkFilter	countRemain	later	1b8e87c	01f45c8c68717029		Process: next after the first release (mine, follow, explore, in that order).
 ExploreProcess.JsonChunkFilter	isAlreadyExplored	later	1b8e87c	ab870a6ee4f61fc2		Process: next after the first release (mine, follow, explore, in that order).
+FasterWorldScanner	collectChunkSections	port	1b8e87c	b467b8d1491697f6		`scan::scan_chunk_internal`. The sections from the player's outwards, at most `max` hits (D39).
+FasterWorldScanner	getChunkRange	port	1b8e87c	c64e1dd8b35c8186		`scan::get_chunk_range`.
+FasterWorldScanner	getIncludedFilterIndices	drop	1b8e87c	d70cbed037b46a68		A speed-up over the palette; the engine matches state ids cell by cell.
+FasterWorldScanner	getIncludedFilterIndicesFromRegistry	drop	1b8e87c	e930cb79683d8297		A speed-up over the palette; the engine matches state ids cell by cell.
+FasterWorldScanner	getPalette	drop	1b8e87c	10417afddc534f7f		Palette access; the engine reads cells (D39).
+FasterWorldScanner	repack(IPlayerContext)	drop	1b8e87c	02ace948cef59822		The cached world is not ported (D37).
+FasterWorldScanner	repack(IPlayerContext,int)	drop	1b8e87c	00113c50527d6227		The cached world is not ported (D37).
+FasterWorldScanner	scanChunk	later	1b8e87c	d205b000c4a83700		Used by the builder and the cache; `scan_chunk_radius` is the scan the mine process makes.
+FasterWorldScanner	scanChunkInternal	redesign	1b8e87c	440936c38256da80		One function with `collectChunkSections`: `scan::scan_chunk_internal` (unloaded chunk: nothing).
+FasterWorldScanner	scanChunkRadius	port	1b8e87c	a02b01667142f119		`scan::scan_chunk_radius`. The same first `max` hits in the same order, walked in order instead of in parallel (D39).
+FasterWorldScanner	scanChunksInternal	redesign	1b8e87c	447a2ebf7f58d3fd		Inside `scan::scan_chunk_radius`: the chunks in order until `max` hits are in, instead of a parallel stream with `limit`.
+FasterWorldScanner	visitSection	port	1b8e87c	00a4e1e128620148		`scan::visit_section`. A section of one state is read off the cells (D39).
 Favoring	<init>(IPath,CalculationContext)	redesign	1b8e87c	3fd5b204257288a8		`Favoring::from_previous`. The coefficient comes from the settings.
 Favoring	<init>(IPlayerContext,IPath,CalculationContext)	redesign	1b8e87c	fb0a2c449d12b6a0		`Favoring::new`. The avoidances come from `Avoidance::create`, which the caller feeds.
 Favoring	calculate	port	1b8e87c	c595a8db6f667123	search-compare	
@@ -164,22 +210,22 @@ FollowProcess	onTick	later	1b8e87c	e774687a82c9e44c		Process: next after the fir
 FollowProcess	pickup	later	1b8e87c	75d823431af51119		Process: next after the first release (mine, follow, explore, in that order).
 FollowProcess	scanWorld	later	1b8e87c	a794a49d26b7a5c0		Process: next after the first release (mine, follow, explore, in that order).
 FollowProcess	towards	later	1b8e87c	c9e548474908ecae		Process: next after the first release (mine, follow, explore, in that order).
-GetToBlockProcess	<init>	missing	1b8e87c	e1462b0576e82003		
-GetToBlockProcess	areAdjacent	missing	1b8e87c	35bb2c42eff4417f		
-GetToBlockProcess	blacklistClosest	missing	1b8e87c	1fb33c1ee9b790a1		
-GetToBlockProcess	blockOnTopMustBeRemoved	missing	1b8e87c	3d336dda0ec72e43		
-GetToBlockProcess	createGoal	missing	1b8e87c	e421b051ac5a3470		
-GetToBlockProcess	displayName0	missing	1b8e87c	f7fdd1f642e4f871		
-GetToBlockProcess	getToBlock	missing	1b8e87c	e6a0ecbf176076a0		
-GetToBlockProcess	isActive	missing	1b8e87c	7ec33c51b3164379		
-GetToBlockProcess	onLostControl	missing	1b8e87c	4dc1ee4764c899bd		
-GetToBlockProcess	onTick	missing	1b8e87c	0815e33e2e1ea51f		
-GetToBlockProcess	rescan	missing	1b8e87c	0f0aa69d090b7495		
-GetToBlockProcess	rightClick	missing	1b8e87c	597a58d8848ae8ac		
-GetToBlockProcess	rightClickOnArrival	missing	1b8e87c	69867b5af01c3123		
-GetToBlockProcess	walkIntoInsteadOfAdjacent	missing	1b8e87c	f06b54e55a3ee137		
-GetToBlockProcess.GetToBlockCalculationContext	<init>	missing	1b8e87c	81dc5357229f27c1		
-GetToBlockProcess.GetToBlockCalculationContext	breakCostMultiplierAt	missing	1b8e87c	bb01e1e18fde5c6e		
+GetToBlockProcess	<init>	redesign	1b8e87c	e1462b0576e82003		`GetToBlockProcess::new`.
+GetToBlockProcess	areAdjacent	port	1b8e87c	35bb2c42eff4417f		
+GetToBlockProcess	blacklistClosest	port	1b8e87c	1fb33c1ee9b790a1		
+GetToBlockProcess	blockOnTopMustBeRemoved	port	1b8e87c	3d336dda0ec72e43		
+GetToBlockProcess	createGoal	port	1b8e87c	e421b051ac5a3470		
+GetToBlockProcess	displayName0	port	1b8e87c	f7fdd1f642e4f871		`display_name`.
+GetToBlockProcess	getToBlock	port	1b8e87c	e6a0ecbf176076a0		The first scan is run by `Pathing::tick`; `feet` is given by the glue.
+GetToBlockProcess	isActive	port	1b8e87c	7ec33c51b3164379		
+GetToBlockProcess	onLostControl	port	1b8e87c	4dc1ee4764c899bd		
+GetToBlockProcess	onTick	port	1b8e87c	0815e33e2e1ea51f		The scan every `mineGoalUpdateInterval` ticks is a job for a thread (D37); none starts while one is out.
+GetToBlockProcess	rescan	redesign	1b8e87c	0f0aa69d090b7495		`make_job` and `deliver`: the scan is a `ScanJob` a thread runs, and its answer comes in by generation.
+GetToBlockProcess	rightClick	port	1b8e87c	597a58d8848ae8ac		`println` of the container is dropped; "container is not the inventory menu" is `ProcessInputs::container_open`.
+GetToBlockProcess	rightClickOnArrival	port	1b8e87c	69867b5af01c3123		
+GetToBlockProcess	walkIntoInsteadOfAdjacent	port	1b8e87c	f06b54e55a3ee137		
+GetToBlockProcess.GetToBlockCalculationContext	<init>	redesign	1b8e87c	81dc5357229f27c1		`ScanJob::run` with `ignore_allow_break`.
+GetToBlockProcess.GetToBlockCalculationContext	breakCostMultiplierAt	redesign	1b8e87c	bb01e1e18fde5c6e		`ScanJob::run` runs the scan with `allowBreak` on.
 Goal	heuristic()	port	1b8e87c	76039b40b2f67ee5	cost-compare	
 Goal	heuristic(BlockPos)	drop	1b8e87c	d7a01e52903c5830		The engine has no BlockPos; callers pass coordinates.
 Goal	heuristic(int,int,int)	port	1b8e87c	6b3a05c07414772a	cost-compare	
@@ -328,31 +374,31 @@ LookBehavior.AimProcessor	<init>	redesign	1b8e87c	2d79797ea89f32b2		`AimProcesso
 LookBehavior.AimProcessor	getPrevRotation	redesign	1b8e87c	8ce25b03ace8e15c		`AimProcessor`: the previous rotation is the player's.
 LookBehavior.Target	<init>	drop	1b8e87c	5b012e9c6ff7c960		`freelook::Plan`.
 LookBehavior.Target.Mode	resolve	redesign	1b8e87c	a2cfb7cfedc5b285		`freelook::resolve_mode`, without the elytra and swimming branches (D35).
-MineProcess	<init>	later	1b8e87c	bfae21d062cbb6cf		Process: next after the first release (mine, follow, explore, in that order).
-MineProcess	addNearby	later	1b8e87c	95a70841d1b7c495		Process: next after the first release (mine, follow, explore, in that order).
-MineProcess	coalesce	later	1b8e87c	06f301cb066ad1f6		Process: next after the first release (mine, follow, explore, in that order).
-MineProcess	displayName0	later	1b8e87c	513a8ecb596ff1db		Process: next after the first release (mine, follow, explore, in that order).
-MineProcess	droppedItemsScan	later	1b8e87c	059611453fbec80d		Process: next after the first release (mine, follow, explore, in that order).
-MineProcess	filterFilter	later	1b8e87c	4e39a42425a98cd4		Process: next after the first release (mine, follow, explore, in that order).
-MineProcess	internalMiningGoal	later	1b8e87c	02dc183052cd9682		Process: next after the first release (mine, follow, explore, in that order).
-MineProcess	isActive	later	1b8e87c	d72afc32eff6149a		Process: next after the first release (mine, follow, explore, in that order).
-MineProcess	isNextToAir	later	1b8e87c	2332dd5b2c06ae43		Process: next after the first release (mine, follow, explore, in that order).
-MineProcess	mine	later	1b8e87c	f32a044b158e5b9c		Process: next after the first release (mine, follow, explore, in that order).
-MineProcess	mineByName	later	1b8e87c	de219c34259bf5e5		Process: next after the first release (mine, follow, explore, in that order).
-MineProcess	onLostControl	later	1b8e87c	fc12d9f3b70b461e		Process: next after the first release (mine, follow, explore, in that order).
-MineProcess	onTick	later	1b8e87c	0d0ecbfe538be9c0		Process: next after the first release (mine, follow, explore, in that order).
-MineProcess	plausibleToBreak	later	1b8e87c	06fa4e8ad7df7348		Process: next after the first release (mine, follow, explore, in that order).
-MineProcess	prune	later	1b8e87c	de619a8735cd2833		Process: next after the first release (mine, follow, explore, in that order).
-MineProcess	rescan	later	1b8e87c	331d08932c23a091		Process: next after the first release (mine, follow, explore, in that order).
-MineProcess	searchWorld	later	1b8e87c	99dcb3bcc2205f55		Process: next after the first release (mine, follow, explore, in that order).
-MineProcess	updateGoal	later	1b8e87c	cbb8423378b658fd		Process: next after the first release (mine, follow, explore, in that order).
-MineProcess	updateLoucaSystem	later	1b8e87c	b8f5b17a012d301b		Process: next after the first release (mine, follow, explore, in that order).
-MineProcess.GoalThreeBlocks	<init>	later	1b8e87c	c043b903eea393fb		Process: next after the first release (mine, follow, explore, in that order).
-MineProcess.GoalThreeBlocks	equals	later	1b8e87c	a59b35b45d1185c0		Process: next after the first release (mine, follow, explore, in that order).
-MineProcess.GoalThreeBlocks	hashCode	later	1b8e87c	60fc2508440abd71		Process: next after the first release (mine, follow, explore, in that order).
-MineProcess.GoalThreeBlocks	heuristic	later	1b8e87c	0c0551a1ec975b75		Process: next after the first release (mine, follow, explore, in that order).
-MineProcess.GoalThreeBlocks	isInGoal	later	1b8e87c	a611ad8b8438e84b		Process: next after the first release (mine, follow, explore, in that order).
-MineProcess.GoalThreeBlocks	toString	later	1b8e87c	3669a6976d6b71e5		Process: next after the first release (mine, follow, explore, in that order).
+MineProcess	<init>	redesign	1b8e87c	bfae21d062cbb6cf		`MineProcess::new`.
+MineProcess	addNearby	port	1b8e87c	95a70841d1b7c495		Legit mine.
+MineProcess	coalesce	port	1b8e87c	06f301cb066ad1f6		
+MineProcess	displayName0	port	1b8e87c	513a8ecb596ff1db		`display_name`.
+MineProcess	droppedItemsScan	port	1b8e87c	059611453fbec80d		The item entities come from the glue (`ProcessInputs::item_entities`).
+MineProcess	filterFilter	port	1b8e87c	4e39a42425a98cd4		
+MineProcess	internalMiningGoal	port	1b8e87c	02dc183052cd9682		
+MineProcess	isActive	port	1b8e87c	d72afc32eff6149a		
+MineProcess	isNextToAir	port	1b8e87c	2332dd5b2c06ae43		
+MineProcess	mine	port	1b8e87c	f32a044b158e5b9c		The first scan is run by `Pathing::tick`, not inside the call. `Pathing::mine` is the call.
+MineProcess	mineByName	redesign	1b8e87c	de219c34259bf5e5		`command::mine_command` and `BlockOptionalMetaLookup::from_names`.
+MineProcess	onLostControl	port	1b8e87c	fc12d9f3b70b461e		
+MineProcess	onTick	port	1b8e87c	0d0ecbfe538be9c0		The scan every `mineGoalUpdateInterval` ticks is a job for a thread (D37); none starts while one is out. `notificationOnMineFail` is the glue's.
+MineProcess	plausibleToBreak	port	1b8e87c	06fa4e8ad7df7348		
+MineProcess	prune	port	1b8e87c	de619a8735cd2833		
+MineProcess	rescan	redesign	1b8e87c	331d08932c23a091		`make_job` and `deliver`: the scan is a `ScanJob` a thread runs, and its answer comes in by generation.
+MineProcess	searchWorld	port	1b8e87c	99dcb3bcc2205f55		There is no cached world: every block is scanned (D37).
+MineProcess	updateGoal	port	1b8e87c	cbb8423378b658fd		
+MineProcess	updateLoucaSystem	port	1b8e87c	b8f5b17a012d301b		
+MineProcess.GoalThreeBlocks	<init>	redesign	1b8e87c	c043b903eea393fb		`Goal::ThreeBlocks`.
+MineProcess.GoalThreeBlocks	equals	drop	1b8e87c	a59b35b45d1185c0		`Goal` derives `PartialEq`.
+MineProcess.GoalThreeBlocks	hashCode	drop	1b8e87c	60fc2508440abd71		
+MineProcess.GoalThreeBlocks	heuristic	port	1b8e87c	0c0551a1ec975b75		The arm of `Goal::heuristic`.
+MineProcess.GoalThreeBlocks	isInGoal	port	1b8e87c	a611ad8b8438e84b		The arm of `Goal::is_in_goal`.
+MineProcess.GoalThreeBlocks	toString	drop	1b8e87c	3669a6976d6b71e5		
 Movement	<init>(IBaritone,BetterBlockPos,BetterBlockPos,BetterBlockPos[])	redesign	1b8e87c	2f48e88c7287f8a1		`Movement::new` keeps kind, src and dest. toBreak and toPlace are executor work.
 Movement	<init>(IBaritone,BetterBlockPos,BetterBlockPos,BetterBlockPos[],BetterBlockPos)	redesign	1b8e87c	74088287641e4e86		`Movement::new` keeps kind, src and dest. toBreak and toPlace are executor work.
 Movement	calculateCost	redesign	1b8e87c	c6cdc8d04918ae75		`Movement::calculate_cost` matches on the kind.
@@ -382,7 +428,7 @@ Movement	toBreak	port	1b8e87c	3d1cc95adf1aa01d		Executor: S4.
 Movement	toBreakAll	port	1b8e87c	b9d13341c6f54c6d		Executor: S4.
 Movement	toPlace	port	1b8e87c	55e066d696ecc2ac		Executor: S4.
 Movement	toWalkInto	port	1b8e87c	b4ce8638adae76f0		`exec/movements.rs`: empty except for the diagonal.
-Movement	update	port	1b8e87c	3ddb04be9cc19623		`exec/movements.rs`. Swimming (`allowSwimming`) and the click when the head is in a block are failures by name. The slot to hold goes to `Controls::select`.
+Movement	update	port	1b8e87c	3ddb04be9cc19623		`exec/movements.rs`. Swimming (`allowSwimming`) is a failure by name. With the head in a block it switches to the best tool for the block the crosshair is on and presses the left button, as upstream. The slot to hold goes to `Controls::select`.
 Movement	updateState	port	1b8e87c	88bc25824f1ae844		`exec/movements.rs`: `base_update_state`.
 MovementAscend	<init>	redesign	1b8e87c	f97db35233e1a72e		`Movement::new`. toBreak and toPlace are executor work.
 MovementAscend	calculateCost	port	1b8e87c	57e33d60a46f1c69		
@@ -486,7 +532,7 @@ MovementHelper	moveTowardsWithSlightRotation	port	1b8e87c	1813bf5430988acc		`exe
 MovementHelper	moveTowardsWithoutRotation(IPlayerContext,MovementState,BlockPos)	port	1b8e87c	14e13264cd7131ba		`exec/helper.rs`.
 MovementHelper	moveTowardsWithoutRotation(IPlayerContext,MovementState,float)	port	1b8e87c	4683692d05d274b0		`exec/helper.rs`.
 MovementHelper	mustBeSolidToWalkOn	port	1b8e87c	4158dd03d47cb9fd	cost-compare	
-MovementHelper	openDoors	port	1b8e87c	22a8f6aedc2cd83e		The click is `Intent::use_block` (with `can_use_blocks`), else `NeedsUseBlock`. The aim is the middle of the block.
+MovementHelper	openDoors	port	1b8e87c	22a8f6aedc2cd83e		The click is `Intent::use_block`, always. The aim is the middle of the block, not of its collision shape (D15).
 MovementHelper	possiblyFlowing	port	1b8e87c	135e5ad22ff9a802	cost-compare	
 MovementHelper	steppingOnBlocks	port	1b8e87c	2549cdcfe6accd89		Executor side: S4.
 MovementHelper	switchToBestToolFor(IPlayerContext,BlockState)	port	1b8e87c	266b18edf4cca6d2		`inventory.rs`: the slot to select, which the executor puts in the intent.
@@ -527,7 +573,7 @@ MovementTraverse	cost	port	1b8e87c	d3f6b3b49021d2c3	cost-compare
 MovementTraverse	prepared	port	1b8e87c	cca0bb7772344049		Executor: S4.
 MovementTraverse	reset	port	1b8e87c	e415f81bea730766		Executor: S4.
 MovementTraverse	safeToCancel	port	1b8e87c	3ed0a190a240e5f9		Executor: S4.
-MovementTraverse	updateState	port	1b8e87c	71cb6aeb8d77e9f1		Breaks (walking on while it does), bridges (sneak, place against the block it left, back up) and opens doors and gates (`use_block`, or `NeedsUseBlock` when the glue cannot).
+MovementTraverse	updateState	port	1b8e87c	71cb6aeb8d77e9f1		Breaks (walking on while it does), bridges (sneak, place against the block it left, back up) and opens doors and gates (`use_block`; a gate only when `reachable` finds a rotation, as upstream).
 Moves	<init>(int,int,int)	redesign	1b8e87c	44231cfdfba4e7ef	cost-compare	The enum has offset and flag functions instead of fields.
 Moves	<init>(int,int,int,boolean,boolean)	redesign	1b8e87c	7cb2b27c96e607f1	cost-compare	The enum has offset and flag functions instead of fields.
 Moves	apply	port	1b8e87c	779e80c6d2db7615	cost-compare	
@@ -645,7 +691,7 @@ PathingBehavior	onRenderPass	later	1b8e87c	e217451d56350922		The path renderer i
 PathingBehavior	onTick	port	1b8e87c	02014521947fbafc		`Pathing::tick`, with `PathingControlManager.preTick` and `postTick`.
 PathingBehavior	pathStart	port	1b8e87c	18f2e9d89c937e5c		
 PathingBehavior	queuePathEvent	port	1b8e87c	3bcff0b083617cfa		
-PathingBehavior	requestPause	later	1b8e87c	d5b5cd982e3fcc52		The path renderer is the glue's; no process pauses.
+PathingBehavior	requestPause	port	1b8e87c	d5b5cd982e3fcc52		
 PathingBehavior	resetEstimatedTicksToGoal()	redesign	1b8e87c	c0461dbb844e4788		Called with the expected start.
 PathingBehavior	resetEstimatedTicksToGoal(BetterBlockPos)	port	1b8e87c	74e22c5b48800ceb		
 PathingBehavior	resetEstimatedTicksToGoal(BlockPos)	redesign	1b8e87c	a5176b40deab5f37		Same as the BetterBlockPos one.
@@ -654,16 +700,16 @@ PathingBehavior	secretInternalSegmentCancel	port	1b8e87c	a6de6ac3e70b389c
 PathingBehavior	secretInternalSetGoal	redesign	1b8e87c	f21f443a2e6be667		A field.
 PathingBehavior	secretInternalSetGoalAndPath	port	1b8e87c	cfa1fe74e97238e8		
 PathingBehavior	softCancelIfSafe	port	1b8e87c	61d2e7415fd06568		
-PathingBehavior	tickPath	port	1b8e87c	d02e75600b51bdb3		`process/pathing.rs`. The pause request is left out (no process sends one). The partial path of the running search is not readable: see deviations.md.
-PathingControlManager	<init>	drop	1b8e87c	73e599ccae712dad		There is one process.
+PathingBehavior	tickPath	port	1b8e87c	d02e75600b51bdb3		`process/pathing.rs`. The partial path of the running search is not readable: see deviations.md.
+PathingControlManager	<init>	drop	1b8e87c	73e599ccae712dad		`Pathing::new` makes the three processes.
 PathingControlManager	cancelEverything	port	1b8e87c	652e6d2bf2039537		
-PathingControlManager	executeProcesses	redesign	1b8e87c	c7754215340e7e74		One process: `Pathing::execute_processes`.
+PathingControlManager	executeProcesses	redesign	1b8e87c	c7754215340e7e74		`Pathing::execute_processes`: the three processes, newest active first (all priorities are 0), the first answer that is not a deferral wins and the ones behind it lose control.
 PathingControlManager	forceRevalidate	port	1b8e87c	2c9ab62413f438cc		
-PathingControlManager	mostRecentCommand	drop	1b8e87c	a4157261d9bcaa03		There is one process.
-PathingControlManager	mostRecentInControl	drop	1b8e87c	31fdacf17c6282a5		There is one process.
+PathingControlManager	mostRecentCommand	drop	1b8e87c	a4157261d9bcaa03		
+PathingControlManager	mostRecentInControl	drop	1b8e87c	31fdacf17c6282a5		`Pathing::in_control`.
 PathingControlManager	postTick	port	1b8e87c	b95b3eec7a6df6ff		
-PathingControlManager	preTick	port	1b8e87c	99cc018339ae5835		
-PathingControlManager	registerProcess	drop	1b8e87c	5d413c6233069351		There is one process.
+PathingControlManager	preTick	port	1b8e87c	99cc018339ae5835		Mine and get-to-block send `RequestPause` and `RevalidateGoalAndPath`; `SET_GOAL_AND_PAUSE` is not ported (nothing sends it).
+PathingControlManager	registerProcess	drop	1b8e87c	5d413c6233069351		The processes are fixed (`PROCESSES`).
 PathingControlManager	revalidateGoal	port	1b8e87c	3e4f29716bb0ed8b		
 PlayerMovementInput	<init>	drop	1b8e87c	b4a6589c43f29ceb		The keyboard replacement is the glue's: it reads `Intent`.
 PlayerMovementInput	tick	redesign	1b8e87c	bbdc08be1ba3a92d		`Intent::forward_impulse` and `strafe_impulse`; the glue sets the keys.
@@ -762,3 +808,8 @@ VecUtils	distanceToCenter	port	1b8e87c	7a84293414eddb5d
 VecUtils	entityDistanceToCenter	redesign	1b8e87c	a19306296a36b9eb		`distance_to_center` with the player's position.
 VecUtils	entityFlatDistanceToCenter	redesign	1b8e87c	877e6850cca4e05d		`distance_to_center` with the player's position.
 VecUtils	getBlockPosCenter	port	1b8e87c	bbf006dfca711cca		
+WorldScanner	repack(IPlayerContext)	drop	1b8e87c	02ace948cef59822		The cached world is not ported (D37).
+WorldScanner	repack(IPlayerContext,int)	drop	1b8e87c	00113c50527d6227		The cached world is not ported (D37).
+WorldScanner	scanChunk	later	1b8e87c	b23da48219ad93e2		Used by the builder and the cache; `scan_chunk_radius` is the scan the mine process makes.
+WorldScanner	scanChunkInto	drop	1b8e87c	8d15f98e46d051ae		Not used: `BaritoneProvider.getWorldScanner()` is `FasterWorldScanner` (D39).
+WorldScanner	scanChunkRadius	drop	1b8e87c	af354fa90da21dc6		Not used: `BaritoneProvider.getWorldScanner()` is `FasterWorldScanner` (D39).

@@ -513,11 +513,7 @@ impl PathExecutor {
                 std::mem::swap(&mut rt_fake.state, &mut fake);
                 let opened = movements::open_doors(env, &mut rt_fake.state, src, Pos::new(dest.x, src.y, dest.z));
                 if !opened {
-                    if rt_fake.state.status == MoveStatus::Failed {
-                        let why = rt_fake.state.failure.map(CancelReason::Unsupported).unwrap_or(CancelReason::Status(MoveStatus::Failed));
-                        self.cancel(controls, why);
-                        return true;
-                    }
+                    // `open_doors` no longer fails (D15): a door it cannot click yet only leaves the movement waiting
                     if let Some(t) = rt_fake.state.target {
                         controls.look = Some(t.rotation);
                         controls.look_force = t.force;
@@ -865,14 +861,15 @@ mod tests {
     }
 
     #[test]
-    fn the_player_in_a_wall_or_swimming_fails_the_movement_by_name() {
+    fn the_player_in_a_wall_mines_and_swimming_fails_the_movement_by_name() {
         let (mut ex, w, t) = east(1, 8);
         let mut c = Controls::default();
         let set = ExecSettings::default();
         let mut pv = at(1.5, 3.5);
         pv.in_wall = true;
         tick(&mut ex, &t, &w, &pv, &set, &mut c);
-        assert_eq!(ex.cancel_reason(), Some(CancelReason::Unsupported(MoveFailure::InsideWall)));
+        // upstream `Movement.update`: the left button, on whatever the crosshair is on; the movement goes on
+        assert!(!ex.failed() && c.keys.click_left);
         // swimming allowed and in water
         let states = crate::testing::Fixture::new().states;
         let cfg = Config { allow_swimming: true, ..test_config() };
@@ -930,7 +927,7 @@ mod tests {
         let fx = crate::testing::Fixture::new();
         let mut states = fx.states.clone();
         states.push(State { name: "oak_door".into(), door: true, wooden_door: true, pathfindable: true, fluid_empty: true, door_facing: Direction::East, ..State::default() });
-        states.push(State { name: "oak_fence_gate".into(), gate: true, pathfindable: true, fluid_empty: true, ..State::default() });
+        states.push(State { name: "oak_fence_gate".into(), gate: true, pathfindable: false, fluid_empty: true, ..State::default() });
         let n = states.len();
         let _ = Precomputed::new(&states, &fx.cfg);
         Tables::new(states, fx.cfg.clone(), vec![1.0; n])
@@ -960,12 +957,12 @@ mod tests {
         }
     }
 
-    fn run_door(open: bool, can_use: bool, id: usize) -> (PathExecutor, Controls) {
+    fn run_door(open: bool, id: usize) -> (PathExecutor, Controls) {
         let t = door_tables();
         let world = DoorWorld { inner: TestWorld::flat(10, 10), door: vec![(3, 1, 3, id), (3, 2, 3, id)], open };
         let ctx = t.ctx(&world, BORDER);
         let mut ex = PathExecutor::new(chain_path(&ctx, &[p(2, 3), p(3, 3), p(4, 3)]).unwrap()).unwrap();
-        let set = ExecSettings { can_use_blocks: can_use, ..Default::default() };
+        let set = ExecSettings::default();
         let player = at(2.7, 3.5);
         let mut c = Controls::default();
         let env = Env::new(&ctx, &player, &set, player.feet());
@@ -974,30 +971,24 @@ mod tests {
     }
 
     #[test]
-    fn a_closed_wooden_door_is_opened_by_a_use_when_the_glue_can_and_fails_by_name_when_it_cannot() {
+    fn a_closed_wooden_door_is_opened_by_a_use_always() {
         // the door faces east and the path goes east through it: closed, it blocks
-        let (ex, c) = run_door(false, true, 2);
+        let (ex, c) = run_door(false, 2);
         assert!(!ex.failed());
         assert!(c.keys.click_right && !c.keys.forward);
         assert_eq!(c.use_pos, Some(Pos::new(3, 1, 3)));
-        assert!(c.look.is_some());
-        let (ex, c) = run_door(false, false, 2);
-        assert!(ex.failed());
-        assert_eq!(ex.cancel_reason(), Some(CancelReason::Unsupported(MoveFailure::NeedsUseBlock(Pos::new(3, 1, 3)))));
-        assert_eq!(c.keys, Keys::default());
+        assert!(c.look.is_some() && c.look_force);
         // open: walk through
-        let (ex, c) = run_door(true, false, 2);
+        let (ex, c) = run_door(true, 2);
         assert!(!ex.failed() && c.keys.forward && !c.keys.click_right);
     }
 
     #[test]
     fn a_closed_fence_gate_is_the_same() {
-        let (ex, c) = run_door(false, true, 3);
+        let (ex, c) = run_door(false, 3);
         // upstream looks at the upper cell of the gate first
         assert!(!ex.failed() && c.keys.click_right && c.use_pos == Some(Pos::new(3, 2, 3)), "{:?} {:?}", ex.cancel_reason(), c);
-        let (ex, _) = run_door(false, false, 3);
-        assert_eq!(ex.cancel_reason(), Some(CancelReason::Unsupported(MoveFailure::NeedsUseBlock(Pos::new(3, 2, 3)))));
-        let (ex, c) = run_door(true, false, 3);
+        let (ex, c) = run_door(true, 3);
         assert!(!ex.failed() && c.keys.forward);
     }
 

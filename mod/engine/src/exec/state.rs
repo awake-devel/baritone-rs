@@ -95,12 +95,8 @@ impl MoveStatus {
 /// Each has a row marked `later` in docs/port-ledger.tsv.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MoveFailure {
-    /// A closed wooden door or fence gate must be opened, and `ExecSettings::can_use_blocks` is false.
-    NeedsUseBlock(Pos),
     /// `allowSwimming` is on: the swimming rules (`holdWaterline`, `preTurnIntoTheBend`) are not ported.
     Swimming,
-    /// The head is inside a block: upstream mines whatever the crosshair is on, which needs the crosshair. Not ported.
-    InsideWall,
     /// A parkour movement: `allowParkour` is off by default and its executor is not ported.
     Parkour,
 }
@@ -229,7 +225,7 @@ pub struct Intent {
     /// Upstream's `PathExecutor.isSprinting`: whether the player should be sprinting from the next movement. Only meaningful while `active`; when
     /// it is false and `active` is true, the glue stops the sprint (upstream: `setSprinting(false)`).
     pub sprint: bool,
-    /// Right click on this block: a closed door or fence gate. Only when `ExecSettings::can_use_blocks` is on.
+    /// Right click on this block: a closed door or fence gate (`MovementHelper.openDoors`, the gate branch of `MovementTraverse`).
     pub use_block: Option<Pos>,
     /// The hotbar slot to put in the hand (`Inventory.selected`), 0 to 8. `None`: leave the hand as it is. The slot stays until another is asked for.
     pub select_slot: Option<usize>,

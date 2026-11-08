@@ -3,15 +3,21 @@
 use crate::goals::{Goal, GoalSettings};
 use crate::pos::Pos;
 
-/// `PathingCommandType`, the ones `CustomGoalProcess` sends. Pause, defer and the revalidating ones other processes use come with those processes.
+/// `PathingCommandType`. `SET_GOAL_AND_PAUSE` is not here: no process that exists sends it (the builder and the follow process do).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PathingCommandType {
+    /// Ask the path to stand still for a tick, once it is safe to cancel (the mine process, to break a block on its own).
+    RequestPause,
     /// Set the goal and cancel the current segment if that is safe.
     CancelAndSetGoal,
     /// Set the goal, and once, cancel the path if it no longer fits the goal; then path.
     ForceRevalidateGoalAndPath,
+    /// Set the goal, start a path when none runs, and cancel the path when it ended in the old goal and does not end in the new one.
+    RevalidateGoalAndPath,
     /// Set the goal and path to it, starting a search when none runs.
     SetGoalAndPath,
+    /// The process has nothing to say: the next one is asked. Nothing sends it yet; it is part of the manager's rules.
+    Defer,
 }
 
 /// `PathingCommand`.

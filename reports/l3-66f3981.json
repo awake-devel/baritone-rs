@@ -7,26 +7,34 @@
    "scenario": "s05_natural300_chat0",
    "chat": false,
    "status": "pass",
-   "ticks": 2109,
-   "ticks_from_command_to_arrival": 2088,
+   "ticks": 1955,
+   "ticks_from_command_to_arrival": 1934,
    "command_tick": 10,
-   "arrived_tick": 2098,
-   "distance_to_goal_xz": 0.1,
+   "arrived_tick": 1944,
+   "distance_to_goal_xz": 0.26,
    "min_health": 20.0,
    "successful_searches": 2,
+   "chat_lines": [
+    "Going to: GoalXZ{x=278,z=8}",
+    "Arrived."
+   ],
    "failed_checks": []
   },
   {
    "scenario": "s10_far1500_chat0",
    "chat": false,
    "status": "pass",
-   "ticks": 10019,
-   "ticks_from_command_to_arrival": 9998,
+   "ticks": 9919,
+   "ticks_from_command_to_arrival": 9898,
    "command_tick": 10,
-   "arrived_tick": 10008,
-   "distance_to_goal_xz": 0.17,
-   "min_health": 20.0,
-   "successful_searches": 10,
+   "arrived_tick": 9908,
+   "distance_to_goal_xz": 0.18,
+   "min_health": 19.0,
+   "successful_searches": 7,
+   "chat_lines": [
+    "Going to: GoalXZ{x=278,z=1508}",
+    "Arrived."
+   ],
    "failed_checks": []
   },
   {
@@ -40,6 +48,10 @@
    "distance_to_goal_xz": 0.06,
    "min_health": 20.0,
    "successful_searches": 1,
+   "chat_lines": [
+    "Going to: GoalBlock{x=3052,y=201,z=3004}",
+    "Arrived."
+   ],
    "failed_checks": []
   },
   {
@@ -53,6 +65,12 @@
    "distance_to_goal_xz": 0.1,
    "min_health": 20.0,
    "successful_searches": 1,
+   "chat_lines": [
+    "Successfully set allowBreak to false",
+    "Old value: true",
+    "Going to: GoalBlock{x=3230,y=201,z=3003}",
+    "Arrived."
+   ],
    "failed_checks": []
   },
   {
@@ -66,6 +84,10 @@
    "distance_to_goal_xz": 0.24,
    "min_health": 20.0,
    "successful_searches": 1,
+   "chat_lines": [
+    "Going to: GoalBlock{x=3424,y=209,z=3013}",
+    "Arrived."
+   ],
    "failed_checks": []
   },
   {
@@ -79,6 +101,10 @@
    "distance_to_goal_xz": 0.02,
    "min_health": 20.0,
    "successful_searches": 1,
+   "chat_lines": [
+    "Going to: GoalBlock{x=3621,y=205,z=3002}",
+    "Arrived."
+   ],
    "failed_checks": []
   },
   {
@@ -92,6 +118,10 @@
    "distance_to_goal_xz": 0.06,
    "min_health": 20.0,
    "successful_searches": 1,
+   "chat_lines": [
+    "Going to: GoalBlock{x=3052,y=201,z=3004}",
+    "Arrived."
+   ],
    "failed_checks": []
   },
   {
@@ -105,6 +135,12 @@
    "distance_to_goal_xz": 0.1,
    "min_health": 20.0,
    "successful_searches": 1,
+   "chat_lines": [
+    "Successfully set allowBreak to false",
+    "Old value: true",
+    "Going to: GoalBlock{x=3230,y=201,z=3003}",
+    "Arrived."
+   ],
    "failed_checks": []
   },
   {
@@ -118,6 +154,10 @@
    "distance_to_goal_xz": 0.24,
    "min_health": 20.0,
    "successful_searches": 1,
+   "chat_lines": [
+    "Going to: GoalBlock{x=3424,y=209,z=3013}",
+    "Arrived."
+   ],
    "failed_checks": []
   },
   {
@@ -131,19 +171,29 @@
    "distance_to_goal_xz": 0.02,
    "min_health": 20.0,
    "successful_searches": 1,
+   "chat_lines": [
+    "Going to: GoalBlock{x=3621,y=205,z=3002}",
+    "Arrived."
+   ],
    "failed_checks": []
   },
   {
    "scenario": "s07_block_chat0",
    "chat": false,
    "status": "pass",
-   "ticks": 185,
-   "ticks_from_command_to_arrival": 164,
+   "ticks": 186,
+   "ticks_from_command_to_arrival": 165,
    "command_tick": 10,
-   "arrived_tick": 174,
-   "distance_to_goal_xz": 0.3,
+   "arrived_tick": 175,
+   "distance_to_goal_xz": 0.27,
    "min_health": 20.0,
    "successful_searches": 2,
+   "chat_lines": [
+    "Successfully set allowBreak to false",
+    "Old value: true",
+    "Going to: GoalBlock{x=4045,y=201,z=3004}",
+    "Arrived."
+   ],
    "failed_checks": []
   },
   {
@@ -157,6 +207,10 @@
    "distance_to_goal_xz": 0.04,
    "min_health": 20.0,
    "successful_searches": 1,
+   "chat_lines": [
+    "Going to: GoalBlock{x=4420,y=210,z=3002}",
+    "Arrived."
+   ],
    "failed_checks": []
   },
   {
@@ -167,6 +221,13 @@
    "command_tick": 10,
    "arrived_tick": null,
    "min_health": 20.0,
+   "chat_lines": [
+    "Going to: GoalBlock{x=4285,y=201,z=3004}",
+    "ok canceled"
+   ],
+   "speed_the_tick_before_the_stop": 0.281,
+   "ticks_until_still": 7,
+   "coasting_distance_blocks": 0.333,
    "failed_checks": []
   },
   {
@@ -180,6 +241,10 @@
    "distance_to_goal_xz": 0.19,
    "min_health": 20.0,
    "successful_searches": 1,
+   "chat_lines": [
+    "Going to: GoalBlock{x=4632,y=202,z=3009}",
+    "Arrived."
+   ],
    "failed_checks": []
   },
   {
@@ -193,6 +258,12 @@
    "distance_to_goal_xz": 0.33,
    "min_health": 20.0,
    "successful_searches": 2,
+   "chat_lines": [
+    "Successfully set allowBreak to false",
+    "Old value: true",
+    "Going to: GoalBlock{x=4045,y=201,z=3004}",
+    "Arrived."
+   ],
    "failed_checks": []
   },
   {
@@ -206,6 +277,10 @@
    "distance_to_goal_xz": 0.04,
    "min_health": 20.0,
    "successful_searches": 1,
+   "chat_lines": [
+    "Going to: GoalBlock{x=4420,y=210,z=3002}",
+    "Arrived."
+   ],
    "failed_checks": []
   },
   {
@@ -216,6 +291,13 @@
    "command_tick": 10,
    "arrived_tick": null,
    "min_health": 20.0,
+   "chat_lines": [
+    "Going to: GoalBlock{x=4285,y=201,z=3004}",
+    "ok canceled"
+   ],
+   "speed_the_tick_before_the_stop": 0.281,
+   "ticks_until_still": 7,
+   "coasting_distance_blocks": 0.333,
    "failed_checks": []
   },
   {
@@ -229,6 +311,10 @@
    "distance_to_goal_xz": 0.19,
    "min_health": 20.0,
    "successful_searches": 1,
+   "chat_lines": [
+    "Going to: GoalBlock{x=4632,y=202,z=3009}",
+    "Arrived."
+   ],
    "failed_checks": []
   },
   {
@@ -239,6 +325,12 @@
    "command_tick": 10,
    "arrived_tick": null,
    "min_health": 20.0,
+   "chat_lines": [
+    "Successfully set allowBreak to false",
+    "Old value: true",
+    "Going to: GoalBlock{x=3826,y=201,z=3005}",
+    "No path to the goal was found."
+   ],
    "failed_checks": []
   },
   {
@@ -249,13 +341,19 @@
    "command_tick": 10,
    "arrived_tick": null,
    "min_health": 20.0,
+   "chat_lines": [
+    "Successfully set allowBreak to false",
+    "Old value: true",
+    "Going to: GoalBlock{x=3826,y=201,z=3005}",
+    "No path to the goal was found."
+   ],
    "failed_checks": []
   },
   {
    "scenario": "b01_break_stone_chat0",
    "chat": false,
    "status": "pass",
-   "ticks": 85,
+   "ticks": 86,
    "blocks": {
     "broken": 1,
     "placed": 0,
@@ -264,28 +362,32 @@
     "segments": 1
    },
    "estimated_vs_actual_ticks": {
-    "estimated": 61.09,
-    "actual": 62,
-    "ratio": 1.015
+    "estimated": 57.53,
+    "actual": 63,
+    "ratio": 1.095
    },
    "slot_start": 5,
    "slot_end": 0,
    "slot_restored_after_the_path": false,
    "hotbar_start": "0:iron_pickaxe x1 d0",
    "hotbar_end": "0:iron_pickaxe x1 d1; 1:cobblestone x1 d0",
-   "ticks_from_command_to_arrival": 64,
+   "ticks_from_command_to_arrival": 65,
    "command_tick": 10,
-   "arrived_tick": 74,
-   "distance_to_goal_xz": 0.09,
+   "arrived_tick": 75,
+   "distance_to_goal_xz": 0.02,
    "min_health": 20.0,
    "successful_searches": 1,
+   "chat_lines": [
+    "Going to: GoalBlock{x=4826,y=201,z=3004}",
+    "Arrived."
+   ],
    "failed_checks": []
   },
   {
    "scenario": "b02_break_dirt_hand_chat0",
    "chat": false,
    "status": "pass",
-   "ticks": 98,
+   "ticks": 97,
    "blocks": {
     "broken": 1,
     "placed": 0,
@@ -295,20 +397,24 @@
    },
    "estimated_vs_actual_ticks": {
     "estimated": 65.03,
-    "actual": 75,
-    "ratio": 1.153
+    "actual": 74,
+    "ratio": 1.138
    },
    "slot_start": 3,
    "slot_end": 0,
    "slot_restored_after_the_path": false,
    "hotbar_start": "",
    "hotbar_end": "0:dirt x1 d0",
-   "ticks_from_command_to_arrival": 77,
+   "ticks_from_command_to_arrival": 76,
    "command_tick": 10,
-   "arrived_tick": 87,
-   "distance_to_goal_xz": 0.01,
+   "arrived_tick": 86,
+   "distance_to_goal_xz": 0.02,
    "min_health": 20.0,
    "successful_searches": 1,
+   "chat_lines": [
+    "Going to: GoalBlock{x=5026,y=201,z=3004}",
+    "Arrived."
+   ],
    "failed_checks": []
   },
   {
@@ -339,6 +445,10 @@
    "distance_to_goal_xz": 0.0,
    "min_health": 20.0,
    "successful_searches": 1,
+   "chat_lines": [
+    "Going to: GoalBlock{x=5218,y=201,z=3002}",
+    "Arrived."
+   ],
    "failed_checks": []
   },
   {
@@ -369,6 +479,10 @@
    "distance_to_goal_xz": 0.01,
    "min_health": 20.0,
    "successful_searches": 1,
+   "chat_lines": [
+    "Going to: GoalBlock{x=5408,y=207,z=3006}",
+    "Arrived."
+   ],
    "failed_checks": []
   },
   {
@@ -399,6 +513,10 @@
    "distance_to_goal_xz": 0.0,
    "min_health": 20.0,
    "successful_searches": 1,
+   "chat_lines": [
+    "Going to: GoalBlock{x=6606,y=207,z=3006}",
+    "Arrived."
+   ],
    "failed_checks": []
   },
   {
@@ -422,13 +540,17 @@
    "slot_end": 0,
    "slot_restored_after_the_path": false,
    "hotbar_start": "0:iron_pickaxe x1 d0",
-   "hotbar_end": "0:iron_pickaxe x1 d5; 1:cobblestone x5 d0",
+   "hotbar_end": "0:iron_pickaxe x1 d5; 1:cobblestone x4 d0",
    "ticks_from_command_to_arrival": 78,
    "command_tick": 10,
    "arrived_tick": 88,
    "distance_to_goal_xz": 0.0,
    "min_health": 20.0,
    "successful_searches": 1,
+   "chat_lines": [
+    "Going to: GoalBlock{x=5604,y=196,z=3004}",
+    "Arrived."
+   ],
    "failed_checks": []
   },
   {
@@ -459,6 +581,10 @@
    "distance_to_goal_xz": 0.07,
    "min_health": 20.0,
    "successful_searches": 1,
+   "chat_lines": [
+    "Going to: GoalBlock{x=5826,y=201,z=3004}",
+    "Arrived."
+   ],
    "failed_checks": []
   },
   {
@@ -489,6 +615,12 @@
    "distance_to_goal_xz": 0.17,
    "min_health": 20.0,
    "successful_searches": 1,
+   "chat_lines": [
+    "Successfully set allowBreak to false",
+    "Old value: true",
+    "Going to: GoalBlock{x=5826,y=201,z=3004}",
+    "Arrived."
+   ],
    "failed_checks": []
   },
   {
@@ -519,6 +651,10 @@
    "distance_to_goal_xz": 0.11,
    "min_health": 20.0,
    "successful_searches": 1,
+   "chat_lines": [
+    "Going to: GoalBlock{x=6009,y=201,z=3006}",
+    "Arrived."
+   ],
    "failed_checks": []
   },
   {
@@ -529,6 +665,10 @@
    "command_tick": 10,
    "arrived_tick": null,
    "min_health": 20.0,
+   "chat_lines": [
+    "Going to: GoalBlock{x=6226,y=201,z=3004}",
+    "ok canceled"
+   ],
    "failed_checks": []
   },
   {
@@ -559,6 +699,67 @@
    "distance_to_goal_xz": 0.04,
    "min_health": 20.0,
    "successful_searches": 1,
+   "chat_lines": [
+    "Going to: GoalBlock{x=6426,y=201,z=3004}",
+    "Arrived."
+   ],
+   "failed_checks": []
+  },
+  {
+   "scenario": "b10_head_sand_chat0",
+   "chat": false,
+   "status": "pass",
+   "ticks": 238,
+   "ticks_from_command_to_arrival": 217,
+   "command_tick": 10,
+   "arrived_tick": 227,
+   "distance_to_goal_xz": 0.01,
+   "min_health": 19.0,
+   "successful_searches": 1,
+   "chat_lines": [
+    "Successfully set allowBreak to false",
+    "Old value: true",
+    "Going to: GoalBlock{x=6862,y=201,z=3004}",
+    "Arrived."
+   ],
+   "failed_checks": []
+  },
+  {
+   "scenario": "b11_door_chat0",
+   "chat": false,
+   "status": "pass",
+   "ticks": 88,
+   "ticks_from_command_to_arrival": 67,
+   "command_tick": 10,
+   "arrived_tick": 77,
+   "distance_to_goal_xz": 0.05,
+   "min_health": 20.0,
+   "successful_searches": 1,
+   "chat_lines": [
+    "Successfully set allowBreak to false",
+    "Old value: true",
+    "Going to: GoalBlock{x=7020,y=201,z=3004}",
+    "Arrived."
+   ],
+   "failed_checks": []
+  },
+  {
+   "scenario": "b12_gate_chat0",
+   "chat": false,
+   "status": "pass",
+   "ticks": 88,
+   "ticks_from_command_to_arrival": 67,
+   "command_tick": 10,
+   "arrived_tick": 77,
+   "distance_to_goal_xz": 0.05,
+   "min_health": 20.0,
+   "successful_searches": 1,
+   "chat_lines": [
+    "Successfully set allowBreak to false",
+    "Old value: true",
+    "Going to: GoalBlock{x=7220,y=201,z=3004}",
+    "Arrived."
+   ],
    "failed_checks": []
   },
   {
@@ -589,6 +790,10 @@
    "distance_to_goal_xz": 0.09,
    "min_health": 20.0,
    "successful_searches": 1,
+   "chat_lines": [
+    "Going to: GoalBlock{x=4826,y=201,z=3004}",
+    "Arrived."
+   ],
    "failed_checks": []
   },
   {
@@ -619,6 +824,10 @@
    "distance_to_goal_xz": 0.09,
    "min_health": 20.0,
    "successful_searches": 1,
+   "chat_lines": [
+    "Going to: GoalBlock{x=5026,y=201,z=3004}",
+    "Arrived."
+   ],
    "failed_checks": []
   },
   {
@@ -649,6 +858,10 @@
    "distance_to_goal_xz": 0.0,
    "min_health": 20.0,
    "successful_searches": 1,
+   "chat_lines": [
+    "Going to: GoalBlock{x=5218,y=201,z=3002}",
+    "Arrived."
+   ],
    "failed_checks": []
   },
   {
@@ -679,6 +892,10 @@
    "distance_to_goal_xz": 0.01,
    "min_health": 20.0,
    "successful_searches": 1,
+   "chat_lines": [
+    "Going to: GoalBlock{x=5408,y=207,z=3006}",
+    "Arrived."
+   ],
    "failed_checks": []
   },
   {
@@ -709,6 +926,10 @@
    "distance_to_goal_xz": 0.0,
    "min_health": 20.0,
    "successful_searches": 1,
+   "chat_lines": [
+    "Going to: GoalBlock{x=6606,y=207,z=3006}",
+    "Arrived."
+   ],
    "failed_checks": []
   },
   {
@@ -739,6 +960,10 @@
    "distance_to_goal_xz": 0.0,
    "min_health": 20.0,
    "successful_searches": 1,
+   "chat_lines": [
+    "Going to: GoalBlock{x=5604,y=196,z=3004}",
+    "Arrived."
+   ],
    "failed_checks": []
   },
   {
@@ -762,13 +987,17 @@
    "slot_end": 0,
    "slot_restored_after_the_path": false,
    "hotbar_start": "0:iron_pickaxe x1 d0",
-   "hotbar_end": "0:iron_pickaxe x1 d2; 1:cobblestone x2 d0",
+   "hotbar_end": "0:iron_pickaxe x1 d2; 1:cobblestone x3 d0",
    "ticks_from_command_to_arrival": 73,
    "command_tick": 10,
    "arrived_tick": 83,
    "distance_to_goal_xz": 0.07,
    "min_health": 20.0,
    "successful_searches": 1,
+   "chat_lines": [
+    "Going to: GoalBlock{x=5826,y=201,z=3004}",
+    "Arrived."
+   ],
    "failed_checks": []
   },
   {
@@ -799,6 +1028,12 @@
    "distance_to_goal_xz": 0.17,
    "min_health": 20.0,
    "successful_searches": 1,
+   "chat_lines": [
+    "Successfully set allowBreak to false",
+    "Old value: true",
+    "Going to: GoalBlock{x=5826,y=201,z=3004}",
+    "Arrived."
+   ],
    "failed_checks": []
   },
   {
@@ -829,6 +1064,10 @@
    "distance_to_goal_xz": 0.11,
    "min_health": 20.0,
    "successful_searches": 1,
+   "chat_lines": [
+    "Going to: GoalBlock{x=6009,y=201,z=3006}",
+    "Arrived."
+   ],
    "failed_checks": []
   },
   {
@@ -839,6 +1078,10 @@
    "command_tick": 10,
    "arrived_tick": null,
    "min_health": 20.0,
+   "chat_lines": [
+    "Going to: GoalBlock{x=6226,y=201,z=3004}",
+    "ok canceled"
+   ],
    "failed_checks": []
   },
   {
@@ -869,29 +1112,380 @@
    "distance_to_goal_xz": 0.04,
    "min_health": 20.0,
    "successful_searches": 1,
+   "chat_lines": [
+    "Going to: GoalBlock{x=6426,y=201,z=3004}",
+    "Arrived."
+   ],
+   "failed_checks": []
+  },
+  {
+   "scenario": "b10_head_sand_chat1",
+   "chat": true,
+   "status": "pass",
+   "ticks": 239,
+   "ticks_from_command_to_arrival": 218,
+   "command_tick": 10,
+   "arrived_tick": 228,
+   "distance_to_goal_xz": 0.16,
+   "min_health": 19.0,
+   "successful_searches": 1,
+   "chat_lines": [
+    "Successfully set allowBreak to false",
+    "Old value: true",
+    "Going to: GoalBlock{x=6862,y=201,z=3004}",
+    "Arrived."
+   ],
+   "failed_checks": []
+  },
+  {
+   "scenario": "b11_door_chat1",
+   "chat": true,
+   "status": "pass",
+   "ticks": 88,
+   "ticks_from_command_to_arrival": 67,
+   "command_tick": 10,
+   "arrived_tick": 77,
+   "distance_to_goal_xz": 0.05,
+   "min_health": 20.0,
+   "successful_searches": 1,
+   "chat_lines": [
+    "Successfully set allowBreak to false",
+    "Old value: true",
+    "Going to: GoalBlock{x=7020,y=201,z=3004}",
+    "Arrived."
+   ],
+   "failed_checks": []
+  },
+  {
+   "scenario": "b12_gate_chat1",
+   "chat": true,
+   "status": "pass",
+   "ticks": 88,
+   "ticks_from_command_to_arrival": 67,
+   "command_tick": 10,
+   "arrived_tick": 77,
+   "distance_to_goal_xz": 0.05,
+   "min_health": 20.0,
+   "successful_searches": 1,
+   "chat_lines": [
+    "Successfully set allowBreak to false",
+    "Old value: true",
+    "Going to: GoalBlock{x=7220,y=201,z=3004}",
+    "Arrived."
+   ],
+   "failed_checks": []
+  },
+  {
+   "scenario": "m01_mine_cave3_chat0",
+   "chat": false,
+   "status": "pass",
+   "ticks": 338,
+   "blocks": {
+    "broken": 6,
+    "placed": 1,
+    "water_cells": 0,
+    "other": [],
+    "segments": 3
+   },
+   "estimated_vs_actual_ticks": {
+    "estimated": 224.08,
+    "actual": 244,
+    "ratio": 1.089
+   },
+   "slot_start": 5,
+   "slot_end": 0,
+   "slot_restored_after_the_path": false,
+   "hotbar_start": "0:iron_pickaxe x1 d0",
+   "hotbar_end": "0:iron_pickaxe x1 d6; 1:cobblestone x2 d0; 2:raw_iron x3 d0",
+   "command_tick": 10,
+   "arrived_tick": null,
+   "min_health": 20.0,
+   "successful_searches": 4,
+   "items_end": {
+    "raw_iron": 3
+   },
+   "container_open_ticks": 0,
+   "ticks_from_command_to_done": 268,
+   "chat_lines": [
+    "Mining [BlockOptionalMeta{block=Block{minecraft:iron_ore},properties={}}]",
+    "Have 3 valid items"
+   ],
+   "failed_checks": []
+  },
+  {
+   "scenario": "m02_mine_quantity_chat0",
+   "chat": false,
+   "status": "pass",
+   "ticks": 125,
+   "blocks": {
+    "broken": 1,
+    "placed": 0,
+    "water_cells": 0,
+    "other": [],
+    "segments": 2
+   },
+   "estimated_vs_actual_ticks": {
+    "estimated": 48.06,
+    "actual": 47,
+    "ratio": 0.978
+   },
+   "slot_start": 5,
+   "slot_end": 0,
+   "slot_restored_after_the_path": false,
+   "hotbar_start": "0:iron_pickaxe x1 d0; 1:raw_iron x2 d0",
+   "hotbar_end": "0:iron_pickaxe x1 d1; 1:raw_iron x3 d0",
+   "command_tick": 10,
+   "arrived_tick": null,
+   "min_health": 20.0,
+   "successful_searches": 2,
+   "items_end": {
+    "raw_iron": 3
+   },
+   "container_open_ticks": 0,
+   "ores_broken": 1,
+   "ticks_from_command_to_done": 55,
+   "chat_lines": [
+    "Mining [BlockOptionalMeta{block=Block{minecraft:iron_ore},properties={}}]",
+    "Have 3 valid items"
+   ],
+   "failed_checks": []
+  },
+  {
+   "scenario": "m03_goto_table_wall_chat0",
+   "chat": false,
+   "status": "pass",
+   "ticks": 233,
+   "blocks": {
+    "broken": 1,
+    "placed": 0,
+    "water_cells": 0,
+    "other": [],
+    "segments": 1
+   },
+   "estimated_vs_actual_ticks": {
+    "estimated": 64.66,
+    "actual": 71,
+    "ratio": 1.098
+   },
+   "slot_start": 5,
+   "slot_end": 0,
+   "slot_restored_after_the_path": false,
+   "hotbar_start": "0:iron_pickaxe x1 d0",
+   "hotbar_end": "0:iron_pickaxe x1 d1; 1:cobblestone x1 d0",
+   "command_tick": 10,
+   "arrived_tick": null,
+   "min_health": 20.0,
+   "successful_searches": 1,
+   "items_end": {},
+   "container_open_ticks": 60,
+   "distance_to_block_xz": 0.97,
+   "ticks_from_command_to_done": 163,
+   "chat_lines": [],
+   "failed_checks": []
+  },
+  {
+   "scenario": "m04_stop_mine_walking_chat0",
+   "chat": false,
+   "status": "pass",
+   "ticks": 301,
+   "command_tick": 10,
+   "arrived_tick": null,
+   "min_health": 20.0,
+   "chat_lines": [
+    "Mining [BlockOptionalMeta{block=Block{minecraft:gold_block},properties={}}]",
+    "ok canceled"
+   ],
+   "speed_the_tick_before_the_stop": 0.281,
+   "ticks_until_still": 7,
+   "coasting_distance_blocks": 0.333,
+   "failed_checks": []
+  },
+  {
+   "scenario": "m05_stop_mine_scanning_chat0",
+   "chat": false,
+   "status": "pass",
+   "ticks": 261,
+   "command_tick": 10,
+   "arrived_tick": null,
+   "min_health": 20.0,
+   "chat_lines": [
+    "Mining [BlockOptionalMeta{block=Block{minecraft:iron_ore},properties={}}]",
+    "Unable to find any path to BlockOptionalMetaLookup{[BlockOptionalMeta{block=Block{minecraft:iron_ore},properties={}}]}, blacklisting presumably unreachable closest instance...",
+    "No path to the goal was found.",
+    "ok canceled"
+   ],
+   "speed_the_tick_before_the_stop": 0.0,
+   "ticks_until_still": 1,
+   "coasting_distance_blocks": 0.0,
+   "failed_checks": []
+  },
+  {
+   "scenario": "m01_mine_cave3_chat1",
+   "chat": true,
+   "status": "pass",
+   "ticks": 337,
+   "blocks": {
+    "broken": 6,
+    "placed": 1,
+    "water_cells": 0,
+    "other": [],
+    "segments": 3
+   },
+   "estimated_vs_actual_ticks": {
+    "estimated": 220.51,
+    "actual": 239,
+    "ratio": 1.084
+   },
+   "slot_start": 5,
+   "slot_end": 0,
+   "slot_restored_after_the_path": false,
+   "hotbar_start": "0:iron_pickaxe x1 d0",
+   "hotbar_end": "0:iron_pickaxe x1 d6; 1:cobblestone x2 d0; 2:raw_iron x3 d0",
+   "command_tick": 10,
+   "arrived_tick": null,
+   "min_health": 20.0,
+   "successful_searches": 4,
+   "items_end": {
+    "raw_iron": 3
+   },
+   "container_open_ticks": 0,
+   "ticks_from_command_to_done": 267,
+   "chat_lines": [
+    "Mining [BlockOptionalMeta{block=Block{minecraft:iron_ore},properties={}}]",
+    "Have 3 valid items"
+   ],
+   "failed_checks": []
+  },
+  {
+   "scenario": "m02_mine_quantity_chat1",
+   "chat": true,
+   "status": "pass",
+   "ticks": 124,
+   "blocks": {
+    "broken": 1,
+    "placed": 0,
+    "water_cells": 0,
+    "other": [],
+    "segments": 2
+   },
+   "estimated_vs_actual_ticks": {
+    "estimated": 43.02,
+    "actual": 44,
+    "ratio": 1.023
+   },
+   "slot_start": 5,
+   "slot_end": 0,
+   "slot_restored_after_the_path": false,
+   "hotbar_start": "0:iron_pickaxe x1 d0; 1:raw_iron x2 d0",
+   "hotbar_end": "0:iron_pickaxe x1 d1; 1:raw_iron x3 d0",
+   "command_tick": 10,
+   "arrived_tick": null,
+   "min_health": 20.0,
+   "successful_searches": 2,
+   "items_end": {
+    "raw_iron": 3
+   },
+   "container_open_ticks": 0,
+   "ores_broken": 1,
+   "ticks_from_command_to_done": 54,
+   "chat_lines": [
+    "Mining [BlockOptionalMeta{block=Block{minecraft:iron_ore},properties={}}]",
+    "Have 3 valid items"
+   ],
+   "failed_checks": []
+  },
+  {
+   "scenario": "m03_goto_table_wall_chat1",
+   "chat": true,
+   "status": "pass",
+   "ticks": 204,
+   "blocks": {
+    "broken": 1,
+    "placed": 0,
+    "water_cells": 0,
+    "other": [],
+    "segments": 1
+   },
+   "estimated_vs_actual_ticks": {
+    "estimated": 64.66,
+    "actual": 71,
+    "ratio": 1.098
+   },
+   "slot_start": 5,
+   "slot_end": 0,
+   "slot_restored_after_the_path": false,
+   "hotbar_start": "0:iron_pickaxe x1 d0",
+   "hotbar_end": "0:iron_pickaxe x1 d1; 1:cobblestone x1 d0",
+   "command_tick": 10,
+   "arrived_tick": null,
+   "min_health": 20.0,
+   "successful_searches": 1,
+   "items_end": {},
+   "container_open_ticks": 60,
+   "distance_to_block_xz": 0.97,
+   "ticks_from_command_to_done": 134,
+   "chat_lines": [],
+   "failed_checks": []
+  },
+  {
+   "scenario": "m04_stop_mine_walking_chat1",
+   "chat": true,
+   "status": "pass",
+   "ticks": 301,
+   "command_tick": 10,
+   "arrived_tick": null,
+   "min_health": 20.0,
+   "chat_lines": [
+    "Mining [BlockOptionalMeta{block=Block{minecraft:gold_block},properties={}}]",
+    "ok canceled"
+   ],
+   "speed_the_tick_before_the_stop": 0.281,
+   "ticks_until_still": 7,
+   "coasting_distance_blocks": 0.333,
+   "failed_checks": []
+  },
+  {
+   "scenario": "m05_stop_mine_scanning_chat1",
+   "chat": true,
+   "status": "pass",
+   "ticks": 261,
+   "command_tick": 10,
+   "arrived_tick": null,
+   "min_health": 20.0,
+   "chat_lines": [
+    "Mining [BlockOptionalMeta{block=Block{minecraft:iron_ore},properties={}}]",
+    "Unable to find any path to BlockOptionalMetaLookup{[BlockOptionalMeta{block=Block{minecraft:iron_ore},properties={}}]}, blacklisting presumably unreachable closest instance...",
+    "No path to the goal was found.",
+    "Unable to find any path to BlockOptionalMetaLookup{[BlockOptionalMeta{block=Block{minecraft:iron_ore},properties={}}]}, blacklisting presumably unreachable closest instance...",
+    "No path to the goal was found.",
+    "ok canceled"
+   ],
+   "speed_the_tick_before_the_stop": 0.0,
+   "ticks_until_still": 1,
+   "coasting_distance_blocks": 0.0,
    "failed_checks": []
   }
  ],
  "overall_timing": {
   "search_micros": {
-   "max": 1908173.0,
-   "median_of_medians": 5933.0,
-   "runs": 42
+   "max": 1191732.0,
+   "median_of_medians": 3490.5,
+   "runs": 58
   },
   "snapshot_micros": {
-   "max": 1778.0,
-   "median_of_medians": 95.0,
-   "runs": 42
+   "max": 1041.0,
+   "median_of_medians": 139.5,
+   "runs": 58
   },
   "snapshot_chunks": {
-   "max": 637.0,
-   "median_of_medians": 637.0,
-   "runs": 42
+   "max": 1057.0,
+   "median_of_medians": 1057.0,
+   "runs": 58
   },
   "mod_tick_micros": {
-   "max": 17424.0,
-   "median_of_medians": 45.2,
-   "runs": 42
+   "max": 15977.0,
+   "median_of_medians": 32.5,
+   "runs": 58
   }
  }
 }

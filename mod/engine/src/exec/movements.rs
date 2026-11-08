@@ -196,15 +196,9 @@ fn fail(st: &mut MoveState, why: MoveFailure) {
 }
 
 /// The right click on a door or gate: `MovementHelper.openDoors` and the gate branch of `MovementTraverse.updateState` set a
-/// forced target at the block and `CLICK_RIGHT`. Without `can_use_blocks` the movement fails instead.
-/// Upstream aims at the middle of the block's collision shape (`VecUtils.calculateBlockCenter`), and for a gate asks `RotationUtils.reachable`
-/// for a rotation that a ray trace confirms. There are no shapes or ray traces here: the aim is the middle of the block.
-fn use_block<W: WorldView>(env: &Env<'_, W>, st: &mut MoveState, pos: Pos) {
-    if !env.set.can_use_blocks {
-        fail(st, MoveFailure::NeedsUseBlock(pos));
-        return;
-    }
-    let rot = calc_rotation_from_vec3d(env.p.head(), block_pos_center(pos), env.p.rotations());
+/// forced target at the block and `CLICK_RIGHT`. For a door the aim is the middle of the block (upstream: the middle of its collision
+/// shape, `VecUtils.calculateBlockCenter`, D15); a gate takes the rotation `RotationUtils.reachable` found.
+fn use_block(st: &mut MoveState, pos: Pos, rot: Rotation) {
     st.target = Some(Target { rotation: rot, force: true });
     st.keys.click_right = true;
     st.use_pos = Some(pos);
@@ -242,7 +236,8 @@ pub fn open_doors<W: WorldView>(env: &Env<'_, W>, st: &mut MoveState, from: Pos,
         let side = if pos == to || pos == to.above(1) { dir } else { opposite(dir) };
         let door = env.get(pos);
         if door.door && door.wooden_door && !is_door_passable(env, pos, &door, side) {
-            use_block(env, st, pos);
+            let rot = calc_rotation_from_vec3d(env.p.head(), block_pos_center(pos), env.p.rotations());
+            use_block(st, pos, rot);
             return false;
         }
     }
@@ -556,9 +551,12 @@ pub fn update<W: WorldView>(mv: &Movement, rt: &mut MoveRuntime, env: &Env<'_, W
             }
         }
     }
-    if env.p.in_wall && !rt.state.status.is_complete() {
-        // upstream: switch to the best tool and press the left button
-        fail(&mut rt.state, MoveFailure::InsideWall);
+    if env.p.in_wall {
+        // a falling block landed in the head, or the head is in a block: mine what the crosshair is on (`ctx.getSelectedBlock`)
+        if let Some(h) = env.p.looking_at {
+            switch_to_best_tool_for(env, &mut rt.state, h.pos);
+        }
+        rt.state.keys.click_left = true;
     }
 
     // If the movement target has to force the new rotations, or we aren't using silent move, then force the rotations
@@ -663,8 +661,11 @@ fn traverse<W: WorldView>(mv: &Movement, rt: &mut MoveRuntime, env: &Env<'_, W>)
             None
         };
         if let Some(b) = blocked {
-            use_block(env, st, b);
-            return;
+            // upstream: only when a rotation reaches the gate; otherwise the movement goes on to the walk below
+            if let Some(rot) = reachable(env, b, env.game.reach, false) {
+                use_block(st, b, rot);
+                return;
+            }
         }
     }
 

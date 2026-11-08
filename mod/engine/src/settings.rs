@@ -36,7 +36,7 @@ pub struct ExecSettings {
     pub assume_step: bool,
     /// `sprintInWater`, default true.
     pub sprint_in_water: bool,
-    /// `cancelOnGoalInvalidation`, default true. Only `REVALIDATE_GOAL_AND_PATH` reads it, which no process sends yet.
+    /// `cancelOnGoalInvalidation`, default true. Only `REVALIDATE_GOAL_AND_PATH` reads it, which the mine and get-to-block processes send.
     pub cancel_on_goal_invalidation: bool,
     /// `randomLooking` and `randomLooking113`: both are 0 here, see `look.rs`. Upstream's defaults are 0.01 and 2.
     pub mouse_sensitivity: f64,
@@ -52,10 +52,72 @@ pub struct ExecSettings {
     pub remain_with_existing_look_direction: bool,
     /// The settings of the tool and the block to place: `autoTool`, `acceptableThrowawayItems` and the others.
     pub tool: ToolSettings,
-    /// Not upstream. Whether the glue can carry out an `Intent::use_block` (right click on a door or fence gate). When
-    /// false (the default), a movement that needs a closed door or gate opened fails with `MoveFailure::NeedsUseBlock`
-    /// and the path is recalculated.
-    pub can_use_blocks: bool,
+    /// The settings of the mine and get-to-block processes.
+    pub mine: MineSettings,
+}
+
+/// The settings `MineProcess` and `GetToBlockProcess` read. Defaults are upstream's (`Settings.java` at 1b8e87c). `notificationOnMineFail` and
+/// `maxCachedWorldScanCount` / `extendCacheOnThreshold` (the cached world) are not here: see docs/deviations.md.
+#[derive(Clone, Debug, PartialEq)]
+pub struct MineSettings {
+    /// `mineGoalUpdateInterval`, default 5: ticks between two scans of the world. 0 never scans again after the first.
+    pub mine_goal_update_interval: i32,
+    /// `mineMaxOreLocationsCount`, default 64.
+    pub mine_max_ore_locations_count: i32,
+    /// `minYLevelWhileMining`, default 0: relative to the world's lowest Y.
+    pub min_y_level_while_mining: i32,
+    /// `maxYLevelWhileMining`, default 2031.
+    pub max_y_level_while_mining: i32,
+    /// `allowOnlyExposedOres`, default false.
+    pub allow_only_exposed_ores: bool,
+    /// `allowOnlyExposedOresDistance`, default 1.
+    pub allow_only_exposed_ores_distance: i32,
+    /// `exploreForBlocks`, default true.
+    pub explore_for_blocks: bool,
+    /// `mineScanDroppedItems`, default true.
+    pub mine_scan_dropped_items: bool,
+    /// `mineDropLoiterDurationMSThanksLouca`, default 250.
+    pub mine_drop_loiter_duration_ms: i64,
+    /// `legitMine`, default false.
+    pub legit_mine: bool,
+    /// `legitMineYLevel`, default -59.
+    pub legit_mine_y_level: i32,
+    /// `legitMineIncludeDiagonals`, default false.
+    pub legit_mine_include_diagonals: bool,
+    /// `forceInternalMining`, default true.
+    pub force_internal_mining: bool,
+    /// `internalMiningAirException`, default true.
+    pub internal_mining_air_exception: bool,
+    /// `blacklistClosestOnFailure`, default true.
+    pub blacklist_closest_on_failure: bool,
+    /// `rightClickContainerOnArrival`, default true.
+    pub right_click_container_on_arrival: bool,
+    /// `enterPortal`, default true.
+    pub enter_portal: bool,
+}
+
+impl Default for MineSettings {
+    fn default() -> Self {
+        MineSettings {
+            mine_goal_update_interval: 5,
+            mine_max_ore_locations_count: 64,
+            min_y_level_while_mining: 0,
+            max_y_level_while_mining: 2031,
+            allow_only_exposed_ores: false,
+            allow_only_exposed_ores_distance: 1,
+            explore_for_blocks: true,
+            mine_scan_dropped_items: true,
+            mine_drop_loiter_duration_ms: 250,
+            legit_mine: false,
+            legit_mine_y_level: -59,
+            legit_mine_include_diagonals: false,
+            force_internal_mining: true,
+            internal_mining_air_exception: true,
+            blacklist_closest_on_failure: true,
+            right_click_container_on_arrival: true,
+            enter_portal: true,
+        }
+    }
 }
 
 impl Default for ExecSettings {
@@ -82,7 +144,7 @@ impl Default for ExecSettings {
             pause_mining_for_falling_blocks: true,
             remain_with_existing_look_direction: true,
             tool: ToolSettings::default(),
-            can_use_blocks: false,
+            mine: MineSettings::default(),
         }
     }
 }
@@ -155,6 +217,6 @@ mod tests {
         let e = ExecSettings::default();
         assert_eq!((e.cost_verification_lookahead, e.movement_timeout_ticks, e.planning_tick_lookahead), (5, 100, 150));
         assert_eq!((e.max_path_history_length, e.path_history_cutoff_amount), (300, 50));
-        assert!(e.splice_path && e.sprint_ascends && e.overshoot_traverse && !e.assume_step && !e.can_use_blocks);
+        assert!(e.splice_path && e.sprint_ascends && e.overshoot_traverse && !e.assume_step);
     }
 }

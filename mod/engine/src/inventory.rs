@@ -64,6 +64,11 @@ pub trait Inventory {
     fn potion_amplifier(&self) -> f64 {
         1.0
     }
+    /// Upstream's `Inventory.items`: the 36 stacks of the main inventory, hotbar included, which `MineProcess` counts to know whether it has enough. The default
+    /// is the hotbar alone: a glue that can read the whole inventory overrides it.
+    fn main_slots(&self) -> Vec<SlotInfo> {
+        (0..HOTBAR).map(|i| self.slot(i)).collect()
+    }
 }
 
 /// An inventory with nothing in it: for tests and for a glue that has no hotbar to show yet.
@@ -310,11 +315,13 @@ pub mod testing {
         /// Per slot: the speed against state 0, 1, 2, ... (missing: 1 / 100, an empty hand on a block that needs a tool)
         pub speeds: Vec<Vec<f64>>,
         pub amplifier: f64,
+        /// Stacks of the main inventory outside the hotbar, for the mine process's count.
+        pub main: Vec<SlotInfo>,
     }
 
     impl TestInventory {
         pub fn empty() -> TestInventory {
-            TestInventory { selected: 0, slots: vec![SlotInfo::empty(); HOTBAR], offhand: SlotInfo::empty(), speeds: vec![vec![]; HOTBAR], amplifier: 1.0 }
+            TestInventory { selected: 0, slots: vec![SlotInfo::empty(); HOTBAR], offhand: SlotInfo::empty(), speeds: vec![vec![]; HOTBAR], amplifier: 1.0, main: vec![] }
         }
 
         /// Puts a stack in a slot, with its speed against each state.
@@ -339,6 +346,9 @@ pub mod testing {
         }
         fn potion_amplifier(&self) -> f64 {
             self.amplifier
+        }
+        fn main_slots(&self) -> Vec<SlotInfo> {
+            self.slots.iter().cloned().chain(self.main.iter().cloned()).collect()
         }
     }
 }

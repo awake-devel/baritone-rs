@@ -24,17 +24,58 @@ impl Config {
 /// `Goal` and its implementations.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Goal {
-    Block { x: i32, y: i32, z: i32 },
-    Xz { x: i32, z: i32 },
-    YLevel { level: i32 },
-    TwoBlocks { x: i32, y: i32, z: i32 },
-    GetToBlock { x: i32, y: i32, z: i32 },
-    Near { x: i32, y: i32, z: i32, range_sq: i32 },
+    Block {
+        x: i32,
+        y: i32,
+        z: i32,
+    },
+    Xz {
+        x: i32,
+        z: i32,
+    },
+    YLevel {
+        level: i32,
+    },
+    TwoBlocks {
+        x: i32,
+        y: i32,
+        z: i32,
+    },
+    GetToBlock {
+        x: i32,
+        y: i32,
+        z: i32,
+    },
+    Near {
+        x: i32,
+        y: i32,
+        z: i32,
+        range_sq: i32,
+    },
     Axis,
-    StrictDirection { x: i32, y: i32, z: i32, dx: i32, dz: i32 },
-    RunAway { from: Vec<(i32, i32, i32)>, distance_sq: i32, maintain_y: Option<i32> },
+    StrictDirection {
+        x: i32,
+        y: i32,
+        z: i32,
+        dx: i32,
+        dz: i32,
+    },
+    RunAway {
+        from: Vec<(i32, i32, i32)>,
+        distance_sq: i32,
+        maintain_y: Option<i32>,
+    },
     Composite(Vec<Goal>),
     Inverted(Box<Goal>),
+    /// Upstream's `MineProcess.GoalThreeBlocks`: `GoalTwoBlocks` with one more block below.
+    ThreeBlocks {
+        x: i32,
+        y: i32,
+        z: i32,
+    },
+    /// The anonymous `GoalRunAway` subclasses of `MineProcess.updateGoal` and `GetToBlockProcess.onTick`, which override `isInGoal` to
+    /// `false` and `heuristic()` to negative infinity: a goal that is never reached, only walked away from. Holds the `GoalRunAway`.
+    NeverInGoal(Box<Goal>),
 }
 
 /// `GoalAxis.SQRT_2_OVER_2`.
@@ -115,6 +156,7 @@ impl Goal {
     /// `GoalGetToBlock.isInGoal`: its arm below.
     /// `GoalInverted.isInGoal`: its arm below.
     /// `GoalNear.isInGoal`: its arm below.
+    /// `MineProcess.GoalThreeBlocks.isInGoal`: its arm below.
     /// `GoalRunAway.isInGoal`: its arm below.
     /// `GoalStrictDirection.isInGoal`: its arm below.
     /// `GoalTwoBlocks.isInGoal`: its arm below.
@@ -176,6 +218,10 @@ impl Goal {
             }
             // `GoalInverted.isInGoal`
             Goal::Inverted(_) => false,
+            // `MineProcess.GoalThreeBlocks.isInGoal`
+            Goal::ThreeBlocks { x: gx, y: gy, z: gz } => x == *gx && (y == *gy || y == gy.wrapping_sub(1) || y == gy.wrapping_sub(2)) && z == *gz,
+            // the anonymous `GoalRunAway` of the processes: `isInGoal` is overridden to false
+            Goal::NeverInGoal(_) => false,
         }
     }
 
@@ -186,6 +232,7 @@ impl Goal {
     /// `GoalGetToBlock.heuristic`: its arm below.
     /// `GoalInverted.heuristic(int,int,int)`: its arm below.
     /// `GoalNear.heuristic(int,int,int)`: its arm below.
+    /// `MineProcess.GoalThreeBlocks.heuristic`: its arm below.
     /// `GoalRunAway.heuristic(int,int,int)`: its arm below.
     /// `GoalStrictDirection.heuristic(int,int,int)`: its arm below.
     /// `GoalTwoBlocks.heuristic`: its arm below.
@@ -275,6 +322,26 @@ impl Goal {
             }
             // `GoalInverted.heuristic(int,int,int)`
             Goal::Inverted(origin) => -origin.heuristic(x, y, z, s),
+            // `MineProcess.GoalThreeBlocks.heuristic`
+            Goal::ThreeBlocks { x: gx, y: gy, z: gz } => {
+                let x_diff = x.wrapping_sub(*gx);
+                let y_diff = y.wrapping_sub(*gy);
+                let z_diff = z.wrapping_sub(*gz);
+                goal_block_calculate(
+                    x_diff as f64,
+                    if y_diff < -1 {
+                        y_diff.wrapping_add(2)
+                    } else if y_diff == -1 {
+                        0
+                    } else {
+                        y_diff
+                    },
+                    z_diff as f64,
+                    s,
+                )
+            }
+            // the anonymous `GoalRunAway` overrides only `heuristic()`: the one with a position is the `GoalRunAway`'s
+            Goal::NeverInGoal(inner) => inner.heuristic(x, y, z, s),
         }
     }
 
@@ -352,6 +419,8 @@ impl Goal {
             }
             // `GoalInverted.heuristic()`
             Goal::Inverted(_) => f64::NEG_INFINITY,
+            // the anonymous `GoalRunAway`: `heuristic()` is overridden to negative infinity
+            Goal::NeverInGoal(_) => f64::NEG_INFINITY,
             // `Goal.heuristic()` default: GoalBlock, GoalXZ, GoalYLevel, GoalTwoBlocks, GoalGetToBlock, GoalAxis
             _ => 0.0,
         }
@@ -473,5 +542,23 @@ mod tests {
         assert_eq!(i.heuristic_inside(&s()), f64::NEG_INFINITY);
         // -min of 0 is -0.0
         assert_eq!(i.heuristic(0, 0, 0, &s()).to_bits(), (-0.0f64).to_bits());
+    }
+
+    #[test]
+    fn three_blocks_and_the_goal_the_processes_never_reach() {
+        let g = Goal::ThreeBlocks { x: 0, y: 10, z: 0 };
+        assert!(g.is_in_goal(0, 10, 0, &s()) && g.is_in_goal(0, 9, 0, &s()) && g.is_in_goal(0, 8, 0, &s()) && !g.is_in_goal(0, 7, 0, &s()) && !g.is_in_goal(0, 11, 0, &s()));
+        // yDiff -1 and -2 cost nothing more than being under the block: -1 is 0, -2 is 0 (-2 + 2), -3 is -1 + 0 block lower
+        assert_eq!(g.heuristic(0, 9, 0, &s()), 0.0);
+        assert_eq!(g.heuristic(0, 8, 0, &s()), 0.0);
+        assert_eq!(g.heuristic(0, 11, 0, &s()), goal_block_calculate(0.0, 1, 0.0, &s()));
+        assert_eq!(g.heuristic(0, 6, 0, &s()), goal_block_calculate(0.0, -2, 0.0, &s()));
+        assert_eq!(g.heuristic_inside(&s()), 0.0);
+        let run = goal_run_away(1.0, Some(5), vec![(0, 5, 0)]);
+        let never = Goal::NeverInGoal(Box::new(run.clone()));
+        // far from the point, where the run-away goal would be satisfied, it still is not
+        assert!(run.is_in_goal(9, 5, 9, &s()) && !never.is_in_goal(9, 5, 9, &s()));
+        assert_eq!(never.heuristic(9, 5, 9, &s()), run.heuristic(9, 5, 9, &s()));
+        assert_eq!(never.heuristic_inside(&s()), f64::NEG_INFINITY);
     }
 }

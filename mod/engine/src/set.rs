@@ -330,6 +330,24 @@ fn table() -> Vec<Setting> {
         s("walkWhileBreaking", Bool(true)),
         s("pauseMiningForFallingBlocks", Bool(true)),
         s("remainWithExistingLookDirection", Bool(true)),
+        // the mine and get-to-block processes: `MineSettings`
+        s("mineGoalUpdateInterval", Int(5)),
+        s("mineMaxOreLocationsCount", Int(64)),
+        s("minYLevelWhileMining", Int(0)),
+        s("maxYLevelWhileMining", Int(2031)),
+        s("allowOnlyExposedOres", Bool(false)),
+        s("allowOnlyExposedOresDistance", Int(1)),
+        s("exploreForBlocks", Bool(true)),
+        s("mineScanDroppedItems", Bool(true)),
+        s("mineDropLoiterDurationMSThanksLouca", Long(250)),
+        s("legitMine", Bool(false)),
+        s("legitMineYLevel", Int(-59)),
+        s("legitMineIncludeDiagonals", Bool(false)),
+        s("forceInternalMining", Bool(true)),
+        s("internalMiningAirException", Bool(true)),
+        s("blacklistClosestOnFailure", Bool(true)),
+        s("rightClickContainerOnArrival", Bool(true)),
+        s("enterPortal", Bool(true)),
         // the hotbar: `ToolSettings`
         s("autoTool", Bool(true)),
         s("assumeExternalAutoTool", Bool(false)),
@@ -615,7 +633,7 @@ impl Settings {
         crate::freelook::LookSettings { free_look: self.get_bool("freeLook"), block_free_look: self.get_bool("blockFreeLook"), anti_cheat_compatibility: self.get_bool("antiCheatCompatibility"), smooth_look: self.get_bool("smoothLook"), smooth_look_ticks: self.get_int("smoothLookTicks") }
     }
 
-    /// Writes the settings into an `ExecSettings`. `mouse_sensitivity` and `can_use_blocks` are not upstream settings and are left alone.
+    /// Writes the settings into an `ExecSettings`. `mouse_sensitivity` is not an upstream setting and is left alone.
     pub fn apply_to_exec(&self, e: &mut ExecSettings) {
         e.allow_sprint = self.get_bool("allowSprint");
         e.sprint_ascends = self.get_bool("sprintAscends");
@@ -637,6 +655,30 @@ impl Settings {
         e.pause_mining_for_falling_blocks = self.get_bool("pauseMiningForFallingBlocks");
         e.remain_with_existing_look_direction = self.get_bool("remainWithExistingLookDirection");
         e.tool = self.tool_settings();
+        e.mine = self.mine_settings();
+    }
+
+    /// The settings of the mine and get-to-block processes.
+    pub fn mine_settings(&self) -> crate::settings::MineSettings {
+        crate::settings::MineSettings {
+            mine_goal_update_interval: self.get_int("mineGoalUpdateInterval"),
+            mine_max_ore_locations_count: self.get_int("mineMaxOreLocationsCount"),
+            min_y_level_while_mining: self.get_int("minYLevelWhileMining"),
+            max_y_level_while_mining: self.get_int("maxYLevelWhileMining"),
+            allow_only_exposed_ores: self.get_bool("allowOnlyExposedOres"),
+            allow_only_exposed_ores_distance: self.get_int("allowOnlyExposedOresDistance"),
+            explore_for_blocks: self.get_bool("exploreForBlocks"),
+            mine_scan_dropped_items: self.get_bool("mineScanDroppedItems"),
+            mine_drop_loiter_duration_ms: self.get_long("mineDropLoiterDurationMSThanksLouca"),
+            legit_mine: self.get_bool("legitMine"),
+            legit_mine_y_level: self.get_int("legitMineYLevel"),
+            legit_mine_include_diagonals: self.get_bool("legitMineIncludeDiagonals"),
+            force_internal_mining: self.get_bool("forceInternalMining"),
+            internal_mining_air_exception: self.get_bool("internalMiningAirException"),
+            blacklist_closest_on_failure: self.get_bool("blacklistClosestOnFailure"),
+            right_click_container_on_arrival: self.get_bool("rightClickContainerOnArrival"),
+            enter_portal: self.get_bool("enterPortal"),
+        }
     }
 
     /// `CalculationContext.<init>(IBaritone,boolean)`: what the player's inventory and the world make of two fields of the context.

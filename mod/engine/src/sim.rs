@@ -20,9 +20,10 @@ use crate::look::Vec3;
 use crate::movement::helper::Border;
 use crate::pos::Pos;
 use crate::process::pathing::{run_search, PathEvent, Pathing, SearchJob, SearchOutcome, SearchRunner, Tables, TickEnv, TickOutput};
+use crate::process::{ItemEntity, ProcessInputs};
 use crate::raytrace::BlockHit;
 use crate::settings::ExecSettings;
-use crate::testing::{Fixture, TestWorld, AIR, STONE};
+use crate::testing::{Fixture, TestWorld, AIR, ORE, STONE};
 use crate::world::WorldView;
 use std::collections::VecDeque;
 use std::sync::atomic::AtomicBool;
@@ -34,7 +35,7 @@ const HALF_WIDTH: f64 = 0.3;
 const HEIGHT: f64 = 1.8;
 
 fn solid(w: &TestWorld, x: i32, y: i32, z: i32) -> bool {
-    (0..16).contains(&y) && w.state_id(x, y, z) == STONE as usize
+    (0..16).contains(&y) && matches!(w.state_id(x, y, z), 1 | 2)
 }
 
 /// The simulated player.
@@ -375,15 +376,48 @@ pub struct Rig<R: SearchRunner<TestWorld>> {
     /// The ticks in which an intent held the left button, and the ticks in which one pressed the right one.
     pub attack_ticks: u32,
     pub use_ticks: u32,
+    /// The dropped items the processes see (`ProcessInputs::item_entities`).
+    pub entities: Vec<ItemEntity>,
+    /// Everything the processes said, in order.
+    pub messages: Vec<String>,
+    /// The scans that were run between ticks, and the position of the player at the time of each one.
+    pub scans_run: u32,
+    /// The ticks in which the process in control was a given one: (tick, mine active, get-to-block active, goal process active).
+    pub who: Vec<(u32, bool, bool, bool)>,
 }
 
 impl<R: SearchRunner<TestWorld>> Rig<R> {
     pub fn with_runner(world: TestWorld, start: (i32, i32, i32), runner: R) -> Rig<R> {
-        let fx = Fixture::new();
-        let tables = Arc::new(Tables::new(fx.states.clone(), fx.cfg.clone(), vec![1.0, 1.0]));
+        let fx = Fixture::with_ore(crate::testing::test_config());
+        let tables = Arc::new(Tables::new(fx.states.clone(), fx.cfg.clone(), vec![1.0, 1.0, 1.0]));
         let mut pathing = Pathing::new(runner);
         pathing.max_nodes = Some(5000);
-        Rig { tables, world, p: SimPlayer::at(start.0, start.1, start.2), pathing, exec: ExecSettings::default(), intent: Intent::neutral(), events: vec![], ticks: 0, intents: vec![], kinds: vec![], inv: TestInventory::empty(), game: GameFacts::default(), configured: None, dig: None, dig_delay: 0, use_cooldown: 0, broken: vec![], placed: vec![], attack_ticks: 0, use_ticks: 0 }
+        Rig {
+            tables,
+            world,
+            p: SimPlayer::at(start.0, start.1, start.2),
+            pathing,
+            exec: ExecSettings::default(),
+            intent: Intent::neutral(),
+            events: vec![],
+            ticks: 0,
+            intents: vec![],
+            kinds: vec![],
+            inv: TestInventory::empty(),
+            game: GameFacts::default(),
+            configured: None,
+            dig: None,
+            dig_delay: 0,
+            use_cooldown: 0,
+            broken: vec![],
+            placed: vec![],
+            attack_ticks: 0,
+            use_ticks: 0,
+            entities: vec![],
+            messages: vec![],
+            scans_run: 0,
+            who: vec![],
+        }
     }
 
     /// A rig whose tables follow the hotbar: `cfg` holds the settings (`allow_break` and the others), and every tick `has_throwaway` is
@@ -402,11 +436,11 @@ impl<R: SearchRunner<TestWorld>> Rig<R> {
         let Some((cfg, allow_place)) = &self.configured else {
             return;
         };
-        let fx = Fixture::new();
+        let fx = Fixture::with_ore(cfg.clone());
         let mut cfg = cfg.clone();
         cfg.has_throwaway = *allow_place && has_generic_throwaway(&self.inv, &self.exec.tool.acceptable_throwaway_items);
         let ts: &ToolSettings = &self.exec.tool;
-        let strength = vec![1.0, get_str_vs_block(&self.inv, 1, "stone", ts)];
+        let strength = vec![1.0, get_str_vs_block(&self.inv, 1, "stone", ts), get_str_vs_block(&self.inv, ORE as usize, "diamond_ore", ts)];
         self.tables = Arc::new(Tables::new(fx.states, cfg, strength));
     }
 
@@ -419,13 +453,17 @@ impl<R: SearchRunner<TestWorld>> Rig<R> {
         if i.attack {
             self.attack_ticks += 1;
             match hit {
-                Some(h) if self.world.state_id(h.pos.x, h.pos.y, h.pos.z) == STONE as usize => {
+                Some(h) if matches!(self.world.state_id(h.pos.x, h.pos.y, h.pos.z), 1 | 2) => {
                     if self.dig_delay > 0 {
                         self.dig_delay -= 1;
                     } else if let Some((pos, done)) = self.dig {
                         if pos == h.pos {
-                            let done = done + self.inv.speed_vs_state(self.inv.selected, STONE as usize);
+                            let done = done + self.inv.speed_vs_state(self.inv.selected, self.world.state_id(pos.x, pos.y, pos.z));
                             if done >= 1.0 {
+                                if self.world.state_id(pos.x, pos.y, pos.z) == ORE as usize {
+                                    // the drop goes straight into the inventory: picking up is not what these tests are about
+                                    self.inv.main.push(SlotInfo::of("diamond", 1));
+                                }
                                 self.world.set(pos.x, pos.y, pos.z, AIR);
                                 self.broken.push(pos);
                                 self.dig = None;
@@ -477,9 +515,21 @@ impl<R: SearchRunner<TestWorld>> Rig<R> {
         self.p.step(&self.world, &last);
         let mut view = self.p.view();
         view.looking_at = self.p.looking_at(&self.world);
+        // the head is in a block (`Entity.isInWall`)
+        let head = (self.p.x.floor() as i32, (self.p.y + self.p.eye_height()).floor() as i32, self.p.z.floor() as i32);
+        view.in_wall = solid(&self.world, head.0, head.1, head.2);
         let snap = self.world.clone();
         let env = TickEnv { tables: &self.tables, world: &self.world, border: Border { min_x: -3.0e7, max_x: 3.0e7, min_z: -3.0e7, max_z: 3.0e7 }, player: &view, exec: &self.exec, inv: &self.inv, game: self.game };
+        self.pathing.set_inputs(ProcessInputs { now_ms: i64::from(self.ticks) * 50, item_entities: self.entities.clone(), container_open: false });
         let out = self.pathing.tick(&env, &mut || snap.clone());
+        // the scans the processes asked for run between ticks, as the glue's worker does, and their answers come in before the next one
+        for job in self.pathing.take_scan_jobs() {
+            let result = job.run(&self.tables.ctx(&self.world, Border { min_x: -3.0e7, max_x: 3.0e7, min_z: -3.0e7, max_z: 3.0e7 }));
+            self.pathing.deliver_scan(result, &self.tables.cfg, &self.exec);
+            self.scans_run += 1;
+        }
+        self.messages.extend(self.pathing.take_messages());
+        self.who.push((self.ticks, self.pathing.mine_process().is_active(), self.pathing.get_to_block_process().is_active(), self.pathing.process().is_active()));
         self.intent = out.intent.clone();
         if let Some(slot) = out.intent.select_slot {
             self.inv.selected = slot;
@@ -1004,7 +1054,6 @@ mod tests {
             let w = random_world(&mut rng);
             let start = some_start(&w, &mut rng);
             let mut rig = Rig::new(w, start);
-            rig.exec.can_use_blocks = rng.chance(50);
             rig.pathing.goto(random_goal(&mut rng));
             for _ in 0..150 {
                 for _ in 0..rng.below(4) {
@@ -1149,6 +1198,30 @@ mod break_place_tests {
             }
         }
         w
+    }
+
+    #[test]
+    fn a_block_landing_in_the_head_is_mined_and_the_walk_goes_on() {
+        // upstream `Movement.update`: with the head in a block, the best tool and the left button on what the crosshair is on; no new path
+        let mut rig = rig_with(corridor(20), (1, 1, 3), true, false, kit(0));
+        rig.pathing.goto(goal(16, 1, 3));
+        for _ in 0..12 {
+            rig.tick();
+        }
+        assert!(rig.p.x > 2.0, "the walk should have started: x {}", rig.p.x);
+        // the sand lands where the head is
+        let (hx, hy, hz) = (rig.p.x.floor() as i32, (rig.p.y + rig.p.eye_height()).floor() as i32, rig.p.z.floor() as i32);
+        rig.world.set(hx, hy, hz, STONE);
+        let attacks_before = rig.attack_ticks;
+        for _ in 0..40 {
+            rig.tick();
+            assert!(rig.pathing.last_cancel().is_none(), "the path was cancelled: {:?}", rig.pathing.last_cancel());
+        }
+        assert!(rig.attack_ticks > attacks_before, "the left button was never pressed");
+        assert!(rig.broken.contains(&Pos::new(hx, hy, hz)), "the block in the head was not mined: {:?}", rig.broken);
+        assert!(rig.intents.iter().any(|i| i.select_slot == Some(3)), "the pickaxe was not asked for");
+        rig.run_until_idle(300);
+        assert!(rig.p.x > 15.0, "the walk did not finish: x {}", rig.p.x);
     }
 
     /// Every cell the movements of every followed path would break or place, by the executor's own lists.
@@ -1453,5 +1526,339 @@ mod eta_tests {
         rig.tick();
         rig.tick();
         assert_eq!(rig.pathing.estimated_ticks_to_goal(rig.p.feet(), &gs), Some(0.0));
+    }
+}
+
+/// `mine` and `goto <block>` with the simulated player: the processes, the manager that hands control between them, and the scans between ticks.
+mod mine_tests {
+    use super::*;
+    use crate::blockmeta::{test_index, BlockOptionalMeta, BlockOptionalMetaLookup};
+    use crate::testing::test_config;
+
+    /// An iron pickaxe in slot 3 that mines stone and ore alike at 0.2 per tick.
+    fn pick() -> TestInventory {
+        let mut inv = TestInventory::empty();
+        inv.put(3, SlotInfo { material_cost: 2, pickaxe: true, ..SlotInfo::of("iron_pickaxe", 1) }, &[0.0, 0.2, 0.2]);
+        inv
+    }
+
+    fn rig(world: TestWorld, start: (i32, i32, i32)) -> Rig<ImmediateRunner> {
+        let cfg = Config { allow_break: true, allow_downward: true, ..test_config() };
+        Rig::configured(world, start, ImmediateRunner::default(), cfg, false, pick())
+    }
+
+    fn ore_lookup() -> BlockOptionalMetaLookup {
+        BlockOptionalMetaLookup::from_names(&["diamond_ore"], &test_index()).unwrap()
+    }
+
+    fn ore_block() -> BlockOptionalMeta {
+        BlockOptionalMeta::parse("diamond_ore", &test_index()).unwrap()
+    }
+
+    fn start_mine(rig: &mut Rig<ImmediateRunner>, quantity: i32) {
+        let cfg = rig.tables.cfg.clone();
+        rig.pathing.mine(quantity, ore_lookup(), &cfg);
+    }
+
+    fn ores_left(rig: &Rig<ImmediateRunner>) -> usize {
+        let mut n = 0;
+        for x in 0..rig.world.w {
+            for y in 0..rig.world.h {
+                for z in 0..rig.world.d {
+                    if rig.world.state_id(x, y, z) == ORE as usize {
+                        n += 1;
+                    }
+                }
+            }
+        }
+        n
+    }
+
+    fn open_field() -> TestWorld {
+        TestWorld::flat(40, 12)
+    }
+
+    #[test]
+    fn the_first_scan_is_a_job_and_the_process_holds_still_until_it_answers() {
+        let mut w = open_field();
+        w.set(10, 1, 3, ORE);
+        let mut r = rig(w, (2, 1, 3));
+        start_mine(&mut r, 0);
+        r.tick();
+        // the game thread did not scan: the answer came after the tick, from a job
+        assert!(r.pathing.mine_process().known_ore_locations().len() == 1 && r.scans_run == 1);
+        let at = (r.p.x, r.p.z);
+        r.tick();
+        assert_eq!((r.p.x, r.p.z), at, "no path was started before the answer was known");
+        // the first tick only paused (the initial job was its one scan); the process's own tick 0, with its rescan, was this one
+        assert_eq!(r.scans_run, 2);
+        let used = r.run_until_idle(2000);
+        assert!(used < 2000, "{:?}", r.messages);
+        assert_eq!(ores_left(&r), 0);
+    }
+
+    #[test]
+    fn mine_three_ores_around_and_stop_at_three() {
+        let mut w = open_field();
+        for (x, y, z) in [(10, 1, 3), (16, 1, 7), (22, 1, 4), (30, 1, 9)] {
+            w.set(x, y, z, ORE);
+        }
+        let mut r = rig(w, (2, 1, 3));
+        start_mine(&mut r, 3);
+        let used = r.run_until_idle(3000);
+        assert!(used < 3000, "the process never ended: {:?}", r.messages);
+        assert!(r.messages.iter().any(|m| m == "Have 3 valid items"), "{:?}", r.messages);
+        assert_eq!(ores_left(&r), 1, "three of the four were mined");
+        assert!(r.world.state_id(10, 1, 3) == AIR as usize && r.world.state_id(16, 1, 7) == AIR as usize && r.world.state_id(22, 1, 4) == AIR as usize);
+        assert!(!r.pathing.is_active());
+        assert!(r.scans_run >= 2, "the world was rescanned while it walked: {}", r.scans_run);
+    }
+
+    #[test]
+    fn mine_with_no_quantity_takes_every_ore_in_reach_and_then_stops_when_not_exploring() {
+        let mut w = open_field();
+        for (x, y, z) in [(8, 1, 3), (14, 1, 6), (20, 1, 2)] {
+            w.set(x, y, z, ORE);
+        }
+        let mut r = rig(w, (2, 1, 3));
+        r.exec.mine.explore_for_blocks = false;
+        start_mine(&mut r, 0);
+        let used = r.run_until_idle(3000);
+        assert!(used < 3000, "never ended: {:?}", r.messages);
+        assert_eq!(ores_left(&r), 0);
+        assert!(!r.pathing.is_active());
+    }
+
+    #[test]
+    fn mine_with_nothing_known_and_no_exploring_says_so_at_once() {
+        let mut r = rig(open_field(), (2, 1, 3));
+        r.exec.mine.explore_for_blocks = false;
+        start_mine(&mut r, 0);
+        r.tick();
+        assert!(!r.pathing.is_active());
+        assert!(r.messages.iter().any(|m| m.starts_with("No locations for BlockOptionalMetaLookup{") && m.ends_with("known, cancelling")), "{:?}", r.messages);
+    }
+
+    #[test]
+    fn mine_refuses_blocks_it_may_not_break() {
+        let cfg = Config { allow_break: false, ..test_config() };
+        let mut r = Rig::configured(open_field(), (2, 1, 3), ImmediateRunner::default(), cfg.clone(), false, pick());
+        r.pathing.mine(0, ore_lookup(), &cfg);
+        assert!(!r.pathing.is_active());
+        assert_eq!(r.pathing.take_messages(), vec!["Unable to mine when allowBreak is false and target block is not in allowBreakAnyway!".to_string()]);
+        // in allowBreakAnyway it is fine
+        let cfg = Config { allow_break: false, allow_break_anyway: vec!["diamond_ore".to_string()], ..test_config() };
+        r.pathing.mine(0, ore_lookup(), &cfg);
+        assert!(r.pathing.is_active());
+    }
+
+    #[test]
+    fn stop_ends_a_mine_at_once_and_neutral() {
+        let mut w = open_field();
+        w.set(30, 1, 3, ORE);
+        let mut r = rig(w, (2, 1, 3));
+        start_mine(&mut r, 0);
+        for _ in 0..40 {
+            r.tick();
+        }
+        assert!(r.pathing.is_active() && r.pathing.is_pathing());
+        let neutral = r.pathing.stop();
+        assert_eq!(neutral, Intent::neutral());
+        assert!(!r.pathing.is_active() && !r.pathing.mine_process().is_active());
+        for _ in 0..5 {
+            r.tick();
+            assert!(!r.pathing.is_active());
+            assert_eq!(r.intent, Intent::neutral());
+        }
+    }
+
+    #[test]
+    fn goto_after_mine_takes_control_and_the_mine_is_gone() {
+        let mut w = open_field();
+        w.set(34, 1, 3, ORE);
+        let mut r = rig(w, (2, 1, 3));
+        start_mine(&mut r, 0);
+        for _ in 0..25 {
+            r.tick();
+        }
+        assert!(r.pathing.mine_process().is_active());
+        r.pathing.goto(Goal::Block { x: 6, y: 1, z: 9 });
+        r.tick();
+        assert!(!r.pathing.mine_process().is_active(), "mine kept control");
+        assert!(r.pathing.process().is_active());
+        r.run_until_idle(600);
+        let f = r.p.feet();
+        assert_eq!((f.x, f.z), (6, 9));
+        assert!(!r.pathing.is_active());
+        assert_eq!(ores_left(&r), 1, "the ore was not touched");
+    }
+
+    #[test]
+    fn mine_after_goto_takes_control_from_the_goal_process() {
+        let mut w = open_field();
+        w.set(20, 1, 3, ORE);
+        let mut r = rig(w, (2, 1, 3));
+        r.pathing.goto(Goal::Block { x: 36, y: 1, z: 10 });
+        for _ in 0..25 {
+            r.tick();
+        }
+        assert!(r.pathing.process().is_active());
+        start_mine(&mut r, 1);
+        r.tick();
+        assert!(!r.pathing.process().is_active(), "the goal process kept control");
+        r.run_until_idle(1500);
+        assert_eq!(ores_left(&r), 0);
+        assert!(r.p.feet().x < 30, "it did not go on to the old goal: {:?}", r.p.feet());
+    }
+
+    #[test]
+    fn at_most_one_process_is_in_control_after_each_start() {
+        let mut w = open_field();
+        w.set(30, 1, 5, ORE);
+        w.set(34, 1, 8, ORE);
+        let mut r = rig(w, (2, 1, 3));
+        r.pathing.goto(Goal::Block { x: 38, y: 1, z: 3 });
+        for t in 0..400 {
+            match t {
+                10 => start_mine(&mut r, 0),
+                60 => {
+                    let feet = r.p.feet();
+                    r.pathing.get_to_block(ore_block(), feet)
+                }
+                120 => r.pathing.goto(Goal::Block { x: 4, y: 1, z: 4 }),
+                200 => {
+                    r.pathing.stop();
+                }
+                _ => {}
+            }
+            r.tick();
+        }
+        // the tick after each start, the newest process is the only one active
+        for t in [10, 60, 120] {
+            let (_, mine, gtb, goal) = r.who[t];
+            assert_eq!([mine, gtb, goal].iter().filter(|a| **a).count(), 1, "tick {t}: mine {mine} gtb {gtb} goal {goal}");
+        }
+        let (_, mine, gtb, goal) = r.who[210];
+        assert!(!mine && !gtb && !goal, "after stop");
+    }
+
+    #[test]
+    fn goto_a_block_walks_next_to_it_and_leaves_it_alone() {
+        let mut w = open_field();
+        w.set(30, 1, 6, ORE);
+        let mut r = rig(w, (2, 1, 3));
+        let feet = r.p.feet();
+        r.pathing.get_to_block(ore_block(), feet);
+        let used = r.run_until_idle(1500);
+        assert!(used < 1500, "{:?}", r.messages);
+        let f = r.p.feet();
+        assert_eq!((f.x - 30).abs() + (f.y - 1).abs() + (f.z - 6).abs(), 1, "next to the ore: {f:?}");
+        assert_eq!(ores_left(&r), 1);
+        assert!(r.broken.is_empty(), "nothing was broken on the way: {:?}", r.broken);
+    }
+
+    #[test]
+    fn goto_a_block_that_is_not_there_explores_or_gives_up_when_told_not_to() {
+        let mut r = rig(open_field(), (5, 1, 5));
+        let feet = r.p.feet();
+        r.pathing.get_to_block(ore_block(), feet);
+        for _ in 0..30 {
+            r.tick();
+        }
+        assert!(r.pathing.get_to_block_process().is_active());
+        assert!(matches!(r.pathing.goal(), Some(Goal::NeverInGoal(_))), "{:?}", r.pathing.goal());
+        r.pathing.stop();
+        let mut r = rig(open_field(), (5, 1, 5));
+        r.exec.mine.explore_for_blocks = false;
+        let feet = r.p.feet();
+        r.pathing.get_to_block(ore_block(), feet);
+        r.tick();
+        r.tick();
+        assert!(!r.pathing.is_active());
+        assert!(r.messages.iter().any(|m| m.starts_with("No known locations of BlockOptionalMeta{") && m.ends_with(", canceling GetToBlock")), "{:?}", r.messages);
+    }
+
+    #[test]
+    fn a_pause_request_stands_the_path_still_for_one_tick_when_it_is_safe() {
+        let mut r = rig(open_field(), (2, 1, 3));
+        r.pathing.goto(Goal::Block { x: 36, y: 1, z: 3 });
+        for _ in 0..30 {
+            r.tick();
+        }
+        assert!(r.pathing.is_pathing());
+        let before = r.pathing.current().unwrap().position();
+        r.pathing.request_pause();
+        let out = r.tick();
+        // `safeToCancel` is what the path said last tick; walking straight is safe
+        assert!(!r.pathing.is_pathing(), "paused this tick");
+        assert!(r.pathing.has_path(), "the path is still there");
+        assert_eq!(r.pathing.current().unwrap().position(), before, "the executor did not tick");
+        assert!(!out.intent.forward && !out.intent.active, "{:?}", out.intent);
+        r.tick();
+        assert!(r.pathing.is_pathing(), "it goes on");
+        r.run_until_idle(600);
+        assert!(r.p.x > 35.0);
+    }
+
+    #[test]
+    fn an_ore_in_the_players_column_is_broken_where_he_stands_with_the_path_paused() {
+        let mut w = open_field();
+        w.set(5, 3, 3, ORE);
+        let mut r = rig(w, (5, 1, 3));
+        // a walk in progress is not safe to cancel at its start: the pause waits for a safe moment, so the player first has a path
+        start_mine(&mut r, 1);
+        let mut paused = 0;
+        for _ in 0..200 {
+            r.tick();
+            if r.pathing.mine_process().is_active() && !r.pathing.is_pathing() && r.intent.attack {
+                paused += 1;
+            }
+            if !r.pathing.is_active() {
+                break;
+            }
+        }
+        assert!(r.broken.contains(&Pos::new(5, 3, 3)), "{:?} {:?}", r.broken, r.messages);
+        assert!(paused > 0, "the left button was held with no path followed");
+        assert!((r.p.x - 5.5).abs() < 0.6 && (r.p.z - 3.5).abs() < 0.6, "it did not walk: {} {}", r.p.x, r.p.z);
+        assert!(r.messages.iter().any(|m| m == "Have 1 valid items"), "{:?}", r.messages);
+        assert!(r.intents.iter().any(|i| i.select_slot == Some(3)), "the pickaxe was asked for");
+    }
+
+    struct Rng(u64);
+    impl Rng {
+        fn next(&mut self) -> u64 {
+            self.0 ^= self.0 << 13;
+            self.0 ^= self.0 >> 7;
+            self.0 ^= self.0 << 17;
+            self.0
+        }
+        fn below(&mut self, n: u64) -> u64 {
+            self.next() % n
+        }
+    }
+
+    #[test]
+    fn random_fields_mine_exactly_what_they_were_asked_to() {
+        for seed in 1..=12u64 {
+            let mut rng = Rng(seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1);
+            let mut w = TestWorld::flat(36, 14);
+            let mut ores = vec![];
+            let n = 3 + rng.below(6) as usize;
+            while ores.len() < n {
+                let p = (6 + rng.below(28) as i32, 1 + rng.below(2) as i32, 1 + rng.below(12) as i32);
+                if !ores.contains(&p) {
+                    ores.push(p);
+                    w.set(p.0, p.1, p.2, ORE);
+                }
+            }
+            let want = 1 + rng.below(n as u64) as i32;
+            let mut r = rig(w, (2, 1, 7));
+            start_mine(&mut r, want);
+            let used = r.run_until_idle(4000);
+            assert!(used < 4000, "seed {seed}: never ended: {:?} {:?}", r.messages, r.p.feet());
+            assert!(r.messages.iter().any(|m| m == &format!("Have {want} valid items")), "seed {seed}: {:?}", r.messages);
+            assert_eq!(ores_left(&r), n - want as usize, "seed {seed}: it mined exactly {want}");
+            assert!(!r.pathing.is_active(), "seed {seed}");
+        }
     }
 }

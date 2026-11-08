@@ -288,6 +288,19 @@ def hotbar_items(text):
     return out
 
 
+def hotbar_total(text, item):
+    """The count of an item over all the stacks of a hotbar text."""
+    total = 0
+    for part in (text or "").split("; "):
+        if not part:
+            continue
+        _, rest = part.split(":", 1)
+        name, count, _ = rest.split(" ")
+        if name == item:
+            total += int(count[1:])
+    return total
+
+
 def judge_blocks(res, chk, meta, plans):
     """Checks of a scenario that is allowed to change blocks (chk has "plan"): every change was planned, every planned cell was
     done, the counts are the expected ones, nothing else changed. Water cells are transient (a bucket's water), counted apart."""
@@ -302,13 +315,22 @@ def judge_blocks(res, chk, meta, plans):
     union_place = set().union(*[p["place"] for p in plans]) if plans else set()
     ok["every broken block was in a plan's toBreak"] = broken <= union_break
     ok["every placed block was in a plan's toPlace"] = placed <= union_place
-    if plans:
+    if plans and not chk.get("last_path_may_be_unused"):
         # The last path was made from what was left to do, so all of it was done. An earlier one may have been replaced.
+        # (Not for `mine`: the path to the next ore is made while the last ore is being broken, and the process ends before it is walked.)
         ok["every toBreak cell of the last path was broken"] = plans[-1]["break"] <= broken
         ok["every toPlace cell of the last path was placed"] = plans[-1]["place"] <= placed
     want = chk["plan"]
-    ok[f"broke exactly {want['break']} blocks"] = len(broken) == want["break"]
-    ok[f"placed exactly {want['place']} blocks"] = len(placed) == want["place"]
+    if isinstance(want["break"], list):
+        lo, hi = want["break"]
+        ok[f"broke {lo} to {hi} blocks"] = lo <= len(broken) <= hi
+    else:
+        ok[f"broke exactly {want['break']} blocks"] = len(broken) == want["break"]
+    if isinstance(want["place"], list):
+        lo, hi = want["place"]
+        ok[f"placed {lo} to {hi} blocks"] = lo <= len(placed) <= hi
+    else:
+        ok[f"placed exactly {want['place']} blocks"] = len(placed) == want["place"]
     ok["no other block changed" + (" (but water)" if chk.get("water_ok") else "")] = not other and (chk.get("water_ok") or not water)
     if "water_ok" in chk and water:
         res["notes"].append(f"{len(water)} water cells differ from the start at the end (a bucket's water, still flowing or settled)")
@@ -318,6 +340,9 @@ def judge_blocks(res, chk, meta, plans):
         ok[f"{item} count changed by {delta}"] = item in start and item in end and end[item][0] - start[item][0] == delta
     for item, dmg in (chk.get("tool_damage") or {}).items():
         ok[f"{item} lost {dmg} durability"] = item in start and item in end and end[item][1] - start[item][1] == dmg
+    if chk.get("tool_damage_equals_broken"):
+        item = chk["tool_damage_equals_broken"]
+        ok[f"{item} lost one durability per block broken ({len(broken)})"] = item in start and item in end and end[item][1] - start[item][1] == len(broken)
     for item in chk.get("hotbar_end_has") or []:
         ok[f"{item} in the hotbar at the end"] = item in end
     # The slot: upstream never puts it back (docs/deviations.md D32), so this is reported, not judged.
@@ -352,7 +377,9 @@ def judge(out, sc, meta):
     res["chat_lines"] = [n[2] for n in notes if n[1] == "chat"]
     res["chat_open_in_rows"] = sum(int(r["chat"]) for r in rows)
     if sc["chat"]:
-        ok["chat was open during the walk"] = res["chat_open_in_rows"] >= len(rows) * 0.9
+        # For `mine` and `goto <block>` the run goes on 60 ticks after the process ended (and a right click on a table replaces the chat screen).
+        n_rows = len(rows) - 60 if chk["kind"] in ("mine", "goto_block") else len(rows)
+        ok["chat was open during the walk"] = res["chat_open_in_rows"] >= n_rows * 0.9
     ok["never died"] = not meta["died"]
     if chk.get("blocks_changed") == 0 and meta.get("blocks_changed") is not None:
         ok["blocks changed = 0"] = meta["blocks_changed"] == 0
@@ -397,6 +424,17 @@ def judge(out, sc, meta):
             res["searches_after_the_block_appeared"] = len(late)
             ok["recalculated after the block appeared"] = len(late) >= 1
         res["per_movement"] = per_movement(rows)
+        if "no_search_after" in chk:
+            t0 = chk["no_search_after"]
+            later = [s for s in good if int(s["t"].split("=")[-1]) >= t0]
+            res["searches_after_the_event"] = len(later)
+            ok["no search that gave a path after the event (the walk went on)"] = not later
+        if "toggled" in chk:
+            changes = read_changes(meta)
+            want = {tuple(c) for c in chk["toggled"]}
+            res["door_cells_changed"] = sorted(changes)
+            ok["the door or gate was used (its cells changed state)"] = set(changes) == want
+            ok["its block did not change into another"] = all(b == a for b, a in changes.values())
         if "plan" in chk:
             judge_blocks(res, chk, meta, read_plan(os.path.join(out, name + ".segments.txt")))
             pm = res["per_movement"]
@@ -408,6 +446,48 @@ def judge(out, sc, meta):
             stopped_with_message = (not meta["busy_at_end"]) and any("No path" in c or "Stopped" in c or "cancel" in c.lower() for c in res["chat_lines"])
             if stopped_with_message:
                 res["notes"].append("did not arrive but stopped with a message: " + " | ".join(res["chat_lines"][-3:]))
+    elif kind in ("mine", "goto_block"):
+        # `b mine` and `b goto <block>`: no goal cell; the walk ends when the process is done (the mod is idle for 60 ticks).
+        done_t = meta["ticks"] - 60
+        took = done_t - cmd if cmd is not None else None
+        res["ticks_from_command_to_done"] = took
+        ok["stopped on its own (path off, keys released)"] = (not meta["busy_at_end"]) and (not meta["forced_at_end"])
+        ok[f"done within {chk['limit_ticks']} ticks of the command"] = took is not None and took <= chk["limit_ticks"]
+        changes = read_changes(meta)
+        broken_cells = {c for c, (b, a) in changes.items() if not is_air(b) and not is_water(b) and (is_air(a) or is_water(a))}
+        for c in chk.get("ores_broken") or []:
+            ok[f"ore {c} was broken"] = tuple(c) in broken_cells
+        for c in chk.get("ores_intact") or []:
+            ok[f"ore {c} is still there"] = tuple(c) not in changes
+        if "ores_broken_count" in chk:
+            n = sum(1 for c in chk["ores_all"] if tuple(c) in broken_cells)
+            res["ores_broken"] = n
+            ok[f"exactly {chk['ores_broken_count']} of the {len(chk['ores_all'])} ores were broken"] = n == chk["ores_broken_count"]
+        for c in chk.get("intact") or []:
+            ok[f"{c} was not touched"] = tuple(c) not in changes
+        res["items_end"] = {}
+        for item, want in (chk.get("items_end") or {}).items():
+            have = hotbar_total(meta.get("hotbar_end"), item)
+            res["items_end"][item] = have
+            ok[f"{item} in the hotbar: {want}"] = have == want
+        res["hotbar_start"], res["hotbar_end"] = meta.get("hotbar_start"), meta.get("hotbar_end")
+        res["container_open_ticks"] = meta.get("container_open_ticks")
+        if chk.get("opens_container"):
+            ok["the block was right clicked open (a container or station screen was open)"] = bool(meta.get("container_open_ticks"))
+        if "have_message" in chk:
+            ok[f"said 'Have {chk['have_message']} valid items'"] = any(f"Have {chk['have_message']} valid items" in m for m in res["chat_lines"])
+        if kind == "goto_block":
+            bx, by, bz = chk["block"]
+            d = math.hypot(fp[0] - (bx + 0.5), fp[2] - (bz + 0.5))
+            res["distance_to_block_xz"] = round(d, 2)
+            ok[f"ended within {chk['radius']} blocks of the block"] = d <= chk["radius"] and abs(fp[1] - by) <= 1.5
+        searches = read_kv_lines(os.path.join(out, name + ".searches.txt"))
+        res["successful_searches"] = len([s for s in searches if s["cancelled"] == "false" and s["kind"] in ("SuccessToGoal", "SuccessSegment")])
+        res["per_movement"] = per_movement(rows)
+        judge_blocks(res, chk, meta, read_plan(os.path.join(out, name + ".segments.txt")))
+        pm = res["per_movement"]
+        res["estimated_vs_actual_ticks"] = {"estimated": pm["estimated_ticks_total"], "actual": pm["actual_ticks_total"], "ratio": pm["ratio_actual_over_estimated"]}
+        ok["no 'Unable to find any path' in the chat"] = not any("Unable to find any path" in m for m in res["chat_lines"])
     elif kind == "unreachable":
         msgs = res["chat_lines"]
         ok["stopped on its own (path off, keys released)"] = (not meta["busy_at_end"]) and (not meta["forced_at_end"])
@@ -433,7 +513,12 @@ def judge(out, sc, meta):
         ok["no keys and no path from the stop tick on"] = all(r["forced"] == "0" and r["pathing"] == "0" for r in rows if int(r["t"]) >= ts)
         before = byt[ts - 1]
         res["speed_the_tick_before_the_stop"] = round(speed(byt[ts - 2], before), 3)
-        ok["was walking before the stop"] = res["speed_the_tick_before_the_stop"] > 0.2
+        if chk.get("not_walking_before"):
+            ok["was not walking at the stop (the scan was still running)"] = res["speed_the_tick_before_the_stop"] < 0.05
+            ok["the walk never started afterwards (the player did not move)"] = math.hypot(fnum(byt[ts], "x") - fnum(rows[-1], "x"), fnum(byt[ts], "z") - fnum(rows[-1], "z")) < 0.01
+            ok[f"the run went on at least {chk['still_for_ticks']} ticks past the stop (the scan's result had arrived)"] = len(rows) - ts >= chk["still_for_ticks"]
+        else:
+            ok["was walking before the stop"] = res["speed_the_tick_before_the_stop"] > 0.2
         settle = None
         still = 0
         for t in range(ts + 1, len(rows)):
@@ -511,7 +596,7 @@ def main():
         failed = [k for k, v in r["checks"].items() if not v]
         print(f"{r['status'].upper():8} {r['scenario']:34} ticks={r.get('ticks')} {('failed: ' + '; '.join(failed)) if failed else ''} {' '.join(r['notes'])[:160]}")
     if args.report:
-        keep = ("scenario", "chat", "status", "ticks", "blocks", "estimated_vs_actual_ticks", "slot_start", "slot_end", "slot_restored_after_the_path", "hotbar_start", "hotbar_end", "ticks_from_command_to_arrival", "command_tick", "arrived_tick", "distance_to_goal_xz", "min_health", "successful_searches")
+        keep = ("scenario", "chat", "status", "ticks", "blocks", "estimated_vs_actual_ticks", "slot_start", "slot_end", "slot_restored_after_the_path", "hotbar_start", "hotbar_end", "ticks_from_command_to_arrival", "command_tick", "arrived_tick", "distance_to_goal_xz", "min_health", "successful_searches", "items_end", "container_open_ticks", "ores_broken", "distance_to_block_xz", "ticks_from_command_to_done", "chat_lines", "speed_the_tick_before_the_stop", "ticks_until_still", "coasting_distance_blocks")
         slim = [{k: r[k] for k in keep if k in r} | {"failed_checks": [k for k, v in r["checks"].items() if not v]} for r in results]
         rep = {"horizon_revision": HORIZON_REVISION, "instance": INSTANCE, "run": status, "scenarios": slim, "overall_timing": summary["overall_timing"]}
         with open(args.report, "w") as f:

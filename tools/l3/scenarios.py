@@ -407,11 +407,173 @@ def b09_dig_stone_by_hand(chat, x0=6400, z0=3000):
         watch=(x0 + 16, SKY - 2, z0 - 1, x0 + 30, SKY + 6, z0 + 9), slot=0)
 
 
+def b10_head_sand(chat, x0=6800, z0=3000):
+    """Sand lands where the head is, in the middle of a walk (S4 follow-up, docs/deviations.md D16 and D31). At tick 45 the console sets a sand
+    block in the cell of the player's head. Upstream `Movement.update` then switches to the best tool and presses the left button on what the
+    crosshair is on, and the walk goes on; before the fix the movement failed and the path was searched again. The sand then falls on and
+    may land in the cell of the feet, so blocks are not judged; what is judged is that the walk reached the goal and that no search that gave
+    a path was made after the sand came."""
+    a = Area(x0, z0, x0 + 70, z0 + 8)
+    a.add(*floor(x0, z0, x0 + 70, z0 + 8))
+    goal = (x0 + 62, SKY + 1, z0 + 4)
+    return scenario(
+        f"b10_head_sand_chat{int(chat)}", chat, a, (x0 + 2.5, SKY + 1, z0 + 4.5),
+        with_chat(chat, [
+            {"t": 10, "command": f"b goto {goal[0]} {goal[1]} {goal[2]}"},
+            {"t": 45, "console": "execute as @p at @s run setblock ~ ~1 ~ minecraft:sand"},
+        ]),
+        end=700, stop_when="arrived",
+        check={"kind": "arrive", "goal": goal, "limit_ticks": 500, "no_search_after": 45},
+        watch=(x0, SKY - 2, z0, x0 + 70, SKY + 8, z0 + 8), settings={"allowBreak": False}, slot=0)
+
+
+def closed_corridor(x0, z0, length=24):
+    """A corridor one block wide along x at z0 + 4, two high, walled and roofed in stone, closed at both ends. Returns the Area."""
+    a = Area(x0, z0, x0 + length, z0 + 8)
+    a.add(*floor(x0, z0, x0 + length, z0 + 8))
+    a.add(f"fill {x0} {SKY + 1} {z0 + 3} {x0 + length} {SKY + 3} {z0 + 5} minecraft:stone")
+    a.add(f"fill {x0 + 1} {SKY + 1} {z0 + 4} {x0 + length - 1} {SKY + 2} {z0 + 4} minecraft:air")
+    return a
+
+
+def b11_door(chat, x0=7000, z0=3000):
+    """A corridor whose only way on is a closed oak door (the door faces along the corridor, so it blocks). Upstream always opens it
+    (`MovementHelper.openDoors`). Judged: arrival, and that the only blocks that changed are the two halves of the door (opened)."""
+    a = closed_corridor(x0, z0)
+    dx = x0 + 12
+    a.add(f"setblock {dx} {SKY + 1} {z0 + 4} minecraft:oak_door[facing=east,half=lower,hinge=left,open=false]")
+    a.add(f"setblock {dx} {SKY + 2} {z0 + 4} minecraft:oak_door[facing=east,half=upper,hinge=left,open=false]")
+    goal = (x0 + 20, SKY + 1, z0 + 4)
+    return scenario(
+        f"b11_door_chat{int(chat)}", chat, a, (x0 + 2.5, SKY + 1, z0 + 4.5),
+        with_chat(chat, [{"t": 10, "command": f"b goto {goal[0]} {goal[1]} {goal[2]}"}]),
+        end=600, stop_when="arrived",
+        check={"kind": "arrive", "goal": goal, "limit_ticks": 350, "toggled": [(dx, SKY + 1, z0 + 4), (dx, SKY + 2, z0 + 4)]},
+        watch=(x0, SKY - 2, z0, x0 + 24, SKY + 6, z0 + 8), settings={"allowBreak": False}, slot=0)
+
+
+def b12_gate(chat, x0=7200, z0=3000):
+    """The same with a closed oak fence gate."""
+    a = closed_corridor(x0, z0)
+    gx = x0 + 12
+    a.add(f"setblock {gx} {SKY + 1} {z0 + 4} minecraft:oak_fence_gate[facing=east,open=false]")
+    goal = (x0 + 20, SKY + 1, z0 + 4)
+    return scenario(
+        f"b12_gate_chat{int(chat)}", chat, a, (x0 + 2.5, SKY + 1, z0 + 4.5),
+        with_chat(chat, [{"t": 10, "command": f"b goto {goal[0]} {goal[1]} {goal[2]}"}]),
+        end=600, stop_when="arrived",
+        check={"kind": "arrive", "goal": goal, "limit_ticks": 350, "toggled": [(gx, SKY + 1, z0 + 4)]},
+        watch=(x0, SKY - 2, z0, x0 + 24, SKY + 6, z0 + 8), settings={"allowBreak": False}, slot=0)
+
+
 def new_scenarios():
     out = []
     for chat in (False, True):
         out += [b01_break_stone(chat), b02_break_dirt_by_hand(chat), b03_bridge(chat), b04_pillar(chat), b04_pillar(chat, x0=6600, ledge=False), b05_dig_down(chat),
-                b06_wall_break_allowed_vs_not(chat, True), b06_wall_break_allowed_vs_not(chat, False), b07_bucket_fall(chat), b08_stop_dig(chat), b09_dig_stone_by_hand(chat)]
+                b06_wall_break_allowed_vs_not(chat, True), b06_wall_break_allowed_vs_not(chat, False), b07_bucket_fall(chat), b08_stop_dig(chat), b09_dig_stone_by_hand(chat),
+                b10_head_sand(chat), b11_door(chat), b12_gate(chat)]
+    return out
+
+
+# ---------------------------------------------------------------- mine and goto <block> (R2)
+
+def m01_mine_cave(chat, x0=7400, z0=3000):
+    """Three iron ores in a small cave at three depths: one in the east wall at the height of the feet, one in the north wall three blocks up (the
+    head height of a person standing on the floor), one in the wall of a pit three blocks below the floor. `b mine 3 iron_ore` must break all three
+    and pick up their drops (3 raw iron), the whole walk must be planned (every block broken was in a plan's toBreak), and the player is unhurt."""
+    a = Area(x0, z0, x0 + 20, z0 + 20)
+    a.add(f"fill {x0} {SKY - 6} {z0} {x0 + 20} {SKY + 6} {z0 + 20} minecraft:stone")
+    a.add(f"fill {x0 + 4} {SKY + 1} {z0 + 4} {x0 + 16} {SKY + 4} {z0 + 16} minecraft:air")
+    a.add(f"fill {x0 + 10} {SKY - 2} {z0 + 15} {x0 + 13} {SKY} {z0 + 18} minecraft:air")
+    ores = [(x0 + 17, SKY + 1, z0 + 10), (x0 + 10, SKY + 4, z0 + 3), (x0 + 9, SKY - 2, z0 + 16)]
+    for o in ores:
+        a.add(f"setblock {o[0]} {o[1]} {o[2]} minecraft:iron_ore")
+    a.add(*kit("iron_pickaxe"))
+    return scenario(
+        f"m01_mine_cave3_chat{int(chat)}", chat, a, (x0 + 10.5, SKY + 1, z0 + 10.5),
+        with_chat(chat, [{"t": 10, "command": "b mine 3 iron_ore"}]),
+        end=2400, stop_when="idle",
+        check={"kind": "mine", "ores_broken": ores, "ores_intact": [], "items_end": {"raw_iron": 3}, "limit_ticks": 1800,
+               "plan": {"break": [3, 40], "place": [0, 6]}, "have_message": 3, "no_health_loss": True,
+               "last_path_may_be_unused": True, "tool_damage_equals_broken": "iron_pickaxe"},
+        watch=(x0, SKY - 6, z0, x0 + 20, SKY + 6, z0 + 20), slot=5)
+
+
+def m02_mine_quantity(chat, x0=7600, z0=3000):
+    """The quantity counts what is in the inventory: two raw iron are already in the hotbar, four ores lie on the floor, `b mine 3 iron_ore` must
+    break exactly one (the count was 2) and stop with 3 raw iron. The three others stay."""
+    a = Area(x0, z0, x0 + 30, z0 + 10)
+    a.add(*floor(x0, z0, x0 + 30, z0 + 10))
+    ores = [(x0 + 10, SKY + 1, z0 + 5), (x0 + 14, SKY + 1, z0 + 3), (x0 + 18, SKY + 1, z0 + 7), (x0 + 22, SKY + 1, z0 + 5)]
+    for o in ores:
+        a.add(f"setblock {o[0]} {o[1]} {o[2]} minecraft:iron_ore")
+    a.add(*kit("iron_pickaxe"))
+    a.add("give @p minecraft:raw_iron 2")
+    return scenario(
+        f"m02_mine_quantity_chat{int(chat)}", chat, a, (x0 + 4.5, SKY + 1, z0 + 5.5),
+        with_chat(chat, [{"t": 10, "command": "b mine 3 iron_ore"}]),
+        end=1500, stop_when="idle",
+        check={"kind": "mine", "ores_broken": [], "ores_broken_count": 1, "ores_all": ores, "items_end": {"raw_iron": 3}, "limit_ticks": 900,
+               "plan": {"break": 1, "place": 0}, "have_message": 3, "no_health_loss": True,
+               "last_path_may_be_unused": True, "tool_damage_equals_broken": "iron_pickaxe"},
+        watch=(x0, SKY - 2, z0, x0 + 30, SKY + 6, z0 + 10), slot=5)
+
+
+def m03_goto_table_behind_wall(chat, x0=7800, z0=3000):
+    """`b goto crafting_table`: the table stands behind a wall of stone two high across the whole floor, so the way is through (the pickaxe is in the
+    hotbar). The player ends next to the table, the table is still there, and what was broken was in a plan's toBreak."""
+    a = Area(x0, z0, x0 + 40, z0 + 8)
+    a.add(*floor(x0, z0, x0 + 40, z0 + 8))
+    a.add(f"fill {x0 + 20} {SKY + 1} {z0} {x0 + 20} {SKY + 2} {z0 + 8} minecraft:stone")
+    table = (x0 + 28, SKY + 1, z0 + 4)
+    a.add(f"setblock {table[0]} {table[1]} {table[2]} minecraft:crafting_table")
+    a.add(*kit("iron_pickaxe"))
+    return scenario(
+        f"m03_goto_table_wall_chat{int(chat)}", chat, a, (x0 + 14.5, SKY + 1, z0 + 4.5),
+        with_chat(chat, [{"t": 10, "command": "b goto crafting_table"}]),
+        end=1500, stop_when="idle",
+        check={"kind": "goto_block", "block": table, "radius": 2.2, "limit_ticks": 900, "plan": {"break": [1, 2], "place": 0},
+               "no_health_loss": True, "intact": [table], "opens_container": True, "last_path_may_be_unused": True,
+               "tool_damage_equals_broken": "iron_pickaxe"},
+        watch=(x0 + 12, SKY - 2, z0 - 1, x0 + 34, SKY + 6, z0 + 9), slot=5)
+
+
+def m04_stop_mine_walking(chat, x0=8000, z0=3000):
+    """`b mine gold_block` toward a block 100 blocks away; `b stop` at tick 160, when the scan is long over and the player is running. Same
+    checks as `b stop` for a goto: keys released at once, no path, stands still, the block is untouched. Gold blocks, not iron ore: the scan
+    keeps the first 64 hits of a spiral of chunks (FasterWorldScanner), and the natural iron ore far below the platform would fill them before
+    a block six chunks away is seen (docs/deviations.md D39)."""
+    a = Area(x0, z0, x0 + 120, z0 + 8)
+    a.add(*floor(x0, z0, x0 + 120, z0 + 8))
+    a.add(f"setblock {x0 + 105} {SKY + 1} {z0 + 4} minecraft:gold_block")
+    a.add(*kit("iron_pickaxe"))
+    return scenario(
+        f"m04_stop_mine_walking_chat{int(chat)}", chat, a, (x0 + 2.5, SKY + 1, z0 + 4.5),
+        with_chat(chat, [{"t": 10, "command": "b mine gold_block"}, {"t": 160, "command": "b stop"}]),
+        end=300, stop_when="never",
+        check={"kind": "stop", "stop_tick": 160, "blocks_changed": 0},
+        watch=(x0, SKY - 2, z0, x0 + 120, SKY + 8, z0 + 8), slot=0)
+
+
+def m05_stop_mine_scanning(chat, x0=8200, z0=3000):
+    """`b stop` four ticks after `b mine`, while the scan runs on its own thread (it takes about 2 s when fewer than 64 ores are near). The scan's
+    result arrives after the stop and must not start the walk: no keys, no path, the player does not move, the ore is untouched."""
+    a = Area(x0, z0, x0 + 60, z0 + 8)
+    a.add(*floor(x0, z0, x0 + 60, z0 + 8))
+    a.add(f"setblock {x0 + 40} {SKY + 1} {z0 + 4} minecraft:iron_ore")
+    a.add(*kit("iron_pickaxe"))
+    return scenario(
+        f"m05_stop_mine_scanning_chat{int(chat)}", chat, a, (x0 + 2.5, SKY + 1, z0 + 4.5),
+        with_chat(chat, [{"t": 10, "command": "b mine iron_ore"}, {"t": 14, "command": "b stop"}]),
+        end=260, stop_when="never",
+        check={"kind": "stop", "stop_tick": 14, "blocks_changed": 0, "not_walking_before": True, "still_for_ticks": 200},
+        watch=(x0, SKY - 2, z0, x0 + 60, SKY + 8, z0 + 8), slot=0)
+
+
+def mine_scenarios():
+    out = []
+    for chat in (False, True):
+        out += [m01_mine_cave(chat), m02_mine_quantity(chat), m03_goto_table_behind_wall(chat), m04_stop_mine_walking(chat), m05_stop_mine_scanning(chat)]
     return out
 
 
@@ -426,4 +588,5 @@ def all_scenarios(include_far=True):
         out += [s07_block_in_the_way(chat), s09_ladder_and_water(chat), s08_stop(chat), s11_slab_floor(chat)]
     out += [s06_sealed(False), s06_sealed(True)]
     out += new_scenarios()
+    out += mine_scenarios()
     return out

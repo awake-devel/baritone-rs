@@ -4,6 +4,7 @@
 //
 // Upstream reads these from a command argument consumer that can peek, consume and tab complete. Here the arguments are a slice of
 // strings and each datatype answers `Option`: upstream's `peekDatatypePostOrNull` is `None` when the datatype throws.
+use crate::blockmeta::{BlockIndex, BlockOptionalMeta, BlockOptionalMetaLookup};
 use crate::goals::Goal;
 use crate::pos::Pos;
 
@@ -104,7 +105,7 @@ pub enum GotoError {
     NoArguments,
     /// More than three arguments with a coordinate first: `requireMax(3)`.
     TooManyArguments,
-    /// The first argument is not a coordinate. Upstream reads it as a block to find; that process is not ported.
+    /// The first argument is not a coordinate. Upstream reads it as a block to find: the glue then calls [`goto_block`].
     BlockName,
 }
 
@@ -121,6 +122,58 @@ pub fn goto_goal(args: &[&str], feet: Pos) -> Result<Goal, GotoError> {
         return Err(GotoError::TooManyArguments);
     }
     Ok(relative_goal(args, feet))
+}
+
+// ---------------------------------------------------------------- the block commands
+
+/// `GotoCommand.execute`, the block branch: one argument, a block selector. `Err` is the text upstream's exception gives.
+pub fn goto_block(args: &[&str], index: &BlockIndex) -> Result<BlockOptionalMeta, CommandError> {
+    require_max(args, 1)?;
+    let Some(first) = args.first() else {
+        return Err("Not enough arguments (expected at least 1)".to_string());
+    };
+    BlockOptionalMeta::parse(first, index)
+}
+
+/// What `mine` asks for: how many drops to have in the inventory (0: no end), and the blocks.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MineRequest {
+    pub quantity: i32,
+    pub filter: BlockOptionalMetaLookup,
+    /// The selectors as `BlockOptionalMeta.toString` writes them, in a list: what `Mining %s` prints.
+    pub text: String,
+}
+
+impl MineRequest {
+    /// The line `MineCommand` prints before it starts: `Mining [BlockOptionalMeta{...}, ...]`.
+    pub fn message(&self) -> String {
+        format!("Mining {}", self.text)
+    }
+}
+
+/// Upstream's `MineCommand.execute`: an optional whole number first (`Integer.class` with a default of 0), then at least one block selector.
+pub fn mine_command(args: &[&str], index: &BlockIndex) -> Result<MineRequest, CommandError> {
+    let (quantity, rest) = match args.first().and_then(|a| a.parse::<i32>().ok()) {
+        Some(q) => (q, &args[1..]),
+        None => (0, args),
+    };
+    if rest.is_empty() {
+        return Err("Not enough arguments (expected at least 1)".to_string());
+    }
+    let mut boms = vec![];
+    for a in rest {
+        boms.push(BlockOptionalMeta::parse(a, index)?);
+    }
+    let text = format!("[{}]", boms.iter().map(|b| b.to_string()).collect::<Vec<_>>().join(", "));
+    Ok(MineRequest { quantity, filter: BlockOptionalMetaLookup::new(boms), text })
+}
+
+/// The blocks to offer for the word being typed after `mine` or `goto`: the names that start with it (`minecraft:` may be left off). Upstream's
+/// completion also offers the properties inside `[]`; that is left out.
+pub fn complete_blocks(current: &str, index: &BlockIndex) -> Vec<String> {
+    let cur = current.to_lowercase();
+    let bare = cur.strip_prefix("minecraft:").unwrap_or(&cur);
+    index.block_names().into_iter().filter(|n| n.to_lowercase().starts_with(bare)).map(|n| n.to_string()).collect()
 }
 
 // ---------------------------------------------------------------- the other commands
@@ -248,7 +301,7 @@ pub fn eta_command(args: &[&str], in_control: bool, segment: Option<f64>, goal: 
 }
 
 /// The commands of this port, with the names they answer to and the short description `HelpCommand` lists.
-pub const COMMANDS: &[(&[&str], &str)] = &[(&["goal"], "Set or clear the goal"), (&["goto"], "Go to a coordinate or block"), (&["path"], "Start heading towards the goal"), (&["cancel", "stop"], "Cancel what Baritone is currently doing"), (&["eta"], "View the current ETA"), (&["set", "setting", "settings"], "View or change settings")];
+pub const COMMANDS: &[(&[&str], &str)] = &[(&["goal"], "Set or clear the goal"), (&["goto"], "Go to a coordinate or block"), (&["mine"], "Mine some blocks"), (&["path"], "Start heading towards the goal"), (&["cancel", "stop"], "Cancel what Baritone is currently doing"), (&["eta"], "View the current ETA"), (&["set", "setting", "settings"], "View or change settings")];
 
 /// Every name a command answers to, in the order of [`COMMANDS`].
 pub fn command_names() -> Vec<&'static str> {
@@ -456,5 +509,41 @@ mod tests {
         assert_eq!(complete(&["settings", "allowBreak"], "", &s), ["true", "false"]);
         assert_eq!(complete(&["set", "toggle"], "allowDiagonalD", &s), ["allowDiagonalDescend"]);
         assert!(complete(&["nonsense"], "", &s).is_empty());
+    }
+
+    #[test]
+    fn mine_takes_an_optional_quantity_and_block_selectors() {
+        let idx = crate::blockmeta::test_index();
+        let r = mine_command(&["diamond_ore", "deepslate_diamond_ore"], &idx).unwrap();
+        assert_eq!(r.quantity, 0);
+        assert_eq!(r.filter.blocks().len(), 2);
+        assert_eq!(r.message(), "Mining [BlockOptionalMeta{block=Block{minecraft:diamond_ore},properties={}}, BlockOptionalMeta{block=Block{minecraft:deepslate_diamond_ore},properties={}}]");
+        let r = mine_command(&["64", "oak_log[axis=y]"], &idx).unwrap();
+        assert_eq!(r.quantity, 64);
+        assert_eq!(r.filter.blocks()[0].all_block_states(), &[5]);
+        assert_eq!(mine_command(&[], &idx).unwrap_err(), "Not enough arguments (expected at least 1)");
+        assert_eq!(mine_command(&["5"], &idx).unwrap_err(), "Not enough arguments (expected at least 1)");
+        assert_eq!(mine_command(&["stone", "nothing"], &idx).unwrap_err(), "Invalid block name nothing");
+        // a number later on is a block name, which does not exist
+        assert!(mine_command(&["stone", "5"], &idx).is_err());
+        assert_eq!(mine_command(&["-3", "stone"], &idx).unwrap().quantity, -3);
+    }
+
+    #[test]
+    fn goto_a_block_takes_one_selector() {
+        let idx = crate::blockmeta::test_index();
+        assert_eq!(goto_block(&["diamond_ore"], &idx).unwrap().block(), "diamond_ore");
+        assert_eq!(goto_block(&["diamond_ore", "stone"], &idx).unwrap_err(), "Too many arguments (expected at most 1)");
+        assert!(goto_block(&["nothing"], &idx).is_err());
+        assert_eq!(goto_block(&[], &idx).unwrap_err(), "Not enough arguments (expected at least 1)");
+    }
+
+    #[test]
+    fn blocks_complete_by_prefix() {
+        let idx = crate::blockmeta::test_index();
+        assert_eq!(complete_blocks("diam", &idx), vec!["diamond_ore"]);
+        assert_eq!(complete_blocks("minecraft:oak", &idx), vec!["oak_log"]);
+        assert!(complete_blocks("zzz", &idx).is_empty());
+        assert!(complete_blocks("", &idx).len() >= 5);
     }
 }

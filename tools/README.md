@@ -394,6 +394,11 @@ judges nothing; `run.py` starts the game of the instance `baritone-test` with a 
 (also on failure), and applies the criteria: arrived within 1 block, within a tick limit, blocks changed = 0 in a watched box, never died,
 no health lost on drops, plus the checks of each kind (sprinting, a recalculation after a block appears, the stop message and released
 keys for an unreachable goal, keys released at `/b stop`). Most scenarios run with the chat closed and open (`chat` in the name).
+`m01` to `m05` (R2) cover `/b mine` and `/b goto <block>`: three iron ores at three depths in a small cave (all broken, 3 raw iron, pickaxe
+damage equal to the blocks broken, unhurt), a quantity reached through the inventory count (2 raw iron in the hotbar, `mine 3` breaks exactly
+one ore), `goto crafting_table` through a wall (ends next to the table, table intact, the table's screen was opened by the right click), and
+`/b stop` during `mine` while walking and while the scan runs. For `mine` and `goto <block>` the run is done when the mod has been idle for
+60 ticks, and the path to the next ore, made while the last one is broken, is never walked, so the last plan is not required to be done.
 
 ```sh
 # Build the mod into the instance first (see "The mod and its scenario trigger"); no game or build may run.
@@ -415,6 +420,9 @@ carries the `to_break` and `to_place` cells that upstream's `toBreak`/`toPlace` 
 changed cell of the watch box. `run.py` checks that every change was planned, that every cell of the last path's plan was done, the exact counts,
 that nothing else changed (water only where the scenario allows it), the stack counts and the tool damage, and the estimate against the actual
 ticks (0.4x to 2.5x, plus 30). The slot at the end is reported, not judged: upstream never puts it back (docs/deviations.md D32).
+
+The fixes after v0.1.0 (scenarios `b10` to `b12`): `b10_head_sand` sets a sand block in the cell of the player's head at tick 45 (`no_search_after`: the walk goes on, no search that gave a path after it);
+`b11_door` and `b12_gate` are a stone corridor whose only way on is a closed oak door or fence gate (`toggled`: the only cells that changed are the door's or gate's own, whose block did not change into another).
 
 ## gate.py, check_public_tree.py, run_compare.py
 

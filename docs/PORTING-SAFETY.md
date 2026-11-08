@@ -200,7 +200,7 @@ Limits of this result:
 - It is L0. The block facts come from Java `1.21.4`, not from Horizon. S2 tests those.
 - Twelve injected errors were listed as holes at the time. S2 settled seven of them, and the other five stay open.
 - State flags come from the harness. The glue that will set them on Horizon doesn't exist yet.
-- `GoalThreeBlocks` is not ported (`later`), because it belongs to `MineProcess`.
+- `GoalThreeBlocks` was not ported at that time; it came with `MineProcess` in R2 (`Goal::ThreeBlocks`).
 
 Measured effort for S1: about 9 hours of wall-clock time, of which about 6 h 50 min was a workflow of 9 agents using
 1.53 million tokens. It produced 2407 lines of engine, and the methods marked `port` in the ledger went from 35 to 114 of
@@ -396,8 +396,7 @@ In the second part, an independent review of the break and place code against up
 - A test run could wipe an existing world: `tools/l3/run.py` now refuses a world name that does not start with `l3-` or already exists, and the mod's test triggers (`BARITONE_RS_L3_SPEC`, `BARITONE_RS_SCENARIO_DIR`) refuse any single-player
   world whose name does not start with `l3-` (`tools/test_l3.py` tests the name check; the mod's refusal was read and built, and was not provoked in a game).
 
-Recorded, not changed: the pillar digs the block at its feet with the throwaway block in hand (U14, `exec/review_tests.rs` R3, upstream's behaviour), a falling block landing in the head cell ends the movement as `InsideWall` instead of
-mining out (D31), `/b` and `/baritone` are taken from servers, `/b trace` logs exact coordinates whatever `censorCoordinates` says, mod chat lines (with the goal coordinates) go to the game log, `set load` completes no file names, and settings are
+Recorded, not changed: the pillar digs the block at its feet with the throwaway block in hand (U14, `exec/review_tests.rs` R3, upstream's behaviour), `/b` and `/baritone` are taken from servers, `/b trace` logs exact coordinates whatever `censorCoordinates` says, mod chat lines (with the goal coordinates) go to the game log, `set load` completes no file names, and settings are
 not range-checked (a huge `primaryTimeoutMS` on an unreachable goal makes the search run as long as asked, as upstream; not run). Open from the first part: the logs of searches and snapshots grow slowly outside the test code, and "Arrived." can print while the player is still falling.
 
 **Final checks of this work.** `cargo fmt --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace` (200 engine tests), `python3 -m unittest discover -s tools -q` (95 tests), the
@@ -414,7 +413,7 @@ ledger check and `tools/check_public_tree.py` with the deny list all pass. The J
 - The timing bounds (0.4 to 2.5 times the estimate) are my own choice; the actual ratios in the breaking and placing scenarios ran 0.79 to 1.15.
 - The unit and property tests use fixed-seed random runs and a simple simulator, which is not evidence of real physics.
 
-**Left out on purpose.** Parkour and swimming (off by upstream's defaults, branches fail by name, D16); `goto <block>` and the other processes (mine, follow, explore, build, farm, elytra); using doors, buttons and levers beyond what D15 says (`allowInventory`); Depth Strider and Frost Walker from the boots (D22); the stored settings that nothing reads (`renderPath`, `allowInventory`, D29).
+**Left out on purpose.** Parkour and swimming (off by upstream's defaults, branches fail by name, D16); `goto <block>` and `mine` in the game (the engine has them since R2) and the other processes (follow, explore, build, farm, elytra); using doors, buttons and levers beyond what D15 says (`allowInventory`); Depth Strider and Frost Walker from the boots (D22); the stored settings that nothing reads (`renderPath`, `allowInventory`, D29).
 
 Measured effort: the first part took a workflow of 7 agents, 3 h 39 min and 1.96 million tokens, and its last agent ended before writing this section. The second part took a workflow of 7 agents (probe, engine, glue, scenarios, two reviews, fixes), 2 h 47 min and 2.04 million tokens, then two gate runs by hand.
 
@@ -475,6 +474,81 @@ still takes effect one tick after the mod decides it, as before.
 
 **S5 closed (owner's decision, 2026-11-07)** with one server only (6b6t.org) and with breaking and placing on a server **not run**: they
 rest on the single-player scenarios (L3) alone. Both stay open for a later L4 session.
+
+### Bug fixes after v0.1.0
+
+Two behaviours that differed from upstream, found by the owner, are now upstream's (no path changes; the search and the costs were not touched). (1) With the head in a block (sand or gravel that landed there),
+`Movement.update` switches to the best tool for the block under the crosshair and presses the left button, and the movement goes on; before, it ended as `InsideWall` and the path was searched again (D16, D31).
+(2) A closed wooden door or fence gate on the route is opened with a right click that goes through the pinned input hook (`Intent::use_block` now counts as a press); the gate branch clicks only when `RotationUtils.reachable`
+finds a rotation; the setting `can_use_blocks` and `MoveFailure::NeedsUseBlock` are removed (D15). What ran: unit tests (`exec.rs` door and gate tests, the in-wall tests, and a simulator test with sand in the head cell),
+the whole workspace checks, and in the game (single player, instance `baritone-test`) the new L3 scenarios `b10_head_sand`, `b11_door` and `b12_gate`, each with the chat closed and open, then the whole L3 suite once (see the report of the run).
+Limits: `b10` only shows that the walk reaches the goal with no new path search after the sand came; it does not show the sand being mined (it falls on within a few ticks), and it was not run against the code before the fix. The door aim is the middle of the cell,
+not of the shape (D15). Iron doors, doors opening towards the player, trapdoors and other hinge sides were not run in the game.
+
+### R2: `mine` and `goto <block>`
+
+**What works.** `/b mine [n] <blocks...>` and `/b goto <block>` are in the mod, with tab completion of block names. The engine has `MineProcess` (the Louca hold, shaft mining, `coalesce` with `GoalThreeBlocks`, legit mine),
+`GetToBlockProcess` (goals per block, the right click on arrival, `blacklistClosest`), the block matcher (`BlockOptionalMeta`, `BlockOptionalMetaLookup`), `FasterWorldScanner.scanChunkRadius` and the process manager with three
+processes handing control over (D36 to D39). Scans run as jobs on a thread of their own, the first of a command too. The search and the movement costs were not touched. Ledger: `port`, `redesign`, `drop` or `later`
+for every method of these classes.
+
+**What ran, and where.**
+
+- Unit and simulator tests (`cargo test --workspace`: 254 engine tests): the scan order and the `max` limit, selectors, `prune`, each `coalesce` case, shaft mining, the Louca hold, legit mine, `blacklistClosest`, the right click, and the
+  simulator (`sim::mine_tests`): mine three of four ores and stop, mine with no number, a stop, a `goto` after a `mine` and a `mine` after a `goto`, exploring, twelve random fields mined to the exact number, and the first scan as a job.
+- In the game (single player, instance `baritone-test`, a new world `l3-r2fix-full2`), the whole L3 suite once, on the final build: **58 of 58 PASS** (`finished`). That is the 42 scenarios of v0.1.0, `b10` to `b12` (head in a block, door, gate;
+  each with the chat closed and open) and `m01` to `m05` (each with the chat closed and open). The run before it, on the same build and in another new world, passed 44 of 58 and is not the result: 13 failures were in older scenarios (`s06` to `s08`, `s09`, `b01` to `b03`) that found no changed or placed block where they expect one (the arrival checks passed), and one was `m04` (see "Reviews and fixes"). The 13 were not investigated; that run was slow (7 scenarios in the first 11 minutes), and the repeat of the same build, with only `m04` changed, passed them all, so a flaw of the scenario setup in that run is likely but is not shown.
+- Not run in the game: picking up dropped item entities (mined drops reached the inventory directly), several block names in one `mine`, block properties in `[...]`, other dimensions, servers, typing the command in the chat box
+  (completion only), iron doors, doors opening towards the player and trapdoors.
+
+**L3 table, this run** (`reports/l3-66f3981.json`; the chat-closed variant first, the chat-open one in brackets; ticks are game ticks of 50 ms).
+
+| Scenario | What it checks | Result |
+|---|---|---|
+| `m01_mine_cave3` | `mine 3 iron_ore`, ores in a cave at y+1, y+4 and y-2 | PASS. 7 cells changed (3 ores, 1 cobblestone placed), 3 raw iron, 268 (267) ticks from command to done, estimate ratio 1.09 (1.08), health 20 |
+| `m02_mine_quantity` | 2 raw iron held, 4 ores on the floor, `mine 3` | PASS. 1 ore broken, 3 raw iron, "Have 3 valid items", 55 (54) ticks, ratio 0.98 (1.02) |
+| `m03_goto_table_wall` | `goto crafting_table` through a 2-high wall | PASS. 1 block broken, ended 0.97 blocks from the table, table intact, screen open 60 ticks, 163 (134) ticks from the command, of which about 70 to 90 wait for the first scan |
+| `m04_stop_mine_walking` | `/b stop` at tick 160 while walking (`mine gold_block`) | PASS. 0.281 blocks per tick before, still after 7 ticks, drifted 0.333 blocks, block untouched |
+| `m05_stop_mine_scanning` | `/b stop` 4 ticks after `mine`, during the scan | PASS. The player never moved, no keys or path afterwards, ore untouched |
+| `b10_head_sand` | sand set in the head cell mid-walk | PASS. Arrived, 217 (218) ticks, health 19 |
+| `b11_door`, `b12_gate` | the only way on is a closed door or gate, `allowBreak` off | PASS. Arrived in 67 (67) ticks; only the door's or gate's own cells changed state |
+
+The longest tick of the mod in the whole run was 16 ms (`mod_tick_micros` max 15,977; median of medians 32.5 microseconds). In the run before the first scan became a job it was 4.1 to 4.6 s on the tick after `goto <block>`.
+
+**Bug fixes after v0.1.0** (see the section above): a block in the head is mined as upstream does (D16, D31), and a closed door or fence gate is opened (D15). Both are covered by unit tests, simulator tests and `b10` to `b12`.
+Also found with the scenarios: the game opens a crafting table as the inventory screen with a 3 x 3 grid, so the glue's container check never saw it and `goto crafting_table` printed "Right click timed out"; `container_is_open`
+in `mod/runtime.rs` counts that screen (m03 fails without it).
+
+**Reviews and fixes.** Two reviews of the branch read the code against upstream (no game run), and a fuzz of 300,000 argument lists through the command parsers found no panic.
+
+| Finding | What was done |
+|---|---|
+| The port copied `WorldScanner`, but `BaritoneProvider.getWorldScanner()` is `FasterWorldScanner` (high; D37 named the wrong class) | **Fixed.** `scan.rs` is now `FasterWorldScanner`: a square spiral of chunks, the sections from the player's outwards, never more than `max` hits (the old scan kept the rest of a chunk and stopped on an unloaded ring). Tests that fail on the old scan: the `max` limit, and the north chunk before the west one. Rows in the ledger corrected. D39. **Changes chosen paths** when more than 64 matches are loaded, toward upstream's choice. |
+| The first scan ran on the game thread, and D36 and D38 contradicted each other | **Fixed.** The first scan is a job; the process answers `RequestPause` until it comes (D39). Simulator test `the_first_scan_is_a_job_and_the_process_holds_still_until_it_answers`. The player now stands still for the length of the scan instead of the game freezing. |
+| `cmd_goto_block` printed "Going to a block: ..." where upstream says nothing | **Fixed**, the line is removed. |
+| Dead branch for a failed `open_doors` in the fall override | **Removed.** |
+| A head stuck in a block is mined with no `allowBreak` check (safety) | Upstream's behaviour, **kept**, U17. A guard would not change a path; the owner's call. |
+| The shaft click can hit a cell the filter would not let the search break (safety) | Upstream's behaviour, **kept**, U18. |
+| Unbounded numeric settings, a button held one extra tick (safety) | Upstream's, **kept**, U19, U20. The second was read, not measured. |
+| `in_wall` in the glue is "the eye cell has full collision" | Listed in D31 already (broader than `isInWall`). |
+
+The scenario `m04` used `iron_ore` 105 blocks away. With the faithful scanner the 64 hits are the natural iron ore far below the platform (upstream does the same on that terrain), the placed ore was never chosen, and the
+scenario failed in that run. It now mines a `gold_block`, which does not occur naturally. This changed the scenario to fit upstream's behaviour; no rule was changed.
+
+**Limits.**
+
+- Everything about dropped item entities is untested in the game. The simulator has none.
+- `mine` of a rare block (fewer than 64 loaded) scans every loaded chunk: about 3 to 4.5 s with 1,057 chunks loaded, during which the player stands still (D39). `mine` of a common block returns in milliseconds.
+- When more than 64 matches are loaded, upstream (and so the port) sees only the first 64 of the spiral. On a platform above a cave-rich world the nearest ore on the platform can be missed, as it can in upstream.
+- No cached world: chests, furnaces, spawners, portals and shulker boxes are found only in loaded chunks (D37). Ores are not affected.
+- An ore directly under the player's feet is not mined (upstream's `avoidBreaking` rule). `mine` with no ore near digs down toward deep natural ores, as upstream does.
+- "One block state everywhere" is read off the cells (D39), not the palette.
+- The glue's drop list reads loot tables with a heuristic for tool conditions (D38.2); it was not compared with upstream's netherite-pickaxe roll beyond that.
+
+**Left out.** Follow, explore, the cached world (`maxCachedWorldScanCount`, `extendCacheOnThreshold`, `repack`, `scanChunk`), the failed-mine desktop notification, build, farm, elytra, `SET_GOAL_AND_PAUSE`, non-zero process priorities,
+property completion inside `[...]`.
+
+**The gate.** This section reports what ran. It does not claim the gate passed: the owner's session runs it.
 
 ## Reports
 

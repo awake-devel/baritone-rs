@@ -1,12 +1,16 @@
 // Ported from cabaletta/baritone at 1b8e87c: src/main/java/baritone/behavior/PathingBehavior.java (onTick, tickPath, pathStart,
 // secretInternalSetGoalAndPath, the cancel methods, findPathInNewThread, and what the thread does with its result) and
 // src/main/java/baritone/utils/PathingControlManager.java (preTick, postTick, executeProcesses, forceRevalidate, revalidateGoal, for
-// the one process that exists), src/main/java/baritone/utils/InputOverrideHandler.java (inControl). LGPL-3.0-or-later, see lib.rs.
+// the three processes that exist), src/main/java/baritone/utils/InputOverrideHandler.java (inControl). LGPL-3.0-or-later, see lib.rs.
 //
 // A pure state machine, driven once per game tick by `Pathing::tick`. Searches run behind the `SearchRunner` trait: this file starts them
 // and takes their results, and never waits for one. Each search has a generation number. A result whose generation is not the one in
 // progress is dropped, and a search that was cancelled never installs a path.
 use super::custom_goal::{CustomGoalProcess, PathingCommand, PathingCommandType};
+use super::get_to_block::GetToBlockProcess;
+use super::mine::{MineProcess, ScanJob, ScanKind, ScanResult};
+use super::ProcessInputs;
+use crate::blockmeta::{BlockOptionalMeta, BlockOptionalMetaLookup};
 use crate::blocks::State;
 use crate::config::Config;
 use crate::exec::movements::{Env, GameFacts};
@@ -183,10 +187,23 @@ struct Tk<'a, 'c, W: WorldView, S> {
     snapshot: &'a mut dyn FnMut() -> S,
 }
 
-/// `PathingBehavior` with `PathingControlManager` and the `CustomGoalProcess` it drives.
+/// The processes the manager knows, in the order they are registered. Upstream keeps them in a hash set; the order matters only for two that become
+/// active in the same tick, which the commands never do.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ProcId {
+    CustomGoal,
+    Mine,
+    GetToBlock,
+}
+
+const PROCESSES: [ProcId; 3] = [ProcId::CustomGoal, ProcId::Mine, ProcId::GetToBlock];
+
+/// `PathingBehavior` with `PathingControlManager` and the processes it drives: `CustomGoalProcess`, `MineProcess`, `GetToBlockProcess`.
 pub struct Pathing<R: SearchRunner<S>, S> {
     runner: R,
     process: CustomGoalProcess,
+    mine: MineProcess,
+    get_to_block: GetToBlockProcess,
     aim: AimProcessor,
     controls: Controls,
 
@@ -197,6 +214,9 @@ pub struct Pathing<R: SearchRunner<S>, S> {
     ticks_elapsed_so_far: i32,
     start_position: Option<Pos>,
     safe_to_cancel: bool,
+    pause_requested_last_tick: bool,
+    unpaused_last_tick: bool,
+    paused_this_tick: bool,
     cancel_requested: bool,
     calc_failed_last_tick: bool,
     in_progress: Option<InProgress>,
@@ -206,9 +226,15 @@ pub struct Pathing<R: SearchRunner<S>, S> {
     next_generation: u64,
 
     // PathingControlManager
-    in_control_last_tick: bool,
-    in_control_this_tick: bool,
+    /// The processes that are active, the newest first and then by priority (all are 0, so the newest first).
+    active: Vec<ProcId>,
+    in_control_last_tick: Option<ProcId>,
+    in_control_this_tick: Option<ProcId>,
     command: Option<PathingCommand>,
+    /// What the processes read of the game besides the world and the player.
+    inputs: ProcessInputs,
+    /// What the processes said, for the chat.
+    messages: Vec<String>,
 
     /// A node cap for every search; none by default.
     pub max_nodes: Option<u32>,
@@ -224,6 +250,8 @@ impl<R: SearchRunner<S>, S> Pathing<R, S> {
         Pathing {
             runner,
             process: CustomGoalProcess::new(),
+            mine: MineProcess::new(),
+            get_to_block: GetToBlockProcess::new(),
             aim: AimProcessor::new(0.5),
             controls: Controls::default(),
             current: None,
@@ -231,7 +259,11 @@ impl<R: SearchRunner<S>, S> Pathing<R, S> {
             goal: None,
             ticks_elapsed_so_far: 0,
             start_position: None,
-            safe_to_cancel: true,
+            // upstream's field starts false; nothing reads it with no path, except a pause request, which then is not honored
+            safe_to_cancel: false,
+            pause_requested_last_tick: false,
+            unpaused_last_tick: false,
+            paused_this_tick: false,
             cancel_requested: false,
             calc_failed_last_tick: false,
             in_progress: None,
@@ -239,9 +271,12 @@ impl<R: SearchRunner<S>, S> Pathing<R, S> {
             events: vec![],
             out_events: vec![],
             next_generation: 1,
-            in_control_last_tick: false,
-            in_control_this_tick: false,
+            active: vec![],
+            in_control_last_tick: None,
+            in_control_this_tick: None,
             command: None,
+            inputs: ProcessInputs::default(),
+            messages: vec![],
             max_nodes: None,
             last_cancel: None,
             search_failed: false,
@@ -272,6 +307,61 @@ impl<R: SearchRunner<S>, S> Pathing<R, S> {
     pub fn path(&mut self) {
         self.last_cancel = None;
         self.process.path();
+    }
+
+    /// `MineProcess.mine(int,BlockOptionalMetaLookup)`, what `/b mine` does after `MineCommand` has made the filter: from now the mine process wants control.
+    /// `cfg` is the settings snapshot (`allowBreak` decides whether the blocks may be mined at all; if none may, the process is not started and says why:
+    /// see [`Pathing::take_messages`]). The first scan is queued on the next tick.
+    pub fn mine(&mut self, quantity: i32, filter: BlockOptionalMetaLookup, cfg: &Config) {
+        self.last_cancel = None;
+        self.mine.mine(quantity, Some(filter), cfg);
+    }
+
+    /// `GetToBlockProcess.getToBlock`, what `/b goto <block>` does: from now the get-to-block process wants control. `feet` is where the player is.
+    pub fn get_to_block(&mut self, block: BlockOptionalMeta, feet: Pos) {
+        self.last_cancel = None;
+        self.controls.clear_all_keys(); // `getToBlock` starts with `onLostControl`, which clears the keys
+        self.get_to_block.get_to_block(block, feet);
+    }
+
+    /// What the processes read of the game besides the world and the player. The glue gives it before each tick.
+    pub fn set_inputs(&mut self, inputs: ProcessInputs) {
+        self.inputs = inputs;
+    }
+
+    /// The chat lines the processes have said since the last call (`logDirect`). Takes them.
+    pub fn take_messages(&mut self) -> Vec<String> {
+        let mut out = std::mem::take(&mut self.messages);
+        out.extend(self.mine.take_messages());
+        out.extend(self.get_to_block.take_messages());
+        out
+    }
+
+    /// The scans the mine and get-to-block processes want run. Run each with [`ScanJob::run`] over a snapshot of the world, on any thread, and hand the answers
+    /// to [`Pathing::deliver_scan`]. The processes start no new scan while one is out, so these are few.
+    pub fn take_scan_jobs(&mut self) -> Vec<ScanJob> {
+        let mut out = self.mine.take_jobs();
+        out.extend(self.get_to_block.take_jobs());
+        out
+    }
+
+    /// The end of `rescan`: gives the answer of a scan to the process that asked. `cfg` and `exec` are the settings of the tick it arrives in. An answer of an
+    /// earlier session of the process (it was stopped and started again) is dropped.
+    pub fn deliver_scan(&mut self, result: ScanResult, cfg: &Config, exec: &ExecSettings) {
+        match result.kind {
+            ScanKind::Mine => self.mine.deliver(result, cfg, exec.mine.explore_for_blocks),
+            ScanKind::GetToBlock => self.get_to_block.deliver(result),
+        }
+    }
+
+    /// The mine process, for the HUD and the tests.
+    pub fn mine_process(&self) -> &MineProcess {
+        &self.mine
+    }
+
+    /// The get-to-block process, for the HUD and the tests.
+    pub fn get_to_block_process(&self) -> &GetToBlockProcess {
+        &self.get_to_block
     }
 
     /// `PathingBehavior.cancelEverything`: the processes lose control now; the current segment is cut only if that is safe, else when
@@ -322,10 +412,14 @@ impl<R: SearchRunner<S>, S> Pathing<R, S> {
         self.current.is_some()
     }
 
-    /// `PathingBehavior.isPathing`:
-    /// `PathingBehavior.isPathing` (no process pauses, so this is `hasPath`).
+    /// `PathingBehavior.isPathing`: a path is followed, and was not paused this tick.
     pub fn is_pathing(&self) -> bool {
-        self.current.is_some()
+        self.current.is_some() && !self.paused_this_tick
+    }
+
+    /// `PathingBehavior.requestPause`: the next `tick_path` stands still if it is safe to cancel.
+    pub(crate) fn request_pause(&mut self) {
+        self.pause_requested_last_tick = true;
     }
 
     /// Whether a search is running.
@@ -333,9 +427,9 @@ impl<R: SearchRunner<S>, S> Pathing<R, S> {
         self.in_progress.is_some()
     }
 
-    /// Whether the process behind `goto` holds the goal.
+    /// Whether a process wants control: the goal process holds a goal (`goto`, `goal`), or `mine` or `goto <block>` runs.
     pub fn is_active(&self) -> bool {
-        self.process.is_active()
+        self.process.is_active() || self.mine.is_active() || self.get_to_block.is_active()
     }
 
     /// `PathingBehavior.getCurrent`:
@@ -376,7 +470,7 @@ impl<R: SearchRunner<S>, S> Pathing<R, S> {
 
     /// Upstream's `PathingControlManager.mostRecentInControl`, for one process: whether the goal process was asked for a command in the last tick.
     pub fn in_control(&self) -> bool {
-        self.in_control_this_tick
+        self.in_control_this_tick.is_some()
     }
 
     /// Upstream's `IPathingBehavior.ticksRemainingInSegment(boolean)`: the cached cost of the movements from the current one (or the next, with
@@ -478,7 +572,7 @@ impl<R: SearchRunner<S>, S> Pathing<R, S> {
             jump: k.jump,
             sneak: k.sneak,
             // `PathingBehavior.onPlayerSprintState`
-            sprint: self.current.as_ref().is_some_and(|c| c.is_sprinting()),
+            sprint: self.is_pathing() && self.current.as_ref().is_some_and(|c| c.is_sprinting()),
             use_block: if click_right { self.controls.use_pos } else { None },
             select_slot: select,
             attack,
@@ -493,41 +587,113 @@ impl<R: SearchRunner<S>, S> Pathing<R, S> {
     /// `PathingControlManager.cancelEverything`:
     /// `PathingControlManager.cancelEverything`.
     fn manager_cancel_everything(&mut self) {
-        self.in_control_last_tick = false;
-        self.in_control_this_tick = false;
+        self.in_control_last_tick = None;
+        self.in_control_this_tick = None;
         self.command = None;
-        self.process.on_lost_control();
-    }
-
-    /// `PathingControlManager.executeProcesses`, for the one process.
-    fn execute_processes<W: WorldView>(&mut self, tk: &Tk<'_, '_, W, S>) -> Option<PathingCommand> {
-        if !self.process.is_active() {
-            return None;
+        self.active.clear();
+        for id in PROCESSES {
+            self.lose_control(id);
         }
-        let feet = tk.env.player.feet();
-        let calc_failed = self.in_control_last_tick && self.calc_failed_last_tick;
-        let cmd = self.process.on_tick(calc_failed, feet, self.expected_segment_start, &tk.ctx.cfg.goal_settings());
-        self.in_control_this_tick = true;
-        Some(cmd)
     }
 
-    /// `PathingControlManager.preTick`: For the one process.
-    /// `PathingControlManager.preTick`.
+    /// `IBaritoneProcess.onLostControl` of one process.
+    fn lose_control(&mut self, id: ProcId) {
+        match id {
+            ProcId::CustomGoal => self.process.on_lost_control(),
+            ProcId::Mine => self.mine.on_lost_control(),
+            ProcId::GetToBlock => self.get_to_block.on_lost_control(&mut self.controls),
+        }
+    }
+
+    /// `IBaritoneProcess.isActive` of one process.
+    fn proc_active(&self, id: ProcId) -> bool {
+        match id {
+            ProcId::CustomGoal => self.process.is_active(),
+            ProcId::Mine => self.mine.is_active(),
+            ProcId::GetToBlock => self.get_to_block.is_active(),
+        }
+    }
+
+    /// `IBaritoneProcess.onTick` of one process. `None` is upstream's `null`.
+    fn tick_process<W: WorldView>(&mut self, id: ProcId, calc_failed: bool, tk: &Tk<'_, '_, W, S>) -> Option<PathingCommand> {
+        let safe = self.is_safe_to_cancel();
+        let env = Env { ctx: tk.ctx, p: tk.env.player, set: tk.env.exec, path_start: self.expected_segment_start, inv: tk.env.inv, game: tk.env.game };
+        match id {
+            ProcId::CustomGoal => Some(self.process.on_tick(calc_failed, tk.env.player.feet(), self.expected_segment_start, &tk.ctx.cfg.goal_settings())),
+            ProcId::Mine => self.mine.on_tick(calc_failed, safe, &env, &self.inputs, &mut self.controls),
+            ProcId::GetToBlock => Some(self.get_to_block.on_tick(calc_failed, safe, &env, &self.inputs, &mut self.controls)),
+        }
+    }
+
+    /// The first scan of `mine` and of `getToBlock`, which upstream runs inside the call that starts them, on the game thread. Here it is queued as a job like
+    /// the others (the game thread never scans) and the process pauses until the answer comes (docs/deviations.md D39).
+    fn run_initial_scans<W: WorldView>(&mut self, tk: &Tk<'_, '_, W, S>) {
+        let env = Env { ctx: tk.ctx, p: tk.env.player, set: tk.env.exec, path_start: self.expected_segment_start, inv: tk.env.inv, game: tk.env.game };
+        self.mine.queue_initial_scan(&env, &self.inputs);
+        self.get_to_block.queue_initial_scan(&env);
+    }
+
+    /// `PathingControlManager.executeProcesses`: the active processes, the newest first (then by priority, which is 0 for all), are asked in turn; the first to
+    /// answer anything but `Defer` is in control, and every process behind it loses control (none is temporary).
+    fn execute_processes<W: WorldView>(&mut self, tk: &Tk<'_, '_, W, S>) -> Option<PathingCommand> {
+        for id in PROCESSES {
+            if self.proc_active(id) {
+                if !self.active.contains(&id) {
+                    // put a newly active process at the very front of the queue
+                    self.active.insert(0, id);
+                }
+            } else {
+                self.active.retain(|a| *a != id);
+            }
+        }
+        // ties are broken by which was added to the beginning of the list first: the priorities are all equal, so the order stays
+        let order = self.active.clone();
+        for (n, id) in order.iter().copied().enumerate() {
+            let calc_failed = self.in_control_last_tick == Some(id) && self.calc_failed_last_tick;
+            match self.tick_process(id, calc_failed, tk) {
+                None => {
+                    // upstream throws if the process is still active; here it is stopped
+                    if self.proc_active(id) {
+                        self.lose_control(id);
+                    }
+                    // no need to call onLostControl; they are reporting inactive.
+                }
+                Some(exec) if exec.kind != PathingCommandType::Defer => {
+                    self.in_control_this_tick = Some(id);
+                    for rest in order[n + 1..].iter().copied() {
+                        self.lose_control(rest);
+                    }
+                    return Some(exec);
+                }
+                Some(_) => {}
+            }
+        }
+        None
+    }
+
+    /// `PathingControlManager.preTick`: asks the processes, then does what the command says.
     fn pre_tick<W: WorldView>(&mut self, tk: &mut Tk<'_, '_, W, S>) {
         self.in_control_last_tick = self.in_control_this_tick;
-        self.in_control_this_tick = false;
+        self.in_control_this_tick = None;
+        self.run_initial_scans(tk);
         self.command = self.execute_processes(tk);
         let Some(cmd) = self.command.clone() else {
             self.cancel_segment_if_safe();
             self.goal = None;
             return;
         };
+        if self.in_control_this_tick != self.in_control_last_tick && cmd.kind != PathingCommandType::RequestPause && self.in_control_last_tick.is_some() {
+            // if control has changed from a real process to another real process, and the new process wants to do something
+            self.cancel_segment_if_safe();
+            // get rid of the in progress stuff from the last process
+        }
         match cmd.kind {
+            PathingCommandType::RequestPause => self.request_pause(),
             PathingCommandType::CancelAndSetGoal => {
                 self.goal = cmd.goal.clone();
                 self.cancel_segment_if_safe();
             }
-            PathingCommandType::ForceRevalidateGoalAndPath => {
+            PathingCommandType::ForceRevalidateGoalAndPath | PathingCommandType::RevalidateGoalAndPath => {
                 if !self.is_pathing() && self.in_progress.is_none() {
                     self.set_goal_and_path(&cmd, tk);
                 }
@@ -538,6 +704,8 @@ impl<R: SearchRunner<S>, S> Pathing<R, S> {
                     self.set_goal_and_path(&cmd, tk);
                 }
             }
+            // `executeProcesses` never answers a deferral
+            PathingCommandType::Defer => {}
         }
     }
 
@@ -546,17 +714,26 @@ impl<R: SearchRunner<S>, S> Pathing<R, S> {
         let Some(cmd) = self.command.clone() else {
             return;
         };
-        if cmd.kind == PathingCommandType::ForceRevalidateGoalAndPath {
-            let gs = tk.ctx.cfg.goal_settings();
-            let cancel = match &cmd.goal {
-                None => true,
-                Some(g) => self.force_revalidate(g, &gs) || self.revalidate_goal(g, &gs),
-            };
-            if cancel {
-                // pwnage
-                self.soft_cancel_if_safe();
+        let gs = tk.ctx.cfg.goal_settings();
+        match cmd.kind {
+            PathingCommandType::ForceRevalidateGoalAndPath => {
+                let cancel = match &cmd.goal {
+                    None => true,
+                    Some(g) => self.force_revalidate(g, &gs) || self.revalidate_goal(g, &gs),
+                };
+                if cancel {
+                    // pwnage
+                    self.soft_cancel_if_safe();
+                }
+                self.set_goal_and_path(&cmd, tk);
             }
-            self.set_goal_and_path(&cmd, tk);
+            PathingCommandType::RevalidateGoalAndPath => {
+                if tk.env.exec.cancel_on_goal_invalidation && cmd.goal.as_ref().is_none_or(|g| self.revalidate_goal(g, &gs)) {
+                    self.soft_cancel_if_safe();
+                }
+                self.set_goal_and_path(&cmd, tk);
+            }
+            _ => {}
         }
     }
 
@@ -720,11 +897,21 @@ impl<R: SearchRunner<S>, S> Pathing<R, S> {
         self.cancel_requested = true;
     }
 
-    /// `PathingBehavior.tickPath`: The pause request is not here: no process sends one.
-    /// `PathingBehavior.tickPath`.
+    /// `PathingBehavior.tickPath`: a pause request stands the path still for the tick.
     fn tick_path<W: WorldView>(&mut self, tk: &mut Tk<'_, '_, W, S>) {
         let player = tk.env.player;
         let feet = player.feet();
+        self.paused_this_tick = false;
+        if self.pause_requested_last_tick && self.safe_to_cancel {
+            self.pause_requested_last_tick = false;
+            if self.unpaused_last_tick {
+                self.controls.clear_all_keys(); // and `blockBreakHelper.stopBreakingBlock`: the glue lets go of the button when the key is not held
+            }
+            self.unpaused_last_tick = false;
+            self.paused_this_tick = true;
+            return;
+        }
+        self.unpaused_last_tick = true;
         if self.cancel_requested {
             self.cancel_requested = false;
             self.controls.clear_all_keys();

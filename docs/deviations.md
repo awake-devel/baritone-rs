@@ -3,7 +3,7 @@
 Each place where this port differs from upstream on purpose. The rules are in
 [PORTING-SAFETY.md](PORTING-SAFETY.md#deviations). Upstream lines are cited at the `1.21.4` commit `1b8e87c`.
 
-Entries 1 to 4 are decided and wait for the code they apply to. Entry 5 is active and has no effect on any real search. Entries 6 to 10 are active (S3) and change no chosen path that a game can reach. Entries 11 to 23 are active (S4, executor, state machine and the mod): they change when a search is cancelled (12) and what `/b stop` waits for (13), and nothing a search returns. Entries 24 to 32 are active (S4, breaking, placing, settings, commands and the glue): none changes a search; 28 changes what the executor does when the settings forbid an action that a path in progress still asks for. Entry 35 is active (free look): it changes what the player's camera does while a path runs, and nothing a search returns.
+Entries 1 to 4 are decided and wait for the code they apply to. Entry 5 is active and has no effect on any real search. Entries 6 to 10 are active (S3) and change no chosen path that a game can reach. Entries 11 to 23 are active (S4, executor, state machine and the mod): they change when a search is cancelled (12) and what `/b stop` waits for (13), and nothing a search returns. Entries 24 to 32 are active (S4, breaking, placing, settings, commands and the glue): none changes a search; 28 changes what the executor does when the settings forbid an action that a path in progress still asks for. Entry 35 is active (free look): it changes what the player's camera does while a path runs, and nothing a search returns. Entries 36 and 37 are active (R2, engine side of `mine` and `goto <block>`): they change which process asks for a search, and no search.
 
 ## How exceptions work today
 
@@ -204,24 +204,27 @@ Fields: upstream, ours, why, changes chosen paths, decided by, expectation in th
 ### D15. Closed doors and fence gates
 
 - **Status:** active, in `exec::movements`.
-- **Upstream:** `MovementHelper.openDoors` and the gate branch of `MovementTraverse` aim at the middle of the block's collision shape
-  (`VecUtils.calculateBlockCenter`, `RotationUtils.reachable` with a ray trace) and press the right button.
-- **Ours:** the aim is the middle of the block, and there is no ray trace, so a gate is always "reachable". The click is
-  `Intent::use_block`, set only when `ExecSettings::can_use_blocks` is true (the default is false). When it is false, the movement
-  ends as `Failed` with `NeedsUseBlock` and the path is cancelled and searched again. Whether a door or gate is open is
-  `WorldView::is_open`, not a block fact (the default says open).
-- **Why:** the glue may not have a simple way to press the button yet. Not adding fields to the block table keeps `facts-compare` as it is.
-- **Changes chosen paths:** no. But a closed door on the only route is searched again at once, so the walk loops until the door is opened by hand, or the glue sets `can_use_blocks`.
-- **Decided by:** the task for S4.
+- **Upstream:** `MovementHelper.openDoors` aims at the middle of the door's collision shape (`VecUtils.calculateBlockCenter`) with a forced target and presses
+  the right button. The gate branch of `MovementTraverse` asks `RotationUtils.reachable` for a rotation that a ray trace confirms, and presses the right button only when it finds one.
+- **Ours:** the same, always (since the fix after v0.1.0; `ExecSettings::can_use_blocks` and `MoveFailure::NeedsUseBlock` are gone). A door is aimed at the middle of the *cell*, not of its
+  collision shape (there are no shapes in the engine), and the game's own use then acts on whatever its crosshair is on. A gate uses `exec::helper::reachable`, whose ray treats a closed gate as a whole cube
+  (`raytrace::blocks_ray`: not pathfindable), D25; when no rotation reaches it nothing is clicked and the movement goes on, as upstream. The right button is the glue's `game.right`, pressed through the pinned
+  input hook (`Intent::use_block` counts as a press like `use_item`, D32). Whether a door or gate is open is `WorldView::is_open`, not a block fact (the default says open). Iron doors are not wooden
+  (`wooden_door` is false), so `openDoors` leaves them alone as upstream does and the search treats them as walls.
+- **Tested:** the engine's unit tests (door and gate, open and closed) and, in the game, L3 `b11_door` and `b12_gate` (chat closed and open: a corridor whose only exit is a closed oak door or fence gate; arrived,
+  and only the door's own cells changed state). Not run in the game: iron doors, doors that open towards the player, trapdoors, hinge right, other wood types.
+- **Changes chosen paths:** no.
+- **Decided by:** the owner (the fix after v0.1.0). Before, the default was off and a closed door on the only route ended the movement and looped.
 
 ### D16. Branches that swim, jump a gap or mine from inside a block fail by name
 
 - **Status:** active, in `exec::movements`. Each has a row marked `later` in the ledger. (Until the breaking and placing step, the branches that break, place and use a bucket failed by name too; they are carried out now, see D24 to D28.)
 - **Upstream:** a movement swims along the surface with `allowSwimming` (`holdWaterline`, `preTurnIntoTheBend`), runs the parkour jump, and
   mines whatever the crosshair is on when the head is in a block.
-- **Ours:** the movement ends as `Failed` with a `MoveFailure` (`Swimming`, `InsideWall`, `Parkour`). The executor cancels the path and the pathing
-  searches again. With `allowSwimming` and `allowParkour` off (upstream's defaults) a search never returns a movement that needs the first or the third;
-  `InsideWall` happens when the player's head is in a block.
+- **Ours:** the movement ends as `Failed` with a `MoveFailure` (`Swimming`, `Parkour`). The executor cancels the path and the pathing
+  searches again. With `allowSwimming` and `allowParkour` off (upstream's defaults) a search never returns a movement that needs the first or the third.
+  The third branch (the head in a block) is ported since the fix after v0.1.0: `Movement.update` switches to the best tool for the block the crosshair is on (if the crosshair is on one) and
+  presses the left button, whatever the movement is doing, and the movement goes on (`MoveFailure::InsideWall` is gone). It aims nothing of its own, as upstream.
 - **Why:** these are outside the first release (docs/PLAN.md).
 - **Changes chosen paths:** no.
 - **Decided by:** the owner (the S4 cut, and the task for the breaking and placing step).
@@ -380,7 +383,7 @@ Fields: upstream, ours, why, changes chosen paths, decided by, expectation in th
 
 - **Status:** active, in `set.rs`.
 - **Ours:** one table of the settings of this port, with upstream's names, types and defaults (checked against `Settings.java` for each and against `Config::upstream_defaults` and
-  `ExecSettings::default` for all). Not carried: the settings of processes that do not exist, the chat prefix and notifications. `renderPath` and `allowInventory` are stored
+  `ExecSettings::default` for all). Not carried: the settings of processes that do not exist (the mine and get-to-block settings are carried since R2, D37), the chat prefix and notifications. `renderPath` and `allowInventory` are stored
   but read by nobody in the engine; `freeLook`, `blockFreeLook`, `antiCheatCompatibility`, `smoothLook` and `smoothLookTicks` are read through `look_settings` (D35). Names are matched without regard to case. Values are printed as Java prints them (`2.0`, `1.0E7`, a block without `minecraft:`, an item with it) and read as
   `SettingsUtil` reads them, except: a number is read with Rust's parser after trimming and a trailing `d` or `f` (no hexadecimal floats), "modified" means "not equal to the default" where
   upstream compares object identity, and the command's errors read `Expected a valid setting` without the position of the argument. `set save` and `set load` ask the glue for the file
@@ -405,8 +408,9 @@ Fields: upstream, ours, why, changes chosen paths, decided by, expectation in th
 - **Ours:** `Movement.prepared` asks `WorldView::falling_block_near` before it mines, as upstream asks the entities (`getEntitiesOfClass(FallingBlockEntity, AABB(0,0,0,1,1.1,1).move(pos))`).
   The default says none. The game thread's `Live` world answers it from the falling blocks the game holds (`game.falling`: a box 0.98 wide and tall, tested strictly on all three axes). Before the fix of the
   review (S4b), `pauseMiningForFallingBlocks` had no effect in the game. It is a unit-tested box test; no sand or gravel was mined in the game.
-- **Still different:** when a falling block lands in the cell of the player's head while a movement runs, the movement ends as `InsideWall` (D16) and the path is cancelled and searched again, where upstream
-  mines the block out of the way.
+- **Fixed after v0.1.0:** when a falling block lands in the cell of the player's head while a movement runs, the executor mines it as upstream does (D16): best tool for the block under the crosshair, left button, the
+  movement goes on. Before, the movement ended as `InsideWall` and the path was searched again. The glue's `in_wall` is "the block at the eye is a full cube" (`shape_full`); upstream's `isInWall` is the game's
+  suffocation test, so a full cube that does not suffocate may also count here (not checked against the block table). Not run in the game: mining the sand out (by hand it takes longer than the sand stays a block); L3 `b10_head_sand` only shows that the walk goes on.
 - **Changes chosen paths:** no.
 
 ### D32. The glue: buttons, slot, settings file, completion
@@ -524,6 +528,100 @@ The port does what upstream does here; a change would change paths, so it is the
   `movementTimeoutTicks`, the new search finds the same path, and the player stands still in that loop until stopped. Found in
   6b6t.org's lobby (2026-11-07): an Ascend through dirt and grass (cost 43.6) repeated every 148 ticks. `/b set allowBreak false`
   avoids it. The port does the same; the owner chose to keep it (2026-11-07).
+
+### D36. Three processes, and the scans are jobs
+
+- **Status:** active, in `process/pathing.rs` (the manager), `process/mine.rs`, `process/get_to_block.rs`. Engine only so far: the glue calls it in the next step.
+- **Upstream:** `PathingControlManager` keeps the processes in a hash set, puts a newly active one at the front of a list, sorts by `priority()` (all 0 here) and asks them in turn; the first answer that is
+  not `DEFER` is in control, and every process behind it that is not temporary loses control. `MineProcess.mine` and `GetToBlockProcess.getToBlock` run their first scan inside the call, on the game thread; the
+  later scans (`rescan`) run on an executor thread every `mineGoalUpdateInterval` ticks and write the answer into the process's fields when they are done, whatever the process is doing by then (`GetToBlockProcess`
+  checks that it is still going to the same block, `MineProcess` does not).
+- **Ours:** the same rules for three fixed processes (`CustomGoalProcess`, `MineProcess`, `GetToBlockProcess`, registered in that order, so two that become active in the same tick would be ordered by
+  that, which the commands never do). `RequestPause`, `RevalidateGoalAndPath` and `Defer` are ported with the pause rule of `tickPath` (`pausedThisTick`, the keys cleared on the first paused tick) and the
+  `cancelOnGoalInvalidation` rule of `postTick`. A process that answers `null` while still active is stopped (upstream throws `IllegalStateException`). The first scan is a job too (D39): `Pathing::tick` queues it before the processes
+  are asked and the process asks for a pause until it is answered, so no process sees "nothing known yet". Every scan is a `ScanJob` that owns what it reads: the glue takes it (`Pathing::take_scan_jobs`), runs it on any thread over a snapshot
+  (`ScanJob::run`) and hands the answer back (`Pathing::deliver_scan`). Each answer carries the process's session number, and an answer from an earlier session (the process was stopped or started again) is dropped.
+  A process starts no new scan while one is out; upstream starts one every interval, whether or not the last has finished.
+- **Why:** the engine has no threads and no shared fields, and a slow scan of the whole loaded world would otherwise queue up. The session number is what `GetToBlockProcess.rescan` does with its `gettingTo != target` check, for both.
+- **Not carried:** `SET_GOAL_AND_PAUSE` (nothing that exists sends it), priorities other than 0, `isTemporary` (no process is), the check that throws when a process stays active after `cancelEverything`, `mostRecentInControl`
+  and `mostRecentCommand` (`Pathing::in_control` answers the first). The `safeToCancel` field starts false as upstream's does; nothing reads it with no path, except that a pause request is not honoured then, which is what
+  upstream does too.
+- **Changes chosen paths:** no. A path is searched as before; what changes is which process asks for it.
+- **Decided by:** the task for this step.
+
+### D37. `mine` and `goto <block>`
+
+- **Status:** active, engine only: `blockmeta.rs`, `scan.rs`, `process/mine.rs`, `process/get_to_block.rs`, the mine settings in `set.rs` and `settings.rs`, the commands in `command.rs`.
+- **Ours, the same as upstream:** the order and the rules of `MineProcess.onTick` (quantity check, the blacklist after a failed path, the Louca hold on a mined block, the shaft in the player's own column mined from where he
+  stands with a pause request, `updateGoal`, `coalesce` with `GoalThreeBlocks`), `prune` and its filters, `searchWorld`, legit mine, `GetToBlockProcess` (goals per block, the nether portal, the chests with a block on top, the
+  right click on arrival, `blacklistClosest`), and `FasterWorldScanner.scanChunkRadius` (D39: the square spiral of chunks, the sections from the player's outwards, never more than `max` hits). Defaults are upstream's.
+- **Differs from upstream:**
+  1. **No cached world.** Every block is scanned straight from the loaded chunks, as upstream does for the blocks it does not keep in its cache. Upstream finds the blocks of `CachedChunk.BLOCKS_TO_KEEP_TRACK_OF` (chests, furnaces,
+     ender chests, spawners, portals, shulker boxes, hoppers, beacons, heads, ...) only through the cache, so `goto chest` there finds chests remembered from chunks that are no longer loaded and this does not. Ores
+     are not in that list, so `mine` finds the same places. `maxCachedWorldScanCount`, `extendCacheOnThreshold`, `repack` and `scanChunk` are not ported.
+  2. **The scanner.** The first version of this port copied `WorldScanner`, which `MineProcess` does not use: `BaritoneProvider.getWorldScanner()` is `FasterWorldScanner`. Corrected in R2 (D39).
+  3. **Blocks and drops come from the glue.** `BlockOptionalMeta` matches by state id and item path from a `BlockIndex` the glue builds once (the block and properties of each state, and the items each block drops, from
+     the loot tables). Upstream reads the registries and runs the loot tables with a netherite pickaxe and a fixed random seed. The glue should list every item the block can drop for the best case; an item the
+     table lacks is not counted towards `mine <n>`, and a dropped item of it is not walked to. An unknown property is a message (`"x" is not a property of Block{minecraft:y}`), where upstream throws a `NullPointerException`.
+  4. **Dropped items and the inventory come from the glue too.** `ProcessInputs::item_entities` (empty: none seen), `Inventory::main_slots` (default: the hotbar only; upstream counts the 36 main slots), `ProcessInputs::now_ms`
+     for the Louca hold, `ProcessInputs::container_open` for the right click. Without them `mine <n>` counts the hotbar, and dropped items are not walked to.
+  5. **The first scan is queued in the first tick** and not run inside the command (D36, D39).
+  6. **Texts.** The lines the processes say (`logDirect`) are upstream's, returned by `Pathing::take_messages` for the glue to print. The desktop notification on a failed mine (`notificationOnMineFail`) is the glue's. `GetToBlockProcess.rightClick`'s `System.out.println` is dropped.
+  7. **`GetToBlockCalculationContext`** (the context that ignores `allowBreak` when places are picked) is the same scan run with `allowBreak` on. The walk itself still obeys `allowBreak`.
+  8. **The new goals print with `Debug`** (`goal_to_string`), as the other goals the commands do not make. No command prints them.
+- **Changes chosen paths:** no. The search and the costs are untouched; the goals the processes send are upstream's.
+- **Decided by:** the task for this step (the owner's R2: `mine` first).
+
+### D38. The glue of `mine` and `goto <block>` (mod only, found by running it)
+
+What the mod feeds the engine (`mod/runtime.rs`), where it differs from upstream:
+
+1. **Scans run on their own thread.** Every scan (the first of a command too, which upstream runs inline; see D39 for how the process waits for it) is a `ScanJob` over a `Snapshot` of the
+   loaded chunks (the same pointer copy the search uses: 50 to 150 microseconds on the game thread in the smoke test). The scan
+   itself runs on a thread of its own and the answer reaches the process on a later tick. In the smoke test a scan took 15 to 25 ms with ore
+   near, and 2.3 to 2.6 s when fewer than 64 ores were near and the scan went through every loaded chunk (render distance 12);
+   that time is off the game thread.
+2. **What a block drops** comes from Horizon's loot tables (`blocks/<name>`): every item of every pool and entry that does not need a tool in
+   hand (no `match_tool` condition without `inverted`), whatever the chance. Upstream rolls the table with an empty hand and keeps what came
+   out. So a block with a chance drop (leaves: saplings) lists it, and silk-touch and shears items are left out. `mine` counts the listed
+   items in the 36 main slots.
+3. **Item entities** are the game's dropped items (`ItemEntity`), with the block their position is in. They are given only while a process is
+   active.
+4. **Tab completion** offers the registry's block paths after `mine` and, as the only argument, after `goto`. The names are read once,
+   with the first tick, so completion works before any `/b` command has run (about one pass over the registry). Properties inside `[...]` are not completed.
+5. **`Arrived.`** is said only for `/b goto <x y z>` and `/b path`. Upstream says nothing when a walk of `mine` or `goto <block>` ends; the
+   `AtGoal` event that ends each of them is not announced.
+6. **The buttons and the held slot are applied while the keys are not forced** (the intent's `active` is false). Upstream's `mine` pauses the
+   path and clicks while it stands still (an ore above the player's head), and `select_slot` comes with it. Before this change the mod
+   ignored both outside a walk.
+
+### D39. The first scan is a job, and the scanner is `FasterWorldScanner` (R2 review)
+
+- **Status:** active, in `scan.rs`, `process/pathing.rs`, `process/mine.rs`, `process/get_to_block.rs`. Two things the R2 reviews found.
+- **Upstream:** `MineProcess.mine` and `GetToBlockProcess.getToBlock` scan inside the command, on the game thread. The scanner is `FasterWorldScanner` (`BaritoneProvider.getWorldScanner()`).
+  `scanChunkRadius` takes the chunks of `getChunkRange(playerChunk, maxSearchRadius)` (a square spiral of `maxSearchRadius - 1` rings; the 32 of `MineProcess` is 31 rings, not a distance), scans them in parallel, and keeps the first `max` hits in
+  that order (`limit`); `yLevelThreshold` is not read. Inside a chunk the sections are the player's, the one below, the one above the player's, and so on; inside a section the packed order is `y`, `z`, `x`; a section with
+  one block state everywhere (`SingleValuePalette`) is walked `x`, `y`, `z`.
+- **Ours:**
+  1. `scan::scan_chunk_radius` is that scan, walked in order and stopped once `max` hits are in (the same first `max`; upstream's parallelism is only speed). The earlier `WorldScanner` port (squared-distance rings, a whole chunk kept past
+     `max`, a stop at an all-unloaded ring) is gone; it chose different ores whenever more than 64 matched.
+  2. The engine cannot see a palette, so "one state everywhere" is read off the 4096 cells, and only for a section whose first cell the filter matches. A section with a bigger palette that holds one state would be walked `y`, `z`, `x`
+     upstream and `x`, `y`, `z` here. That needs a section edited down to one state after it was sent; the order matters only for which of the 64 are kept of such a section.
+  3. The first scan is queued as a job in the first tick (`Pathing::tick`), like every later one, and the process answers `RequestPause` until the answer is delivered, then goes on with its normal tick 0. The player stands still for the
+     length of the scan (15 to 25 ms with ore near; seconds when fewer than 64 matches are near and the scan covers every loaded chunk) instead of the game freezing. Before this change the first scan ran on the game thread and
+     measured 0.17 s to 4.6 s of stall in the L3 run (`mod_tick_micros`).
+- **Changes chosen paths:** (1) yes, when more than 64 matches are loaded, toward upstream's choice; (3) no.
+- **Decided by:** the R2 review findings; (1) is a port bug (upstream's behaviour was copied from the wrong class), (3) keeps the game responsive.
+
+### Upstream behaviour kept, found in the R2 reviews (reported, not fixed)
+
+- **U17. A head stuck in a block is mined with no `allowBreak` check.** `Movement.update` presses the left button with the best tool for whatever the crosshair is on when `isInWall`, whatever `allowBreak`,
+  `blocksToDisallowBreaking` or `avoidBreaking` say. With `allowBreak false` the player still digs out of a block that lands on his head (sand, gravel) while a walk runs. Kept; a guard would not change a path, but it is the owner's call.
+- **U18. The shaft click of `mine` re-checks only `air` and `avoidBreaking`.** A dropped item resting in a cell of the player's own column (a torch, a flower) is a known place (`mineScanDroppedItems`), and `MineProcess.onTick` clicks
+  the block of the shaft without asking whether the filter or `allowBreak` would let the search break it. With `allowBreak false` and an `allowBreakAnyway` filter the mod can click such a cell. Kept.
+- **U19. Some numeric settings have no bound.** `allowOnlyExposedOresDistance` loops over `(2r+1)^3` cells per candidate and `mineMaxOreLocationsCount` can make the scan keep every match; a huge value set by the user costs time or
+  memory. Kept as upstream.
+- **U20. A button can stay pressed for one extra tick** when `MineProcess.onTick` returns before `clearAllKeys` (quantity reached, or a failed path with nothing to blacklist) while a paused path exists. Read, not measured. Kept.
 
 ## Where upstream's two branches disagree
 

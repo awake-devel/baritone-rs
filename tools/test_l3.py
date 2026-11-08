@@ -46,21 +46,58 @@ class SpecTests(unittest.TestCase):
 
     def test_the_new_scenarios_give_items_and_start_with_an_empty_hotbar(self):
         for s in scenarios.new_scenarios():
-            if s["name"].startswith(("b08", "b09", "b02")):
+            if s["name"].startswith(("b08", "b09", "b02", "b10", "b11", "b12")):
                 continue
             self.assertEqual(s["prep"][0], "clear @p", s["name"])
             self.assertTrue(any(l.startswith("give @p") for l in s["prep"]), s["name"])
+
+    def test_the_door_gate_and_sand_scenarios_name_their_checks(self):
+        by = {s["name"]: s for s in scenarios.new_scenarios()}
+        for chat in (0, 1):
+            self.assertEqual(by[f"b10_head_sand_chat{chat}"]["check"]["no_search_after"], 45)
+            self.assertEqual(len(by[f"b11_door_chat{chat}"]["check"]["toggled"]), 2)
+            self.assertEqual(len(by[f"b12_gate_chat{chat}"]["check"]["toggled"]), 1)
+            self.assertTrue(any("sand" in e.get("console", "") for e in by[f"b10_head_sand_chat{chat}"]["events"]))
 
     def test_a_setting_is_set_before_the_command_and_put_back_after(self):
         off = [s for s in scenarios.new_scenarios() if s["name"] == "b06_wall_allowbreakoff_chat0"][0]
         self.assertIn({"t": 3, "set": "b set allowBreak false"}, off["events"])
         self.assertEqual(off["after"], ["b set allowBreak true"])
 
+    def test_the_mine_scenarios_name_their_ores_and_counts(self):
+        by = {s["name"]: s for s in scenarios.mine_scenarios()}
+        self.assertEqual(len(by), 10)
+        for chat in (0, 1):
+            m1 = by[f"m01_mine_cave3_chat{chat}"]["check"]
+            self.assertEqual(len(m1["ores_broken"]), 3)
+            self.assertEqual(len({o[1] for o in m1["ores_broken"]}), 3, "three different depths")
+            self.assertEqual(m1["items_end"], {"raw_iron": 3})
+            m2 = by[f"m02_mine_quantity_chat{chat}"]
+            self.assertEqual(m2["check"]["ores_broken_count"], 1)
+            self.assertEqual(len(m2["check"]["ores_all"]), 4)
+            self.assertTrue(any("raw_iron 2" in l for l in m2["prep"]))
+            self.assertTrue(by[f"m03_goto_table_wall_chat{chat}"]["check"]["opens_container"])
+            self.assertEqual(by[f"m05_stop_mine_scanning_chat{chat}"]["check"]["stop_tick"], 14)
+
     def test_the_far_scenario_can_be_left_out(self):
         self.assertFalse(any(s["name"].startswith("s10") for s in scenarios.all_scenarios(include_far=False)))
 
 
 class BlockJudgeTests(unittest.TestCase):
+    def test_a_range_of_broken_blocks_and_the_items_of_a_hotbar(self):
+        self.assertEqual(run.hotbar_total("0:iron_pickaxe x1 d3; 1:raw_iron x2 d0; 2:raw_iron x1 d0", "raw_iron"), 3)
+        self.assertEqual(run.hotbar_total("", "raw_iron"), 0)
+        plans = [{"break": {(1, 200, 0), (2, 200, 0)}, "place": set()}]
+        ch = [f"{x},200,0: minecraft:iron_ore -> minecraft:air" for x in (1, 2)]
+        r = {"checks": {}, "notes": []}
+        run.judge_blocks(r, {"plan": {"break": [1, 3], "place": [0, 2]}, "tool_damage_equals_broken": "iron_pickaxe"}, {"all_changes": ch, "hotbar_start": "0:iron_pickaxe x1 d0", "hotbar_end": "0:iron_pickaxe x1 d2"}, plans)
+        self.assertTrue(all(r["checks"].values()), r["checks"])
+        r = {"checks": {}, "notes": []}
+        run.judge_blocks(r, {"plan": {"break": [3, 4], "place": 0}, "tool_damage_equals_broken": "iron_pickaxe", "last_path_may_be_unused": True},
+                         {"all_changes": ch, "hotbar_start": "0:iron_pickaxe x1 d0", "hotbar_end": "0:iron_pickaxe x1 d1"}, plans)
+        failed = [k for k, v in r["checks"].items() if not v]
+        self.assertEqual(sorted(failed), ["broke 3 to 4 blocks", "iron_pickaxe lost one durability per block broken (2)"])
+
     def meta(self, changes, start="0:cobblestone x64 d0", end="0:cobblestone x61 d0"):
         return {"all_changes": changes, "hotbar_start": start, "hotbar_end": end, "slot_start": 6, "slot_end": 0}
 

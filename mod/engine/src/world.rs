@@ -22,6 +22,16 @@ pub trait WorldView {
     fn falling_block_near(&self, _x: i32, _y: i32, _z: i32) -> bool {
         false
     }
+    /// `FasterWorldScanner`: whether the chunk at these chunk coordinates is loaded (`ClientChunkCache.getChunk(x, z, null, false) != null`). The
+    /// default asks about the chunk's first column.
+    fn chunk_loaded(&self, chunk_x: i32, chunk_z: i32) -> bool {
+        self.contains_loaded_chunk(chunk_x.wrapping_mul(16), chunk_z.wrapping_mul(16))
+    }
+    /// `FasterWorldScanner`: `LevelChunkSection.hasOnlyAir` for section number `section` of a loaded chunk, counted up from `min_y`. The scan skips such
+    /// a section. The default says no, so the scan reads every cell: the same answer unless the search looks for air, which the section rule would skip.
+    fn section_has_only_air(&self, _chunk_x: i32, _chunk_z: i32, _section: i32) -> bool {
+        false
+    }
     /// The lowest Y of the world.
     fn min_y(&self) -> i32;
     /// The world's height in blocks.

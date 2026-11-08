@@ -6,7 +6,7 @@
 //   * `on_movement` (native_movement_input, before the player moves): replaces the player's keys, only while a path runs.
 //   * `on_input_head` / `on_input_return` (the game's own input step, pinned): hold the left and right buttons for the executor, also
 //     with the chat open (the screen is Playing for that one call). The slot, the aim and the buttons come from the intent.
-//   * `on_command`: `/b goto`, `goal`, `path`, `eta`, `set`, `stop`, `help`, `trace`. `suggest_provider`: the words after `/b` for the chat box.
+//   * `on_command`: `/b goto` (coordinates or a block), `mine`, `goal`, `path`, `eta`, `set`, `stop`, `help`, `trace`. `suggest_provider`: the words after `/b` for the chat box.
 //   * `on_primitives`: the path, drawn in the world.
 //   * `on_level_gone`: the level was dropped, or the connection ends.
 // With no goal ever given, the mod does nothing at all: no thread, no tables, no key touched.
@@ -16,7 +16,8 @@
 use super::{Game, Screen};
 use baritone_engine::blocks::{Direction, State};
 use baritone_engine::buttons::Buttons;
-use baritone_engine::command::{eta_command, goal_command, goal_to_string, goto_goal, path_command, GoalAction, GotoError, PathAction};
+use baritone_engine::blockmeta::{BlockIndex, StateEntry};
+use baritone_engine::command::{complete_blocks, eta_command, goal_command, goal_to_string, goto_block, goto_goal, mine_command, path_command, GoalAction, GotoError, PathAction};
 use baritone_engine::config::Config;
 use baritone_engine::exec::movements::GameFacts;
 use baritone_engine::exec::state::{CancelReason, PlayerView};
@@ -26,6 +27,7 @@ use baritone_engine::look::Vec3;
 use baritone_engine::movement::helper::Border;
 use baritone_engine::pos::Pos;
 use baritone_engine::process::pathing::{PathEvent, Pathing, Tables, TickEnv};
+use baritone_engine::process::{ItemEntity as DroppedItem, ProcessInputs, ScanJob, ScanResult};
 use baritone_engine::raytrace::BlockHit;
 use baritone_engine::set::{Registry, SetEffect, Settings};
 use baritone_engine::freelook::{restored_view, LookSettings, LookState, Plan};
@@ -33,6 +35,7 @@ use baritone_engine::look::Rotation;
 use baritone_engine::settings::ExecSettings;
 use baritone_engine::worker::{monotonic_ms_clock, Worker};
 use baritone_engine::world::{falling_box_hits, known_state, WorldView};
+use std::cell::OnceCell;
 use horizon_client::motion::PlayerMotion;
 use horizon_items::blocks::BlockFacts;
 use horizon_items::items::{ItemStack, Items};
@@ -45,7 +48,7 @@ use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 pub const ID: &str = "baritone_rs";
 pub const NAME: &str = "baritone-rs";
 pub const VERSION: &str = "0.1.0";
-pub const DESCRIPTION: &str = "Pathfinding. /b goto <x> <y> <z>, /b goal, /b path, /b eta, /b set, /b stop. Walks, sprints, breaks and places blocks. Parkour and swimming are off.";
+pub const DESCRIPTION: &str = "Pathfinding. /b goto <x> <y> <z> or <block>, /b mine <block>, /b goal, /b path, /b eta, /b set, /b stop. Walks, sprints, breaks and places blocks. Parkour and swimming are off.";
 
 const PREFIX: &str = "[baritone-rs]";
 
@@ -78,6 +81,13 @@ impl WorldView for Snapshot {
     }
     fn contains_loaded_chunk(&self, x: i32, z: i32) -> bool {
         self.chunks.contains_key(&(x >> 4, z >> 4))
+    }
+    fn chunk_loaded(&self, chunk_x: i32, chunk_z: i32) -> bool {
+        self.chunks.contains_key(&(chunk_x, chunk_z))
+    }
+    fn section_has_only_air(&self, chunk_x: i32, chunk_z: i32, section: i32) -> bool {
+        let air = self.air as u32;
+        usize::try_from(section).ok().and_then(|s| self.chunks.get(&(chunk_x, chunk_z))?.sections.get(s)).is_some_and(|sec| sec.is_uniform(air))
     }
     fn min_y(&self) -> i32 {
         self.min_y
@@ -143,12 +153,58 @@ struct Base {
     states: Vec<State>,
     default_of: Vec<usize>,
     paths: Vec<String>,
+    /// The blocks, their states and what they drop, for `mine` and `goto <block>`.
+    index: BlockIndex,
 }
+
+/// Scans run off the game thread (the mine and get-to-block processes' `rescan`): a request goes in, the answer comes back and is handed to the
+/// process on a later tick. The thread lives as long as the mod state.
+struct Scanner {
+    tx: std::sync::mpsc::Sender<ScanRequest>,
+    rx: std::sync::mpsc::Receiver<ScanResult>,
+}
+
+struct ScanRequest {
+    job: ScanJob,
+    snapshot: Snapshot,
+    tables: Arc<Tables>,
+    border: Border,
+}
+
+impl Scanner {
+    fn spawn() -> std::io::Result<Scanner> {
+        let (tx, jobs) = std::sync::mpsc::channel::<ScanRequest>();
+        let (results, rx) = std::sync::mpsc::channel::<ScanResult>();
+        std::thread::Builder::new().name("baritone-rs-scan".into()).spawn(move || {
+            for req in jobs {
+                let (kind, generation) = (req.job.kind, req.job.generation);
+                let began = std::time::Instant::now();
+                let answer = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| req.job.run(&req.tables.ctx(&req.snapshot, req.border))));
+                let result = match answer {
+                    Ok(r) => r,
+                    Err(_) => {
+                        log::error!("{PREFIX} a scan panicked; it found nothing");
+                        ScanResult { kind, generation, locations: vec![] }
+                    }
+                };
+                log::info!("{PREFIX} scan {kind:?} took {} ms, found {}", began.elapsed().as_millis(), result.locations.len());
+                if results.send(result).is_err() {
+                    break;
+                }
+            }
+        })?;
+        Ok(Scanner { tx, rx })
+    }
+}
+
+/// The block names for tab completion, from the registry, once. Built with the first tick, long before anything is typed.
+static COMPLETION_BLOCKS: OnceLock<BlockIndex> = OnceLock::new();
 
 struct Mod {
     pathing: Pathing<Worker<Snapshot>, Snapshot>,
     tables: Arc<Tables>,
     base: Base,
+    scanner: Scanner,
     sig: Option<Sig>,
     /// The settings table this `exec` and `tables` were made from.
     settings: Settings,
@@ -206,7 +262,7 @@ fn buttons() -> MutexGuard<'static, Buttons> {
     BUTTONS.lock().unwrap_or_else(|e| e.into_inner())
 }
 
-/// Sets what the next input step holds: the left button (`Intent::attack`) and the right button (one press, `Intent::use_item`). A button the mod
+/// Sets what the next input step holds: the left button (`Intent::attack`) and the right button (one press, `Intent::use_item` or `Intent::use_block`). A button the mod
 /// held last time and does not want now is let go of once (`Buttons`), so the dig stops or the press ends.
 fn set_buttons(left: bool, right: bool) {
     buttons().set(left, right);
@@ -355,6 +411,9 @@ struct GameInv<'a> {
     items: &'a Items,
     facts: &'a BlockFacts,
     hb: &'a Hotbar,
+    /// The player's 36 main slots (`game.inventory`), read into `SlotInfo`s only when the engine asks (`mine` counting its drops).
+    main: &'a [Option<ItemStack>],
+    main_infos: OnceCell<Vec<SlotInfo>>,
 }
 
 impl Inventory for GameInv<'_> {
@@ -376,6 +435,11 @@ impl Inventory for GameInv<'_> {
     }
     fn potion_amplifier(&self) -> f64 {
         self.hb.amplifier
+    }
+    fn main_slots(&self) -> Vec<SlotInfo> {
+        self.main_infos
+            .get_or_init(|| self.main.iter().take(36).map(|s| s.as_ref().filter(|st| st.count > 0).map_or_else(SlotInfo::empty, |st| slot_info(self.items, st))).collect())
+            .clone()
     }
 }
 
@@ -416,7 +480,107 @@ fn build_base(game: &Game<'_>) -> Result<Base, String> {
         paths.push(desc.name.strip_prefix("minecraft:").unwrap_or(&desc.name).to_string());
     }
     log::info!("{PREFIX} block facts of {n} states read in {} ms", started.elapsed().as_millis());
-    Ok(Base { states, default_of, paths })
+    let index = build_index(game, registry);
+    log::info!("{PREFIX} block index (states and drops) ready in {} ms", started.elapsed().as_millis());
+    Ok(Base { states, default_of, paths, index })
+}
+
+/// The name the engine keeps a block under (`BlockUtils.blockToString`): the path for `minecraft:`, the whole name otherwise.
+fn block_key(name: &str) -> String {
+    name.strip_prefix("minecraft:").unwrap_or(name).to_string()
+}
+
+/// Whether a loot entry or pool only gives something to a tool in hand: it has a `match_tool` condition (and no `inverted` one, which would
+/// make the empty hand pass). `mine` asks what a block gives when it is broken, not with silk touch or shears.
+fn needs_tool(node: &serde_json::Value) -> bool {
+    node.get("conditions").is_some_and(|c| {
+        let text = c.to_string();
+        text.contains("match_tool") && !text.contains("inverted")
+    })
+}
+
+fn loot_entry_items(entry: &serde_json::Value, out: &mut Vec<String>) {
+    if needs_tool(entry) {
+        return;
+    }
+    if entry.get("type").and_then(|t| t.as_str()) == Some("minecraft:item") {
+        if let Some(name) = entry.get("name").and_then(|n| n.as_str()) {
+            let key = block_key(name);
+            if !out.contains(&key) {
+                out.push(key);
+            }
+        }
+    }
+    if let Some(children) = entry.get("children").and_then(|c| c.as_array()) {
+        for child in children {
+            loot_entry_items(child, out);
+        }
+    }
+}
+
+/// The items a block's loot table can give with an empty hand: what `BlockOptionalMeta.drops` is for. Every pool and entry that does not
+/// need a tool is listed, whatever its chance (docs/deviations.md D38).
+fn table_items(table: &serde_json::Value) -> Vec<String> {
+    let mut out = Vec::new();
+    for pool in table.get("pools").and_then(|p| p.as_array()).into_iter().flatten() {
+        if needs_tool(pool) {
+            continue;
+        }
+        for entry in pool.get("entries").and_then(|e| e.as_array()).into_iter().flatten() {
+            loot_entry_items(entry, &mut out);
+        }
+    }
+    out
+}
+
+/// Every block state with its block and properties, and the items each block drops (from the vanilla loot tables, `blocks/<name>`).
+fn build_index(game: &Game<'_>, registry: &BlockRegistry) -> BlockIndex {
+    let mut states = Vec::with_capacity(registry.len());
+    let mut names: Vec<String> = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for i in 0..registry.len() {
+        let Some(desc) = registry.state(BlockStateId(i as u32)) else {
+            states.push(StateEntry::default());
+            continue;
+        };
+        if seen.insert(desc.name.clone()) {
+            names.push(desc.name.clone());
+        }
+        states.push(StateEntry { block: block_key(&desc.name), props: desc.properties.iter().map(|(k, v)| (k.clone(), v.clone())).collect() });
+    }
+    let mut drops: HashMap<String, Vec<String>> = HashMap::new();
+    match horizon_world::loot::shared_tables(&game.options.resources, &game.pack_files()) {
+        Ok(tables) => {
+            for name in &names {
+                let (ns, path) = name.split_once(':').unwrap_or(("minecraft", name));
+                if let Some(table) = tables.get(&format!("{ns}:blocks/{path}")) {
+                    let items = table_items(table);
+                    if !items.is_empty() {
+                        drops.insert(block_key(name), items);
+                    }
+                }
+            }
+        }
+        Err(e) => log::warn!("{PREFIX} loot tables cannot be read ({e}); mine will not know what blocks drop"),
+    }
+    BlockIndex::new(states, drops)
+}
+
+/// The block names for tab completion: the registry's distinct names, with no states and no drops. Made once, with the first tick.
+fn completion_blocks(game: &Game<'_>) {
+    COMPLETION_BLOCKS.get_or_init(|| {
+        let registry: &BlockRegistry = game.pack.assets.registry;
+        let mut seen = std::collections::HashSet::new();
+        let mut states = Vec::new();
+        for i in 0..registry.len() {
+            if let Some(desc) = registry.state(BlockStateId(i as u32)) {
+                if seen.insert(desc.name.clone()) {
+                    states.push(StateEntry { block: block_key(&desc.name), props: vec![] });
+                }
+            }
+        }
+        BlockIndex::new(states, HashMap::new())
+    });
 }
 
 /// Makes the table again when what it was made from changed: the settings, a tool or block in the hotbar, food, the potion. A table costs
@@ -435,7 +599,7 @@ fn refresh_tables(game: &Game<'_>, m: &mut Mod, hb: &Hotbar, food: i32) {
         m.settings_rev = rev;
     }
     let nether = game.dim.id() == "minecraft:the_nether";
-    let inv = GameInv { items: game.items(), facts: game.res.facts(), hb };
+    let inv = GameInv { items: game.items(), facts: game.res.facts(), hb, main: &game.inventory, main_infos: OnceCell::new() };
     let has_throwaway = m.settings.get_bool("allowPlace") && baritone_engine::inventory::has_generic_throwaway(&inv, &m.ts.acceptable_throwaway_items);
     let has_water_bucket = m.settings.get_bool("allowWaterBucketFall") && baritone_engine::inventory::find_hotbar_slot(&inv, "water_bucket").is_some() && !nether;
     let can_sprint = m.settings.get_bool("allowSprint") && food > 6;
@@ -489,6 +653,7 @@ fn ensure_started(game: &Game<'_>) -> Result<(), String> {
     }
     let base = build_base(game)?;
     let worker = Worker::try_spawn(monotonic_ms_clock()).map_err(|e| format!("could not start the search thread: {e}"))?;
+    let scanner = Scanner::spawn().map_err(|e| format!("could not start the scan thread: {e}"))?;
     let pathing = Pathing::new(worker);
     let settings = with_settings(game, |st, _| st.clone());
     let settings_rev = SETTINGS_REV.load(std::sync::atomic::Ordering::SeqCst);
@@ -498,7 +663,7 @@ fn ensure_started(game: &Game<'_>) -> Result<(), String> {
     let look_settings = settings.look_settings();
     // The real table is made from the hotbar just below; this one only holds the place.
     let tables = Arc::new(Tables::new(base.states.clone(), Config::upstream_defaults(), vec![0.0; base.states.len()]));
-    let mut m = Mod { pathing, tables, base, sig: None, settings, settings_rev, ts, exec, look_settings, look: LookState::new(), dim: game.dim.id(), target: None, was_active: false, auto_jump_saved: None, reported_cancel: None, unsprint: false };
+    let mut m = Mod { pathing, tables, base, scanner, sig: None, settings, settings_rev, ts, exec, look_settings, look: LookState::new(), dim: game.dim.id(), target: None, was_active: false, auto_jump_saved: None, reported_cancel: None, unsprint: false };
     let food = game.player.as_ref().map_or(20, |p| p.health.food.food);
     refresh_tables(game, &mut m, &read_hotbar(game), food);
     let mut s = state();
@@ -613,6 +778,12 @@ pub(super) fn on_tick(game: &mut Game<'_>) {
 static PATH_TICK_US: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 static SNAPSHOTS: Mutex<Vec<(u64, usize)>> = Mutex::new(Vec::new());
 
+/// Whether a container is open, for `GetToBlockProcess.rightClick` (`inventoryScreenIsOpen`). A crafting table opens as the inventory screen
+/// with a 3 x 3 grid, not as a `container` or a `station`.
+fn container_is_open(game: &Game<'_>) -> bool {
+    game.container.is_some() || game.station.is_some() || game.craft_table.is_some() || (game.screen == Screen::Inventory && game.craft_size == 3)
+}
+
 fn tick_path(game: &mut Game<'_>) {
     let mut guard = state();
     let Some(m) = guard.as_mut() else {
@@ -673,12 +844,26 @@ fn tick_path(game: &mut Game<'_>) {
     // the aim lands on the player's own mouse grid, as upstream (D17)
     m.exec.mouse_sensitivity = f64::from(game.settings.sensitivity);
     let [min_x, min_z, max_x, max_z] = game.border.bounds();
+    let border = Border { min_x, max_x, min_z, max_z };
     let registry: &BlockRegistry = game.pack.assets.registry;
+    // What `mine` and `goto <block>` read besides the world: the clock, the dropped items, whether a container is open. The answers of the scans
+    // that finished since the last tick go to their processes first.
+    if m.pathing.is_active() {
+        let item_entities = game
+            .dropped
+            .iter()
+            .map(|e| DroppedItem { item: e.stack.item.strip_prefix("minecraft:").unwrap_or(&e.stack.item).to_string(), pos: Pos::new(e.position.x.floor() as i32, e.position.y.floor() as i32, e.position.z.floor() as i32) })
+            .collect();
+        m.pathing.set_inputs(ProcessInputs { now_ms: wall_ms(), item_entities, container_open: container_is_open(game) });
+    }
+    while let Ok(result) = m.scanner.rx.try_recv() {
+        m.pathing.deliver_scan(result, &m.tables.cfg, &m.exec);
+    }
     let out = {
         let live = Live { world: &game.world, registry, falling: falling_positions(game) };
-        let inv = GameInv { items: game.items(), facts: game.res.facts(), hb: &hotbar };
+        let inv = GameInv { items: game.items(), facts: game.res.facts(), hb: &hotbar, main: &game.inventory, main_infos: OnceCell::new() };
         let facts = GameFacts { reach: game.block_reach, nether: game.dim.id() == "minecraft:the_nether", aim: baritone_engine::look::AimProcessor::new(m.exec.mouse_sensitivity) };
-        let env = TickEnv { tables: &m.tables, world: &live, border: Border { min_x, max_x, min_z, max_z }, player: &view, exec: &m.exec, inv: &inv, game: facts };
+        let env = TickEnv { tables: &m.tables, world: &live, border, player: &view, exec: &m.exec, inv: &inv, game: facts };
         let mut snapshot = || {
             let began = std::time::Instant::now();
             let snap = Snapshot::take(&game.world, registry.len());
@@ -692,11 +877,24 @@ fn tick_path(game: &mut Game<'_>) {
         m.pathing.tick(&env, &mut snapshot)
     };
 
-    let mut lines: Vec<String> = Vec::new();
+    let mut lines: Vec<String> = m.pathing.take_messages();
+    // The scans the processes want (one per process at a time): the chunks are copied here, the search of them runs on the scan thread.
+    let jobs = m.pathing.take_scan_jobs();
+    let mut scan_died = false;
+    if !jobs.is_empty() {
+        let began = std::time::Instant::now();
+        for job in jobs {
+            let snapshot = Snapshot::take(&game.world, registry.len());
+            scan_died |= m.scanner.tx.send(ScanRequest { job, snapshot, tables: Arc::clone(&m.tables), border }).is_err();
+        }
+        log::info!("{PREFIX} scan requested, chunks copied in {} us", began.elapsed().as_micros());
+    }
     let mut arrived = false;
+    // `AtGoal` also ends each walk of `mine` and `goto <block>`, which upstream does not announce: only a `/b goto` or `/b path` does.
+    let announces = m.target.is_some();
     for e in &out.events {
         match e {
-            PathEvent::AtGoal => arrived = true,
+            PathEvent::AtGoal => arrived |= announces,
             PathEvent::CalcFailed => lines.push("No path to the goal was found.".to_string()),
             _ => {}
         }
@@ -707,6 +905,15 @@ fn tick_path(game: &mut Game<'_>) {
         let (f, gs) = (view.feet(), m.tables.cfg.goal_settings());
         arrived |= m.target.as_ref().is_some_and(|g| g.is_in_goal(f.x, f.y, f.z, &gs));
         m.target = None;
+    }
+    if scan_died {
+        release(m, game.player.as_mut());
+        lines.push("The scan thread is gone. Stopped.".to_string());
+        drop(guard);
+        for line in lines {
+            say(game, &line);
+        }
+        return;
     }
     if m.pathing.take_search_failure() {
         // D23: a search that panics would start again on the next tick, forever, with the player standing still.
@@ -744,11 +951,13 @@ fn tick_path(game: &mut Game<'_>) {
         }
     }
     // The slot: the game tells the server on its next tick (probed, with any screen). Nothing is put back when the path ends, as upstream.
-    if let (true, Some(slot)) = (intent.active, intent.select_slot) {
+    if let Some(slot) = intent.select_slot {
         game.selected = slot.min(HOTBAR - 1);
     }
-    // The buttons act in the next input step (`on_input_head`). Left wins over right, as the intent says.
-    set_buttons(intent.active && intent.attack, intent.active && intent.use_item && !intent.attack);
+    // The buttons act in the next input step (`on_input_head`). Left wins over right, as the intent says. The right button is a press for a placement or a
+    // bucket (`use_item`) and for a closed door or fence gate (`use_block`: the aim is the movement's, the game's own use acts on what the crosshair is on).
+    // Also while the keys are not forced: `mine` pauses the path and clicks (a block in the player's own column), which is `active == false`.
+    set_buttons(intent.attack, (intent.use_item || intent.use_block.is_some()) && !intent.attack);
     if let Some(p) = game.player.as_mut() {
         if intent.active {
             if p.sprinting != intent.sprint {
@@ -780,6 +989,12 @@ fn tick_path(game: &mut Game<'_>) {
     for line in lines {
         say(game, &line);
     }
+}
+
+/// A millisecond clock for the processes (`System.currentTimeMillis`): any clock that only counts up.
+fn wall_ms() -> i64 {
+    static START: OnceLock<std::time::Instant> = OnceLock::new();
+    START.get_or_init(std::time::Instant::now).elapsed().as_millis() as i64
 }
 
 fn publish_draw(m: &Mod, base_y: f64) {
@@ -978,6 +1193,7 @@ fn help_lines() -> Vec<String> {
     }
     lines.push("/b help - This list".to_string());
     lines.push("/b trace - One log line per tick while a path runs, for bug reports".to_string());
+    lines.push("/b goto <block>, /b mine [quantity] <block> [<block>...]: blocks by name (minecraft: is optional), also with properties, as stone or oak_stairs[facing=east]".to_string());
     lines.push("/b goto <x> <y> <z> | <x> <z> | <y>, /b goal [x y z | clear], /b set <name> [value] | list | modified | reset | toggle | save | load".to_string());
     lines.push("A ~ in front of a number is relative to you. Tab completes the commands, the settings and their values.".to_string());
     lines
@@ -999,6 +1215,7 @@ pub(super) fn on_command(game: &mut Game<'_>, command: &str, ran: &mut bool) {
     let rest = args.get(1..).unwrap_or(&[]);
     match name.as_deref() {
         Some("goto") => cmd_goto(game, rest),
+        Some("mine") => cmd_mine(game, rest),
         Some("goal") => cmd_goal(game, rest),
         Some("path") => cmd_path(game, rest),
         Some("eta") => cmd_eta(game, rest),
@@ -1053,7 +1270,7 @@ fn cmd_goto(game: &mut Game<'_>, args: &[&str]) {
             return;
         }
         Err(GotoError::BlockName) => {
-            say(game, "Going to a kind of block is not built yet. Give coordinates.");
+            cmd_goto_block(game, args, feet);
             return;
         }
     };
@@ -1065,6 +1282,59 @@ fn cmd_goto(game: &mut Game<'_>, args: &[&str]) {
         m.pathing.goto(goal);
     }
     say(game, &format!("Going to: {text}"));
+}
+
+/// `/b goto <block>`: walk to the nearest block of that kind (`GetToBlockProcess`).
+fn cmd_goto_block(game: &mut Game<'_>, args: &[&str], feet: Pos) {
+    let bom = {
+        let guard = state();
+        let Some(m) = guard.as_ref() else {
+            return;
+        };
+        match goto_block(args, &m.base.index) {
+            Ok(bom) => bom,
+            Err(e) => {
+                drop(guard);
+                say(game, &e);
+                return;
+            }
+        }
+    };
+    if let Some(m) = state().as_mut() {
+        m.dim = game.dim.id();
+        m.reported_cancel = None;
+        m.target = None;
+        m.pathing.get_to_block(bom, feet);
+    }
+}
+
+/// `/b mine [quantity] <block> [<block>...]`: `MineProcess`. The quantity counts the drops in the inventory.
+fn cmd_mine(game: &mut Game<'_>, args: &[&str]) {
+    if start_and_feet(game).is_none() {
+        return;
+    }
+    let request = {
+        let guard = state();
+        let Some(m) = guard.as_ref() else {
+            return;
+        };
+        match mine_command(args, &m.base.index) {
+            Ok(r) => r,
+            Err(e) => {
+                drop(guard);
+                say(game, &e);
+                return;
+            }
+        }
+    };
+    if let Some(m) = state().as_mut() {
+        m.dim = game.dim.id();
+        m.reported_cancel = None;
+        m.target = None;
+        let cfg = m.tables.cfg.clone();
+        m.pathing.mine(request.quantity, request.filter.clone(), &cfg);
+    }
+    say(game, &request.message());
 }
 
 /// `/b goal`: sets the goal without walking. No arguments is the player's feet; `clear` erases it.
@@ -1243,6 +1513,16 @@ fn suggest_provider(text: &str, target: Option<[i32; 3]>) -> Option<(usize, Vec<
             }
         }
     }
+    // Block names after `mine` (anywhere, after an optional number) and after `goto` (the one argument): not for a number or a relative coordinate.
+    if let (Some(first), Some(index)) = (before.first(), COMPLETION_BLOCKS.get()) {
+        let first = first.to_lowercase();
+        let wants = first == "mine" || (first == "goto" && before.len() == 1);
+        if wants && !current.starts_with(|c: char| c.is_ascii_digit() || c == '~' || c == '-') {
+            for name in complete_blocks(current, index) {
+                list.push((name, None));
+            }
+        }
+    }
     let descriptions = baritone_engine::command::COMMANDS;
     for word in baritone_engine::command::complete(&before, current, st) {
         let tooltip = if before.is_empty() { descriptions.iter().find(|(names, _)| names.contains(&word.as_str())).map(|(_, d)| d.to_string()) } else { None };
@@ -1264,6 +1544,7 @@ static REGISTERED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool
 fn register_completion(game: &Game<'_>) {
     ENABLED.store(game.native_on(ID), std::sync::atomic::Ordering::Relaxed);
     if !REGISTERED.swap(true, std::sync::atomic::Ordering::SeqCst) {
+        completion_blocks(game);
         horizon_client::command::baritone_rs_suggest::register(suggest_provider);
     }
 }
@@ -1602,6 +1883,8 @@ struct L3 {
     /// The hotbar and the selected slot when the scenario began.
     hotbar_start: String,
     slot_start: usize,
+    /// Ticks in which a container or a station (a crafting table) was open, for the scenarios that right click a block.
+    container_ticks: u64,
 }
 
 static L3_STATE: Mutex<Option<L3>> = Mutex::new(None);
@@ -1854,6 +2137,9 @@ fn l3_run_tick(game: &mut Game<'_>, sc: &serde_json::Value, s: &mut L3) {
     if busy {
         s.ever_busy = true;
     }
+    if container_is_open(game) {
+        s.container_ticks += 1;
+    }
     let forced = input().is_some();
     let forward = input().map_or(0.0, |h| h.forward);
     let dead = game.screen == Screen::Dead || game.player.as_ref().is_some_and(|p| p.health.dead_or_dying());
@@ -1939,6 +2225,7 @@ fn l3_finish(game: &mut Game<'_>, sc: &serde_json::Value, s: &mut L3) {
         "slot_end": slot_end,
         "hotbar_start": s.hotbar_start,
         "hotbar_end": hotbar_end,
+        "container_open_ticks": s.container_ticks,
         "watch_cells": s.baseline.len(),
         "server_changed_blocks": s.changed_by_server,
         "min_health": if s.min_health == f32::MAX { serde_json::Value::Null } else { serde_json::json!(s.min_health) },
@@ -1964,6 +2251,12 @@ fn l3_finish(game: &mut Game<'_>, sc: &serde_json::Value, s: &mut L3) {
     if game.screen == Screen::Chat {
         game.close_chat(super::chat::ChatExit::Intentional);
     }
+    if game.screen == Screen::Inventory {
+        // A crafting table that the scenario right clicked open: close it as Escape does, so the next scenario can walk.
+        game.close_container();
+        game.screen = Screen::Playing;
+        game.capture(true);
+    }
     if state().as_ref().is_some_and(|m| m.busy()) {
         cmd_stop(game);
     }
@@ -1972,5 +2265,6 @@ fn l3_finish(game: &mut Game<'_>, sc: &serde_json::Value, s: &mut L3) {
     s.prep_tries = 0;
     s.setup_error = None;
     s.csv.clear();
+    s.container_ticks = 0;
     l3_next(s, L3Phase::Prep);
 }

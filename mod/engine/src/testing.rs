@@ -10,6 +10,8 @@ use crate::world::WorldView;
 
 pub const AIR: u16 = 0;
 pub const STONE: u16 = 1;
+/// A block that is stone in every rule but its name, `diamond_ore`: for the tests of the mine and get-to-block processes.
+pub const ORE: u16 = 2;
 
 /// A settings snapshot with the settings the tests rely on written out: sprinting on, nothing is broken or placed, no parkour.
 pub fn test_config() -> Config {
@@ -73,6 +75,15 @@ impl Fixture {
         Fixture { states, pre, cfg, tool: vec![1.0, 1.0] }
     }
 
+    /// The fixture with a third state, `ORE` (`diamond_ore`), which is stone in every rule but its name.
+    pub fn with_ore(cfg: Config) -> Fixture {
+        let mut f = Fixture::with_config(cfg);
+        f.states.push(State { name: "diamond_ore".into(), shape_full: true, top_sturdy: true, fluid_empty: true, ..State::default() });
+        f.pre = Precomputed::new(&f.states, &f.cfg);
+        f.tool.push(1.0);
+        f
+    }
+
     pub fn ctx<'a, W: WorldView>(&'a self, world: &'a W) -> Ctx<'a, W> {
         let border = Border { min_x: -3.0e7, max_x: 3.0e7, min_z: -3.0e7, max_z: 3.0e7 };
         Ctx::new(world, &self.states, &self.pre, &self.cfg, border, &self.tool)
@@ -84,6 +95,8 @@ impl Fixture {
 pub struct TestWorld {
     pub w: i32,
     pub d: i32,
+    /// The height, 16 unless made with [`TestWorld::tall`].
+    pub h: i32,
     cells: Vec<u16>,
     pub loaded_below_x: i32,
 }
@@ -91,7 +104,12 @@ pub struct TestWorld {
 impl TestWorld {
     /// A stone floor at y = 0, and air above it.
     pub fn flat(w: i32, d: i32) -> TestWorld {
-        let mut t = TestWorld { w, d, cells: vec![AIR; (w * d * 16) as usize], loaded_below_x: i32::MAX };
+        TestWorld::tall(w, d, 16)
+    }
+
+    /// Like `flat`, `h` blocks high (a multiple of 16 for the chunk scan).
+    pub fn tall(w: i32, d: i32, h: i32) -> TestWorld {
+        let mut t = TestWorld { w, d, h, cells: vec![AIR; (w * d * h) as usize], loaded_below_x: i32::MAX };
         for x in 0..w {
             for z in 0..d {
                 t.set(x, 0, z, STONE);
@@ -116,11 +134,18 @@ impl WorldView for TestWorld {
     fn contains_loaded_chunk(&self, x: i32, _z: i32) -> bool {
         x < self.loaded_below_x
     }
+    fn chunk_loaded(&self, chunk_x: i32, chunk_z: i32) -> bool {
+        // the columns the world has, in whole chunks, and the ones `loaded_below_x` keeps
+        chunk_x >= 0 && chunk_z >= 0 && chunk_x * 16 < self.w && chunk_z * 16 < self.d && chunk_x * 16 < self.loaded_below_x
+    }
+    fn section_has_only_air(&self, chunk_x: i32, chunk_z: i32, section: i32) -> bool {
+        (0..16).all(|yy| (0..16).all(|z| (0..16).all(|x| self.state_id(chunk_x * 16 + x, section * 16 + yy, chunk_z * 16 + z) == AIR as usize)))
+    }
     fn min_y(&self) -> i32 {
         0
     }
     fn height(&self) -> i32 {
-        16
+        self.h
     }
 }
 

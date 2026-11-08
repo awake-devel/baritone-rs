@@ -17,6 +17,7 @@
 // along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
 #![forbid(unsafe_code)]
 
+pub mod blockmeta;
 pub mod blocks;
 pub mod buttons;
 pub mod command;
@@ -32,6 +33,7 @@ pub mod plan;
 pub mod pos;
 pub mod process;
 pub mod raytrace;
+pub mod scan;
 pub mod search;
 pub mod set;
 pub mod settings;
