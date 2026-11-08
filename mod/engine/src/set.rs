@@ -348,6 +348,11 @@ fn table() -> Vec<Setting> {
         s("blacklistClosestOnFailure", Bool(true)),
         s("rightClickContainerOnArrival", Bool(true)),
         s("enterPortal", Bool(true)),
+        // the follow process: `FollowSettings`
+        s("followOffsetDistance", Double(0.0)),
+        s("followOffsetDirection", Float(0.0)),
+        s("followRadius", Int(3)),
+        s("followTargetMaxDistance", Int(0)),
         // the hotbar: `ToolSettings`
         s("autoTool", Bool(true)),
         s("assumeExternalAutoTool", Bool(false)),
@@ -466,6 +471,13 @@ impl Settings {
     pub fn get_double(&self, name: &str) -> f64 {
         match self.get(name) {
             Value::Double(d) => *d,
+            v => panic!("{name} is a {}", v.type_name()),
+        }
+    }
+
+    pub fn get_float(&self, name: &str) -> f32 {
+        match self.get(name) {
+            Value::Float(f) => *f,
             v => panic!("{name} is a {}", v.type_name()),
         }
     }
@@ -656,6 +668,12 @@ impl Settings {
         e.remain_with_existing_look_direction = self.get_bool("remainWithExistingLookDirection");
         e.tool = self.tool_settings();
         e.mine = self.mine_settings();
+        e.follow = self.follow_settings();
+    }
+
+    /// The settings of the follow process.
+    pub fn follow_settings(&self) -> crate::settings::FollowSettings {
+        crate::settings::FollowSettings { follow_radius: self.get_int("followRadius"), follow_offset_distance: self.get_double("followOffsetDistance"), follow_offset_direction: self.get_float("followOffsetDirection"), follow_target_max_distance: self.get_int("followTargetMaxDistance") }
     }
 
     /// The settings of the mine and get-to-block processes.
@@ -915,6 +933,10 @@ mod tests {
             ("pathCutoffFactor", "0.9"),
             ("avoidBreakingMultiplier", "0.1"),
             ("blockPlacementPenalty", "20.0"),
+            ("followRadius", "3"),
+            ("followOffsetDistance", "0.0"),
+            ("followOffsetDirection", "0.0"),
+            ("followTargetMaxDistance", "0"),
         ] {
             assert_eq!(value_to_string(s.get(name)), v, "{name}");
         }

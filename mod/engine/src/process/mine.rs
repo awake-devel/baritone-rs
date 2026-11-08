@@ -932,7 +932,7 @@ mod tests {
         w.set(10, 1, 3, ORE);
         let p = standing(2.5, 1.0, 3.5);
         let mut set = ExecSettings::default();
-        let mut inputs = ProcessInputs { now_ms: 1000, item_entities: vec![super::super::ItemEntity { item: "diamond".into(), pos: Pos::new(25, 1, 12) }, super::super::ItemEntity { item: "stick".into(), pos: Pos::new(6, 1, 6) }], container_open: false };
+        let mut inputs = ProcessInputs { now_ms: 1000, item_entities: vec![super::super::ItemEntity { item: "diamond".into(), pos: Pos::new(25, 1, 12) }, super::super::ItemEntity { item: "stick".into(), pos: Pos::new(6, 1, 6) }], container_open: false, ..Default::default() };
         let mut m = started(&fx, &w, &p, &set, 0, lookup(&["diamond_ore"]), &inputs);
         // the diamond lies where there is no ore: it is a place of its own; the stick is nothing
         assert_eq!(m.known_ore_locations(), &[Pos::new(10, 1, 3), Pos::new(25, 1, 12)]);

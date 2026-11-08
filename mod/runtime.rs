@@ -17,7 +17,7 @@ use super::{Game, Screen};
 use baritone_engine::blocks::{Direction, State};
 use baritone_engine::buttons::Buttons;
 use baritone_engine::blockmeta::{BlockIndex, StateEntry};
-use baritone_engine::command::{complete_blocks, eta_command, goal_command, goal_to_string, goto_block, goto_goal, mine_command, path_command, GoalAction, GotoError, PathAction};
+use baritone_engine::command::{complete_blocks, complete_follow, eta_command, follow_command, goal_command, goal_to_string, goto_block, goto_goal, mine_command, path_command, GoalAction, GotoError, PathAction, PlayerRef};
 use baritone_engine::config::Config;
 use baritone_engine::exec::movements::GameFacts;
 use baritone_engine::exec::state::{CancelReason, PlayerView};
@@ -27,7 +27,7 @@ use baritone_engine::look::Vec3;
 use baritone_engine::movement::helper::Border;
 use baritone_engine::pos::Pos;
 use baritone_engine::process::pathing::{PathEvent, Pathing, Tables, TickEnv};
-use baritone_engine::process::{ItemEntity as DroppedItem, ProcessInputs, ScanJob, ScanResult};
+use baritone_engine::process::{EntityInfo, ItemEntity as DroppedItem, ProcessInputs, ScanJob, ScanResult};
 use baritone_engine::raytrace::BlockHit;
 use baritone_engine::set::{Registry, SetEffect, Settings};
 use baritone_engine::freelook::{restored_view, LookSettings, LookState, Plan};
@@ -48,7 +48,7 @@ use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 pub const ID: &str = "baritone_rs";
 pub const NAME: &str = "baritone-rs";
 pub const VERSION: &str = "0.1.0";
-pub const DESCRIPTION: &str = "Pathfinding. /b goto <x> <y> <z> or <block>, /b mine <block>, /b goal, /b path, /b eta, /b set, /b stop. Walks, sprints, breaks and places blocks. Parkour and swimming are off.";
+pub const DESCRIPTION: &str = "Pathfinding. /b goto <x> <y> <z> or <block>, /b mine <block>, /b follow <entities>, /b goal, /b path, /b eta, /b set, /b stop. Walks, sprints, breaks and places blocks. Parkour and swimming are off.";
 
 const PREFIX: &str = "[baritone-rs]";
 
@@ -199,6 +199,14 @@ impl Scanner {
 
 /// The block names for tab completion, from the registry, once. Built with the first tick, long before anything is typed.
 static COMPLETION_BLOCKS: OnceLock<BlockIndex> = OnceLock::new();
+
+/// What `follow` completes: the entity types (once) and the players of the world (every few ticks). The completion has no game at hand.
+#[derive(Default)]
+struct CompletionWorld {
+    types: Vec<String>,
+    players: Vec<PlayerRef>,
+}
+static COMPLETION_WORLD: Mutex<CompletionWorld> = Mutex::new(CompletionWorld { types: Vec::new(), players: Vec::new() });
 
 struct Mod {
     pathing: Pathing<Worker<Snapshot>, Snapshot>,
@@ -766,6 +774,7 @@ pub(super) fn on_tick(game: &mut Game<'_>) {
     // The player's tick is over (`tick_remote` runs this right after it): the player's view comes back before anything reads it.
     end_silent_look(game);
     register_completion(game);
+    refresh_completion_players(game);
     let began = std::time::Instant::now();
     tick_path(game);
     PATH_TICK_US.store(began.elapsed().as_micros() as u64, std::sync::atomic::Ordering::Relaxed);
@@ -812,7 +821,7 @@ fn tick_path(game: &mut Game<'_>) {
     if let Some(why) = why {
         let was_busy = m.busy();
         // Nothing to hand back when nothing was going on; releasing every tick would only queue events that nobody drains.
-        if was_busy || input().is_some() || m.target.is_some() {
+        if was_busy || input().is_some() || m.target.is_some() || m.pathing.wants_entities() {
             release(m, game.player.as_mut());
         }
         m.dim = dim;
@@ -848,13 +857,15 @@ fn tick_path(game: &mut Game<'_>) {
     let registry: &BlockRegistry = game.pack.assets.registry;
     // What `mine` and `goto <block>` read besides the world: the clock, the dropped items, whether a container is open. The answers of the scans
     // that finished since the last tick go to their processes first.
-    if m.pathing.is_active() {
+    if m.pathing.is_active() || m.pathing.wants_entities() {
         let item_entities = game
             .dropped
             .iter()
             .map(|e| DroppedItem { item: e.stack.item.strip_prefix("minecraft:").unwrap_or(&e.stack.item).to_string(), pos: Pos::new(e.position.x.floor() as i32, e.position.y.floor() as i32, e.position.z.floor() as i32) })
             .collect();
-        m.pathing.set_inputs(ProcessInputs { now_ms: wall_ms(), item_entities, container_open: container_is_open(game) });
+        // The follow process decides whether it is active by looking at them, so they are listed while it holds a filter, and only then.
+        let entities = if m.pathing.wants_entities() { follow_entities(game) } else { Vec::new() };
+        m.pathing.set_inputs(ProcessInputs { now_ms: wall_ms(), item_entities, container_open: container_is_open(game), entities });
     }
     while let Ok(result) = m.scanner.rx.try_recv() {
         m.pathing.deliver_scan(result, &m.tables.cfg, &m.exec);
@@ -1194,6 +1205,7 @@ fn help_lines() -> Vec<String> {
     lines.push("/b help - This list".to_string());
     lines.push("/b trace - One log line per tick while a path runs, for bug reports".to_string());
     lines.push("/b goto <block>, /b mine [quantity] <block> [<block>...]: blocks by name (minecraft: is optional), also with properties, as stone or oak_stairs[facing=east]".to_string());
+    lines.push("/b follow entities | players | entity <type...> | player <name...>: follow those (entity types by id, as pig or minecraft:pig). /b stop ends it.".to_string());
     lines.push("/b goto <x> <y> <z> | <x> <z> | <y>, /b goal [x y z | clear], /b set <name> [value] | list | modified | reset | toggle | save | load".to_string());
     lines.push("A ~ in front of a number is relative to you. Tab completes the commands, the settings and their values.".to_string());
     lines
@@ -1216,6 +1228,7 @@ pub(super) fn on_command(game: &mut Game<'_>, command: &str, ran: &mut bool) {
     match name.as_deref() {
         Some("goto") => cmd_goto(game, rest),
         Some("mine") => cmd_mine(game, rest),
+        Some("follow") => cmd_follow(game, rest),
         Some("goal") => cmd_goal(game, rest),
         Some("path") => cmd_path(game, rest),
         Some("eta") => cmd_eta(game, rest),
@@ -1335,6 +1348,108 @@ fn cmd_mine(game: &mut Game<'_>, args: &[&str]) {
         m.pathing.mine(request.quantity, request.filter.clone(), &cfg);
     }
     say(game, &request.message());
+}
+
+/// `/b follow entities | players | entity <type...> | player <name...>`: `FollowProcess`.
+fn cmd_follow(game: &mut Game<'_>, args: &[&str]) {
+    if start_and_feet(game).is_none() {
+        return;
+    }
+    let outcome = follow_command(args, &world_players(game, true), &entity_type_ids(game));
+    // upstream sets the filter first, then prints, and throws last: `follow player <nobody>` sets an empty filter and then complains
+    if let Some(filter) = outcome.filter {
+        if let Some(m) = state().as_mut() {
+            m.dim = game.dim.id();
+            m.reported_cancel = None;
+            m.target = None;
+            m.pathing.follow(filter);
+        }
+    }
+    for line in &outcome.lines {
+        say(game, line);
+    }
+    if let Some(error) = &outcome.error {
+        say(game, error);
+    }
+}
+
+/// The entities `FollowProcess` can see: the living ones the game simulates and the dropped items, never the player itself. Bounded: past
+/// `MAX_FOLLOW_ENTITIES` the rest are not listed (a farm of thousands would otherwise be copied every tick).
+const MAX_FOLLOW_ENTITIES: usize = 4096;
+
+fn follow_entities(game: &Game<'_>) -> Vec<EntityInfo> {
+    let mut out: Vec<EntityInfo> = Vec::new();
+    for m in game.mobs.iter() {
+        if out.len() >= MAX_FOLLOW_ENTITIES {
+            return out;
+        }
+        if m.removed {
+            continue;
+        }
+        let kind: &str = &m.kind.id;
+        let player_name = if kind == "minecraft:player" {
+            // another player the server sent; the player itself has no uuid here, and is never followed
+            if game.remote_player_uuid(m.id).is_none() {
+                continue;
+            }
+            Some(game.remote_player_name(m.id).unwrap_or("").to_string())
+        } else {
+            None
+        };
+        out.push(EntityInfo { id: m.id, kind: kind.to_string(), player_name, item: None, position: [m.position.x, m.position.y, m.position.z], living: true, alive: m.alive() });
+    }
+    for e in game.dropped.iter() {
+        if out.len() >= MAX_FOLLOW_ENTITIES {
+            break;
+        }
+        out.push(EntityInfo { id: e.id, kind: "minecraft:item".to_string(), player_name: None, item: Some(e.stack.item.to_string()), position: [e.position.x, e.position.y, e.position.z], living: false, alive: true });
+    }
+    out
+}
+
+/// The name the player joined with, read once (the options read a file).
+fn own_name(game: &Game<'_>) -> String {
+    static NAME: OnceLock<String> = OnceLock::new();
+    NAME.get_or_init(|| game.options.player_name()).clone()
+}
+
+/// `NearbyPlayer`'s players (`world().players()`): the player itself and the other players the server sent. `positions` looks the others up in the
+/// mobs; the completion does not need them.
+fn world_players(game: &Game<'_>, positions: bool) -> Vec<PlayerRef> {
+    let mut out = Vec::new();
+    if let Some(p) = game.player.as_ref() {
+        out.push(PlayerRef { id: u32::MAX, name: own_name(game), local: true, position: [p.position.x, p.position.y, p.position.z] });
+    }
+    for (id, name) in game.remote_player_names() {
+        let position = if positions { game.mobs.iter().find(|m| m.id == id).map_or([0.0; 3], |m| [m.position.x, m.position.y, m.position.z]) } else { [0.0; 3] };
+        out.push(PlayerRef { id, name, local: false, position });
+    }
+    out
+}
+
+/// The registry ids of the entity types the game knows (`BuiltInRegistries.ENTITY_TYPE`): its mob types, the player and the dropped item.
+fn entity_type_ids(game: &Game<'_>) -> Vec<String> {
+    let mut ids: Vec<String> = game.res.mob_types().keys().cloned().collect();
+    for extra in ["minecraft:player", "minecraft:item"] {
+        if !ids.iter().any(|i| i == extra) {
+            ids.push(extra.to_string());
+        }
+    }
+    ids.sort();
+    ids
+}
+
+/// Keeps what `follow` completes up to date: the types once, the players about twice a second.
+fn refresh_completion_players(game: &Game<'_>) {
+    static TICKS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+    let n = TICKS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let mut w = COMPLETION_WORLD.lock().unwrap_or_else(|e| e.into_inner());
+    if w.types.is_empty() {
+        w.types = entity_type_ids(game);
+    }
+    if n % 10 == 0 {
+        w.players = world_players(game, false);
+    }
 }
 
 /// `/b goal`: sets the goal without walking. No arguments is the player's feet; `clear` erases it.
@@ -1521,6 +1636,13 @@ fn suggest_provider(text: &str, target: Option<[i32; 3]>) -> Option<(usize, Vec<
             for name in complete_blocks(current, index) {
                 list.push((name, None));
             }
+        }
+    }
+    // The types and the players after `follow`.
+    if before.first().is_some_and(|f| f.eq_ignore_ascii_case("follow")) {
+        let w = COMPLETION_WORLD.lock().unwrap_or_else(|e| e.into_inner());
+        for name in complete_follow(&before[1..], current, &w.players, &w.types) {
+            list.push((name, None));
         }
     }
     let descriptions = baritone_engine::command::COMMANDS;

@@ -550,6 +550,70 @@ property completion inside `[...]`.
 
 **The gate.** This section reports what ran. It does not claim the gate passed: the owner's session runs it.
 
+### R2: `follow`
+
+**What works.** `/b follow entities | players | entity <type...> | player <name...>` (also `FollowProcess.pickup` in the engine, which no command uses, as upstream). The engine has `FollowProcess` (a `GoalNear` around each entity that passes the filter, in a
+`GoalComposite`, `RevalidateGoalAndPath` every tick, `followRadius`, `followOffsetDistance`, `followOffsetDirection`, `followTargetMaxDistance`), `GoalXZ.fromDirection` through the game's sine table, `FollowCommand` (its texts, its errors with the argument position, its
+tab completion) and the process manager with a fourth process (D40). `ProcessInputs::entities` carries the entities as plain data; the glue lists them each tick while the follow process holds a filter, bounded at 4096. The search and the movement costs were not touched.
+
+**What ran, and where.**
+
+- Unit and simulator tests (`cargo test --workspace`): the filters (groups, types, entity ids, dropped items, dead and far entities, `distinct`), the goal for one and for several entities, the offset by direction (yaw 0 is +z, 90 is -x), the
+  command (texts, errors, completion), and the simulator (`sim::follow_tests`): a moving entity is followed and the goal moves with it (three jumps of 25 to 50 blocks, each ending within `followRadius`), an entity that walks, the offset, nothing to follow and then
+  something, `stop`, `goto` after `follow` and `follow` after `goto` handing control over as upstream's manager does, a dead and a far entity.
+- In the game (single player, instance `baritone-test`, two new worlds `l3-follow-1` (first build) and `l3-follow-2` (the final build, which repeated the villager, `follow player` and dimension runs), built by hand through the console: a stone platform at y 99, peaceful), through the control socket only: see "Numbers" below. The wandering pig, the group, stop, goto, own-name and completion runs were on the first build; the change after it (the player's own id printed as -1, and a dimension change clearing a filter that has no entity) was run only as listed for the second. Players cannot be tested in single player: `follow player <name>`
+  finds only the player itself (`NearbyPlayer` lists it too) and the process, rightly, never follows it. The player table of a server, `follow players` with someone else near, and `Entity.toString` of another player were not run.
+- Not run in the game: dropped items as targets, `followOffsetDistance` and `followOffsetDirection` (unit and simulator tests only), `followTargetMaxDistance` other than 45 and 0, a server. The L3 suite and its follow scenarios are below.
+
+**Numbers** (game ticks of 50 ms, on a flat platform; `horizon-ctl` polls the state about every 0.15 s, so times are good to about 0.3 s).
+
+| What | Result |
+|---|---|
+| `follow entity villager` (NoAI villager 10 blocks away) | the player stopped 3 blocks (block distance) from it |
+| the villager teleported five times with `/tp` (first build), 28 to 73 blocks from the player | within `followRadius` 3 after 4.9, 7.6, 9.8, 9.9 and 13.3 s (5.5 to 5.9 blocks a second), and 3.00 blocks away, still, for the next 3 s each time. The final build, three jumps of 45, 54 and 73 blocks: 7.5, 9.7 and 13.3 s, 3.00 blocks for the next 3 s |
+| `follow entity pig`, a pig that wanders (AI on), 45 s, `followTargetMaxDistance 45` | after the first 12 s: 1.00 to 3.00 blocks from it (mean 2.87, 65 samples) |
+| `follow entities` with about 100 mobs loaded and `followTargetMaxDistance 0` | walked 56 blocks to the pig on the platform, ended 3 blocks away; frame rate 368 before, 271 to 386 during, 281 after (a different number of chunks was drawn) |
+| `/b stop` while walking | horizontal velocity 0.0000 after 0.4 s (0.33 blocks of slide), no move in the next 2 s, and none when the target is teleported away |
+| `/b goto` while following | the goal process took control, arrived at the block, and the player did not go on to the pig 60 blocks away |
+| `follow player <own name>`, `follow players` (nobody else) | the player did not move; the line printed is `LocalPlayer['<name>'/-1, l='ClientLevel', x=.., y=.., z=..]` (final build) |
+| a dimension change with a filter and no entity (`follow entity villager`, none exists; Nether and back; a villager 30 blocks away is summoned) | the player did not move: the filter was cleared (final build; the build before it was not run in this case) |
+| tab completion in the chat box (screenshots) | `follow ` offers `entities entity player players`; `follow entity zomb` offers `minecraft:zombie`, `zombie_horse`, `zombie_nautilus`, `zombie_villager`, `zombified_piglin`; `follow player ` offers the player's own name |
+
+**Limits.**
+
+- Only mobs the game keeps in its mob list, other players (through the multiplayer player table) and dropped items are listed. Projectiles, boats, minecarts, item frames, armor stands and experience orbs are not (D40.1).
+- The entity types are Horizon's mob types plus the player and the item (D40.7).
+- `Entity.toString` is approximated (D40.6). The player's own id is not known to the mod and prints as -1.
+- With `followTargetMaxDistance` 0 every loaded entity that passes the filter is a goal: the composite grows with it, as upstream's.
+
+**Upstream findings** (reported, not changed).
+
+- `FollowCommand.tabComplete` completes entity types with `Object::toString` of `EntityType` (vanilla: the translation key) where `EntityClassById` wants an id (D40.8). Read, not run against vanilla.
+- `follow player <nobody>` sets an empty filter and then throws; `isActive` is false until `stop` clears it. Same here (D40.10).
+- A follow command given while a `goto` runs but with no entity to follow leaves the filter in place; an entity that appears later takes control from the `goto` (the manager asks every active process, newest first). Same here.
+
+**L3 scenarios and the whole suite.** Four scenarios, each with the chat closed and open (8 in all), in `tools/l3/scenarios.py`, judged by the `follow` kind of `tools/l3/run.py`: `f01_follow_route` (a NoAI villager teleported in 3 hops of 30 to 36 blocks, the last
+past the player), `f02_follow_only_pig` and `f02_follow_only_villager` (two kinds of NoAI mob; only one kind is followed, the other stands 10 blocks away, then is moved next to the player while the followed one goes 32 blocks away), and `f04_stop_follow` (`b stop`
+while running toward a villager 88 blocks away). A hop passes when the player is within `followRadius` 3 plus 1.5 blocks within 180 ticks (200 for f02) and stays there for the last 20 ticks, never farther than the longest jump plus 4.5, at floor height, and (f02) at
+least 25 blocks from the other kind at the end of each hop. Follow scenarios run `b stop` when they end. Final build (after the review fixes), a new world `l3-follow-full3`, one run, **66 of 66 pass** (report `reports/l3-66f3981.json`, `run` finished). The L3 suite earlier had a
+first run with 58 of 66 (a persisted `allowPlace false` in the test instance's settings, left by a hand test, and snow on the floor of f02; both fixed in the setup, see the scenarios) and one at 66 of 66 on the build before the review fixes.
+
+| Scenario (both chat variants give the same) | Catch-up ticks per hop | Distance at the end of each hop | Max distance from target |
+|---|---|---|---|
+| f01 (chat closed; open: 52, 130, 136, 85) | 52, 131, 134, 86 | 3.13, 3.10, 3.08, 3.09 | 38.9 (longest jump 35.9) |
+| f02 pig and f02 villager | 112, 107 | 3.01, 3.11 | 35.0 (longest jump 35.2) |
+
+In f02 the player ended 42.0 and then 31.1 blocks from the kind it does not follow. Top speed 0.281 blocks a tick. `f04_stop_follow` passed the `stop` check (keys released, no path afterwards, still within 30 ticks, no movement afterwards, no blocks changed) in both chat variants.
+Whole suite timing: median mod tick 34 microseconds, max 13.4 ms; median search 2.9 ms, max 1.33 s (the 1500-block walk).
+
+**Reviews and fixes.** One review read the branch against `FollowProcess`, `FollowCommand`, `PathingControlManager`, `NearbyPlayer`, `EntityClassById`, `GoalXZ` and `ArgConsumer`, and fuzzed `follow_command`, `complete_follow` and the process (200,000 odd command texts, NaN, infinite and huge positions and settings) in a scratch copy: no panic and no difference from upstream. It found:
+- **Fixed (port bug of cost, no result changes).** `scan_world` removed duplicates by searching its answer for every entity: 7.9 ms per call at 4096 entities (13 microseconds at 256, 294 microseconds at 1024), and the scan runs several times a tick. It uses a hash set now, as upstream's `distinct()`. New test `a_scan_of_many_entities_is_linear` (40,000 entities, under 500 ms): it fails without the fix (3.4 s measured, debug build) and passes with it. D40.4.
+- **Recorded, not changed.** The 4096 cap drops the rest silently and lists items last (D40.11); the `Mth` table may differ by one unit in the last place (D40.5, not measured); a `GoalComposite` of N goals costs N per search node, upstream's shape (U21). None changes a path chosen by upstream's rules.
+- Informational: `inputs.entities` keeps its last list after the follow ends until the next tick's inputs (bounded).
+
+**Left out.** `explore`, the cache (`cache` / `explorefilter` and the world cache), and `FollowProcess.pickup` has no command, as upstream. Other players were not tested in the game (single player has none), nor were `followOffsetDistance` / `followOffsetDirection`, dropped items as targets, or a server. Mob targets in L3 are NoAI mobs the scenario teleports; the judge takes their positions from the scenario's schedule, not from the game.
+This section does not say the gate passed: the owner's session runs the gate.
+
 ## Reports
 
 A comparison writes a small JSON report: the upstream commit, the game version, the Java and Rust versions, hashes of the

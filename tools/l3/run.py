@@ -68,7 +68,18 @@ def check_world_name(world):
     return None
 
 
+SETTINGS_FILE = os.path.expanduser(f"~/.local/share/horizon/instances/{INSTANCE}/horizon-mods/.horizon-mod-data/baritone_rs/settings.txt")
+
+
 def preflight():
+    # `/b set` saves at once, so a setting changed by hand in an earlier session outlives it and silently changes what the scenarios test
+    # (allowPlace false made every bridge and pillar fail with "No path", 2026-11-08).
+    try:
+        bad = [l.strip() for l in open(SETTINGS_FILE) if l.split()[:1] and l.split()[0].startswith("allow") and l.split()[1:] == ["false"]]
+    except OSError:
+        bad = []
+    if bad:
+        sys.exit(f"blocked: {SETTINGS_FILE} turns settings off that the scenarios need ({bad}); put them back with `/b set NAME true`; nothing was started")
     busy = {n: running(n) for n in ("horizon-client", "cargo", "rustc")}
     busy = {n: p for n, p in busy.items() if p}
     if busy:
@@ -488,6 +499,60 @@ def judge(out, sc, meta):
         pm = res["per_movement"]
         res["estimated_vs_actual_ticks"] = {"estimated": pm["estimated_ticks_total"], "actual": pm["actual_ticks_total"], "ratio": pm["ratio_actual_over_estimated"]}
         ok["no 'Unable to find any path' in the chat"] = not any("Unable to find any path" in m for m in res["chat_lines"])
+    elif kind == "follow":
+        # `b follow entity ...` after NoAI mobs that the scenario moves at known ticks (positions are the scenario's own, not read back).
+        # Per step: the player gets within radius + tolerance within `catch_up_ticks` of the step (or of the command) and stays for `hold_ticks`
+        # until the next step. Overall: never farther from the target than the longest jump plus that radius. With a decoy of another type:
+        # far from it at the end of every step.
+        reach = chk["radius"] + chk["tolerance"]
+        byt = {int(r["t"]): r for r in rows}
+        target = chk["target"]
+        end_t = max(byt)
+
+        def target_at(t):
+            cur = target[0]
+            for st in target:
+                if st[0] <= t:
+                    cur = st
+            return cur[1], cur[2]
+
+        def dist_target(t):
+            tx, tz = target_at(t)
+            return math.hypot(fnum(byt[t], "x") - tx, fnum(byt[t], "z") - tz)
+
+        starts = [max(st[0], cmd or 0) for st in target]
+        ends = [target[i + 1][0] - 1 if i + 1 < len(target) else end_t for i in range(len(target))]
+        hops = [math.hypot(target[i + 1][1] - target[i][1], target[i + 1][2] - target[i][2]) for i in range(len(target) - 1)]
+        first_t = min(byt)
+        hops.append(dist_target(max(starts[0], first_t)))
+        steps_out = []
+        for i, (a, b) in enumerate(zip(starts, ends)):
+            caught = next((t for t in range(a, b + 1) if t in byt and dist_target(t) <= reach), None)
+            hold = [dist_target(t) for t in range(max(a, b - chk["hold_ticks"] + 1), b + 1) if t in byt]
+            steps_out.append({"from_tick": a, "to_tick": b, "catch_up_ticks": None if caught is None else caught - a,
+                              "distance_at_end": round(hold[-1], 2) if hold else None, "hold_min": round(min(hold), 2) if hold else None, "hold_max": round(max(hold), 2) if hold else None})
+            ok[f"step {i + 1}: within {reach} blocks of the target within {chk['catch_up_ticks']} ticks"] = caught is not None and caught - a <= chk["catch_up_ticks"]
+            ok[f"step {i + 1}: stayed within {reach} blocks for the last {chk['hold_ticks']} ticks"] = bool(hold) and max(hold) <= reach
+        res["follow"] = {"reach": reach, "steps": steps_out}
+        walked = [dist_target(t) for t in range(max(cmd or 0, first_t), end_t + 1) if t in byt]
+        res["follow"]["max_distance"] = round(max(walked), 2)
+        res["follow"]["longest_jump"] = round(max(hops), 2)
+        ok[f"never farther than the longest jump ({max(hops):.1f}) plus {reach}"] = max(walked) <= max(hops) + reach
+        ok["stayed at the height of the floor"] = all(abs(fnum(r, "y") - (scenarios.SKY + 1)) <= 1.5 for r in rows)
+        if chk.get("decoy"):
+            far = []
+            for i, e in enumerate(chk["decoy"]):
+                tick = ends[i] if i < len(ends) else end_t
+                if e[1] == "rel":
+                    sample = byt[e[0]]
+                    dx, dz = fnum(sample, "x") + e[2], fnum(sample, "z") + e[3]
+                else:
+                    dx, dz = e[1], e[2]
+                far.append(round(math.hypot(fnum(byt[tick], "x") - dx, fnum(byt[tick], "z") - dz), 2))
+                ok[f"step {i + 1}: at least {chk['decoy_min_distance']} blocks from the other kind of mob"] = far[-1] >= chk["decoy_min_distance"]
+            res["follow"]["distance_to_decoy_at_step_ends"] = far
+        sp = [speed(rows[i], rows[i + 1]) for i in range(len(rows) - 1) if int(rows[i]["t"]) > (cmd or 0)]
+        res["follow"]["max_speed_blocks_per_tick"] = round(max(sp), 3) if sp else None
     elif kind == "unreachable":
         msgs = res["chat_lines"]
         ok["stopped on its own (path off, keys released)"] = (not meta["busy_at_end"]) and (not meta["forced_at_end"])
@@ -596,7 +661,7 @@ def main():
         failed = [k for k, v in r["checks"].items() if not v]
         print(f"{r['status'].upper():8} {r['scenario']:34} ticks={r.get('ticks')} {('failed: ' + '; '.join(failed)) if failed else ''} {' '.join(r['notes'])[:160]}")
     if args.report:
-        keep = ("scenario", "chat", "status", "ticks", "blocks", "estimated_vs_actual_ticks", "slot_start", "slot_end", "slot_restored_after_the_path", "hotbar_start", "hotbar_end", "ticks_from_command_to_arrival", "command_tick", "arrived_tick", "distance_to_goal_xz", "min_health", "successful_searches", "items_end", "container_open_ticks", "ores_broken", "distance_to_block_xz", "ticks_from_command_to_done", "chat_lines", "speed_the_tick_before_the_stop", "ticks_until_still", "coasting_distance_blocks")
+        keep = ("scenario", "chat", "status", "ticks", "blocks", "estimated_vs_actual_ticks", "slot_start", "slot_end", "slot_restored_after_the_path", "hotbar_start", "hotbar_end", "ticks_from_command_to_arrival", "command_tick", "arrived_tick", "distance_to_goal_xz", "min_health", "successful_searches", "items_end", "container_open_ticks", "ores_broken", "distance_to_block_xz", "ticks_from_command_to_done", "chat_lines", "speed_the_tick_before_the_stop", "ticks_until_still", "coasting_distance_blocks", "follow")
         slim = [{k: r[k] for k in keep if k in r} | {"failed_checks": [k for k, v in r["checks"].items() if not v]} for r in results]
         rep = {"horizon_revision": HORIZON_REVISION, "instance": INSTANCE, "run": status, "scenarios": slim, "overall_timing": summary["overall_timing"]}
         with open(args.report, "w") as f:

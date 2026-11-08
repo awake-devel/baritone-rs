@@ -20,7 +20,7 @@ use crate::look::Vec3;
 use crate::movement::helper::Border;
 use crate::pos::Pos;
 use crate::process::pathing::{run_search, PathEvent, Pathing, SearchJob, SearchOutcome, SearchRunner, Tables, TickEnv, TickOutput};
-use crate::process::{ItemEntity, ProcessInputs};
+use crate::process::{EntityInfo, ItemEntity, ProcessInputs};
 use crate::raytrace::BlockHit;
 use crate::settings::ExecSettings;
 use crate::testing::{Fixture, TestWorld, AIR, ORE, STONE};
@@ -378,6 +378,8 @@ pub struct Rig<R: SearchRunner<TestWorld>> {
     pub use_ticks: u32,
     /// The dropped items the processes see (`ProcessInputs::item_entities`).
     pub entities: Vec<ItemEntity>,
+    /// The entities the follow process sees (`ProcessInputs::entities`).
+    pub mobs: Vec<EntityInfo>,
     /// Everything the processes said, in order.
     pub messages: Vec<String>,
     /// The scans that were run between ticks, and the position of the player at the time of each one.
@@ -414,6 +416,7 @@ impl<R: SearchRunner<TestWorld>> Rig<R> {
             attack_ticks: 0,
             use_ticks: 0,
             entities: vec![],
+            mobs: vec![],
             messages: vec![],
             scans_run: 0,
             who: vec![],
@@ -520,7 +523,7 @@ impl<R: SearchRunner<TestWorld>> Rig<R> {
         view.in_wall = solid(&self.world, head.0, head.1, head.2);
         let snap = self.world.clone();
         let env = TickEnv { tables: &self.tables, world: &self.world, border: Border { min_x: -3.0e7, max_x: 3.0e7, min_z: -3.0e7, max_z: 3.0e7 }, player: &view, exec: &self.exec, inv: &self.inv, game: self.game };
-        self.pathing.set_inputs(ProcessInputs { now_ms: i64::from(self.ticks) * 50, item_entities: self.entities.clone(), container_open: false });
+        self.pathing.set_inputs(ProcessInputs { now_ms: i64::from(self.ticks) * 50, item_entities: self.entities.clone(), container_open: false, entities: self.mobs.clone() });
         let out = self.pathing.tick(&env, &mut || snap.clone());
         // the scans the processes asked for run between ticks, as the glue's worker does, and their answers come in before the next one
         for job in self.pathing.take_scan_jobs() {
@@ -1860,5 +1863,194 @@ mod mine_tests {
             assert_eq!(ores_left(&r), n - want as usize, "seed {seed}: it mined exactly {want}");
             assert!(!r.pathing.is_active(), "seed {seed}");
         }
+    }
+}
+
+/// `follow` with the simulated player: the goal moves with the entities, the filters pick the right ones, and the other processes take control as upstream's manager gives it.
+mod follow_tests {
+    use super::*;
+    use crate::process::follow::FollowFilter;
+
+    fn pig(id: u32, x: f64, z: f64) -> EntityInfo {
+        EntityInfo { id, kind: "minecraft:pig".to_string(), player_name: None, item: None, position: [x, 1.0, z], living: true, alive: true }
+    }
+
+    fn rig() -> Rig<ImmediateRunner> {
+        Rig::new(TestWorld::flat(60, 12), (2, 1, 3))
+    }
+
+    fn dist(r: &Rig<ImmediateRunner>, e: &EntityInfo) -> f64 {
+        let f = r.p.feet();
+        let (dx, dy, dz) = (f64::from(f.x) - f64::from(mth_floor(e.position[0])), f64::from(f.y) - f64::from(mth_floor(e.position[1])), f64::from(f.z) - f64::from(mth_floor(e.position[2])));
+        (dx * dx + dy * dy + dz * dz).sqrt()
+    }
+
+    fn mth_floor(d: f64) -> i32 {
+        crate::mth::floor(d)
+    }
+
+    fn tick_until(r: &mut Rig<ImmediateRunner>, max: u32, mut done: impl FnMut(&Rig<ImmediateRunner>) -> bool) -> u32 {
+        for n in 0..max {
+            r.tick();
+            if done(r) {
+                return n + 1;
+            }
+        }
+        max
+    }
+
+    #[test]
+    fn a_moving_entity_is_followed_and_the_goal_moves_with_it() {
+        let mut r = rig();
+        r.mobs = vec![pig(7, 40.5, 8.5)];
+        r.pathing.follow(FollowFilter::Types(vec!["minecraft:pig".to_string()]));
+        let used = tick_until(&mut r, 600, |r| dist(r, &r.mobs[0]) <= 3.0 && !r.pathing.is_pathing());
+        assert!(used < 600, "never got near: {:?}", r.p.feet());
+        assert!(r.pathing.is_active(), "following goes on while the entity is there");
+        // it stays near an entity that does not move
+        for _ in 0..40 {
+            r.tick();
+        }
+        assert!(dist(&r, &r.mobs[0]) <= 3.0);
+        // three jumps of the entity: each time the goal is a GoalNear around its new block, and the player comes after it
+        for (x, z) in [(10.5, 10.5), (50.5, 3.5), (25.5, 1.5)] {
+            r.mobs[0].position = [x, 1.0, z];
+            r.tick();
+            let want = Goal::Composite(vec![crate::goals::goal_near(mth_floor(x), 1, mth_floor(z), 3)]);
+            assert_eq!(r.pathing.goal(), Some(&want), "the goal follows the entity");
+            let used = tick_until(&mut r, 800, |r| dist(r, &r.mobs[0]) <= 3.0 && !r.pathing.is_pathing());
+            assert!(used < 800, "never got near ({x}, {z}): {:?}", r.p.feet());
+        }
+    }
+
+    #[test]
+    fn the_player_keeps_after_an_entity_that_walks() {
+        let mut r = rig();
+        r.mobs = vec![pig(1, 15.5, 3.5)];
+        r.pathing.follow(FollowFilter::Living);
+        let mut far = 0;
+        for t in 0..300 {
+            // the entity strolls one block every 8 ticks (2.5 blocks a second), to x = 52
+            if t % 8 == 0 {
+                r.mobs[0].position[0] += 1.0;
+            }
+            r.tick();
+            if t > 150 && dist(&r, &r.mobs[0]) > 6.0 {
+                far += 1;
+            }
+        }
+        assert_eq!(far, 0, "after 150 ticks it was never more than 6 blocks behind");
+        assert!(r.p.feet().x > 40, "{:?}", r.p.feet());
+    }
+
+    #[test]
+    fn the_offset_puts_the_goal_beside_the_entity() {
+        let mut r = rig();
+        r.exec.follow.follow_offset_distance = 5.0;
+        r.exec.follow.follow_offset_direction = 0.0;
+        r.exec.follow.follow_radius = 0;
+        r.mobs = vec![pig(2, 30.5, 10.5)];
+        r.pathing.follow(FollowFilter::Living);
+        r.tick();
+        // yaw 0 faces +z: five blocks that way
+        assert_eq!(r.pathing.goal(), Some(&Goal::Composite(vec![crate::goals::goal_near(30, 1, 15, 0)])));
+        r.exec.follow.follow_offset_direction = 90.0;
+        r.tick();
+        // yaw 90 faces -x
+        assert_eq!(r.pathing.goal(), Some(&Goal::Composite(vec![crate::goals::goal_near(25, 1, 10, 0)])));
+    }
+
+    #[test]
+    fn nothing_to_follow_is_inactive_and_starts_when_something_appears() {
+        let mut r = rig();
+        r.pathing.follow(FollowFilter::Types(vec!["minecraft:pig".to_string()]));
+        r.mobs = vec![EntityInfo { kind: "minecraft:cow".to_string(), ..pig(3, 20.5, 3.5) }];
+        for _ in 0..5 {
+            r.tick();
+            assert!(!r.pathing.is_active());
+        }
+        assert!(r.pathing.wants_entities() && r.pathing.follow_process().has_filter(), "the filter is kept");
+        r.mobs.push(pig(4, 30.5, 3.5));
+        r.tick();
+        assert!(r.pathing.is_active());
+        assert_eq!(r.pathing.following().iter().map(|e| e.id).collect::<Vec<_>>(), vec![4]);
+    }
+
+    #[test]
+    fn stop_ends_following_at_once_and_neutral() {
+        let mut r = rig();
+        r.mobs = vec![pig(5, 50.5, 3.5)];
+        r.pathing.follow(FollowFilter::Living);
+        for _ in 0..30 {
+            r.tick();
+        }
+        assert!(r.pathing.is_active() && r.pathing.is_pathing());
+        let neutral = r.pathing.stop();
+        assert_eq!(neutral, Intent::neutral());
+        assert!(!r.pathing.is_active() && !r.pathing.follow_process().has_filter());
+        for _ in 0..5 {
+            r.tick();
+            assert!(!r.pathing.is_active());
+            assert_eq!(r.intent, Intent::neutral());
+        }
+    }
+
+    #[test]
+    fn goto_after_follow_takes_control_and_the_follow_is_gone() {
+        let mut r = rig();
+        r.mobs = vec![pig(6, 50.5, 3.5)];
+        r.pathing.follow(FollowFilter::Living);
+        for _ in 0..25 {
+            r.tick();
+        }
+        assert!(r.pathing.follow_process().has_filter());
+        r.pathing.goto(Goal::Block { x: 6, y: 1, z: 9 });
+        r.tick();
+        // the goal process became active after the follow process, so it is asked first and the follow process loses control
+        assert!(r.pathing.process().is_active(), "the goal process has control");
+        assert!(!r.pathing.follow_process().has_filter(), "the follow process lost control and its filter");
+        r.run_until_idle(600);
+        let f = r.p.feet();
+        assert_eq!((f.x, f.z), (6, 9));
+        assert!(!r.pathing.is_active());
+    }
+
+    #[test]
+    fn follow_after_goto_takes_control_from_the_goal_process() {
+        let mut r = rig();
+        r.mobs = vec![pig(8, 8.5, 12.5)];
+        r.pathing.goto(Goal::Block { x: 55, y: 1, z: 3 });
+        for _ in 0..25 {
+            r.tick();
+        }
+        assert!(r.pathing.process().is_active());
+        r.pathing.follow(FollowFilter::Living);
+        r.tick();
+        assert!(!r.pathing.process().is_active(), "the goal process kept control");
+        tick_until(&mut r, 600, |r| dist(r, &r.mobs[0]) <= 3.0 && !r.pathing.is_pathing());
+        assert!(r.p.feet().x < 30, "it did not go on to the old goal: {:?}", r.p.feet());
+    }
+
+    #[test]
+    fn a_dead_or_far_entity_is_not_followed() {
+        let mut r = rig();
+        r.exec.follow.follow_target_max_distance = 20;
+        r.mobs = vec![pig(1, 50.5, 3.5), EntityInfo { alive: false, ..pig(2, 10.5, 3.5) }];
+        r.pathing.follow(FollowFilter::Living);
+        r.tick();
+        assert!(!r.pathing.is_active(), "one is dead and one is 48 blocks away");
+        r.mobs[0].position = [20.5, 1.0, 3.5];
+        r.tick();
+        assert_eq!(r.pathing.following().iter().map(|e| e.id).collect::<Vec<_>>(), vec![1]);
+    }
+
+    #[test]
+    fn several_entities_make_a_composite_goal_and_the_nearest_wins() {
+        let mut r = rig();
+        r.mobs = vec![pig(1, 52.5, 3.5), pig(2, 12.5, 3.5)];
+        r.pathing.follow(FollowFilter::Living);
+        let used = tick_until(&mut r, 400, |r| r.pathing.goal().is_some() && !r.pathing.is_pathing() && dist(r, &r.mobs[1]) <= 3.0);
+        assert!(used < 400, "{:?}", r.p.feet());
+        assert!(matches!(r.pathing.goal(), Some(Goal::Composite(g)) if g.len() == 2));
     }
 }

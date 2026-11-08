@@ -54,6 +54,27 @@ pub struct ExecSettings {
     pub tool: ToolSettings,
     /// The settings of the mine and get-to-block processes.
     pub mine: MineSettings,
+    /// The settings of the follow process.
+    pub follow: FollowSettings,
+}
+
+/// The settings `FollowProcess` reads. Defaults are upstream's (`Settings.java` at 1b8e87c).
+#[derive(Clone, Debug, PartialEq)]
+pub struct FollowSettings {
+    /// `followRadius`, default 3: the radius of the `GoalNear` around the target position.
+    pub follow_radius: i32,
+    /// `followOffsetDistance`, default 0: how far from the entity the `GoalNear` is put. 0 puts it on the entity.
+    pub follow_offset_distance: f64,
+    /// `followOffsetDirection`, default 0: the direction of that offset, in degrees (a yaw).
+    pub follow_offset_direction: f32,
+    /// `followTargetMaxDistance`, default 0: entities further than this are not followed. 0 is no limit.
+    pub follow_target_max_distance: i32,
+}
+
+impl Default for FollowSettings {
+    fn default() -> Self {
+        FollowSettings { follow_radius: 3, follow_offset_distance: 0.0, follow_offset_direction: 0.0, follow_target_max_distance: 0 }
+    }
 }
 
 /// The settings `MineProcess` and `GetToBlockProcess` read. Defaults are upstream's (`Settings.java` at 1b8e87c). `notificationOnMineFail` and
@@ -145,6 +166,7 @@ impl Default for ExecSettings {
             remain_with_existing_look_direction: true,
             tool: ToolSettings::default(),
             mine: MineSettings::default(),
+            follow: FollowSettings::default(),
         }
     }
 }

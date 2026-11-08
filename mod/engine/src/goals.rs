@@ -86,6 +86,15 @@ pub fn goal_near(x: i32, y: i32, z: i32, range: i32) -> Goal {
     Goal::Near { x, y, z, range_sq: range.wrapping_mul(range) }
 }
 
+/// `GoalXZ.fromDirection`: the column `distance` blocks from `origin` (x and z) in the direction of `yaw` degrees, as a `GoalXZ`. Minecraft's yaw 0 faces +z, 90 faces -x.
+pub fn goal_xz_from_direction(origin_x: f64, origin_z: f64, yaw: f32, distance: f64) -> Goal {
+    // `(float) Math.toRadians(yaw)`: the float widens to a double, which is multiplied by pi / 180
+    let theta = (f64::from(yaw) * 0.017453292519943295) as f32;
+    let x = origin_x - f64::from(crate::mth::sin(f64::from(theta))) * distance;
+    let z = origin_z + f64::from(crate::mth::cos(f64::from(theta))) * distance;
+    Goal::Xz { x: crate::mth::floor(x), z: crate::mth::floor(z) }
+}
+
 /// `GoalStrictDirection.<init>`: `dx` and `dz` are the direction's step; throws `IllegalArgumentException` when both are 0.
 pub fn goal_strict_direction(x: i32, y: i32, z: i32, dx: i32, dz: i32) -> Goal {
     assert!(!(dx == 0 && dz == 0), "GoalStrictDirection: direction has no horizontal step");
@@ -429,6 +438,17 @@ impl Goal {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn from_direction_walks_the_yaw_the_way_minecraft_faces() {
+        // yaw 0 faces +z, 90 faces -x, 180 faces -z, 270 (or -90) faces +x
+        assert_eq!(goal_xz_from_direction(0.5, 0.5, 0.0, 5.0), Goal::Xz { x: 0, z: 5 });
+        assert_eq!(goal_xz_from_direction(0.5, 0.5, 90.0, 5.0), Goal::Xz { x: -5, z: 0 });
+        assert_eq!(goal_xz_from_direction(0.5, 0.5, 180.0, 5.0), Goal::Xz { x: 0, z: -5 });
+        assert_eq!(goal_xz_from_direction(0.5, 0.5, -90.0, 5.0), Goal::Xz { x: 5, z: 0 });
+        // no distance: the column it is in
+        assert_eq!(goal_xz_from_direction(-3.2, 7.9, 33.0, 0.0), Goal::Xz { x: -4, z: 7 });
+    }
+
     use super::*;
 
     fn s() -> GoalSettings {

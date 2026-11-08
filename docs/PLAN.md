@@ -25,7 +25,7 @@ which are written down nowhere else.
 **In scope:** walking, sprinting, breaking and placing along a computed path, on a pinned Horizon revision, with the chat
 open or closed. `goto`, `goal`, `path`, `stop` and a basic set of settings, plus the path drawn in the world.
 
-**Next, in this order:** `mine`, `follow`, `explore`, then a persistent cache.
+**Next, in this order:** `mine` (done, R2), `follow` (done, R2), `explore`, then a persistent cache.
 
 **Later:** builder, farm, elytra. Elytra would start from upstream's Java pathfinder, without the terrain generator files.
 

@@ -198,18 +198,18 @@ Favoring	<init>(IPath,CalculationContext)	redesign	1b8e87c	3fd5b204257288a8		`Fa
 Favoring	<init>(IPlayerContext,IPath,CalculationContext)	redesign	1b8e87c	fb0a2c449d12b6a0		`Favoring::new`. The avoidances come from `Avoidance::create`, which the caller feeds.
 Favoring	calculate	port	1b8e87c	c595a8db6f667123	search-compare	
 Favoring	isEmpty	port	1b8e87c	cdc858519f608efe	search-compare	
-FollowProcess	<init>	later	1b8e87c	a40e4d6735efcaa2		Process: next after the first release (mine, follow, explore, in that order).
-FollowProcess	currentFilter	later	1b8e87c	5c113f6d2fa838c1		Process: next after the first release (mine, follow, explore, in that order).
-FollowProcess	displayName0	later	1b8e87c	0398b34e877c6f1f		Process: next after the first release (mine, follow, explore, in that order).
-FollowProcess	follow	later	1b8e87c	d142718dfa3c0e68		Process: next after the first release (mine, follow, explore, in that order).
-FollowProcess	followable	later	1b8e87c	58886ce5066d2f70		Process: next after the first release (mine, follow, explore, in that order).
-FollowProcess	following	later	1b8e87c	f457e05d48f2c567		Process: next after the first release (mine, follow, explore, in that order).
-FollowProcess	isActive	later	1b8e87c	df2dc3e8c9811514		Process: next after the first release (mine, follow, explore, in that order).
-FollowProcess	onLostControl	later	1b8e87c	40a1dc4cf6f1a700		Process: next after the first release (mine, follow, explore, in that order).
-FollowProcess	onTick	later	1b8e87c	e774687a82c9e44c		Process: next after the first release (mine, follow, explore, in that order).
-FollowProcess	pickup	later	1b8e87c	75d823431af51119		Process: next after the first release (mine, follow, explore, in that order).
-FollowProcess	scanWorld	later	1b8e87c	a794a49d26b7a5c0		Process: next after the first release (mine, follow, explore, in that order).
-FollowProcess	towards	later	1b8e87c	c9e548474908ecae		Process: next after the first release (mine, follow, explore, in that order).
+FollowProcess	<init>	redesign	1b8e87c	a40e4d6735efcaa2		`FollowProcess::new`.
+FollowProcess	currentFilter	port	1b8e87c	5c113f6d2fa838c1		The filter is a `FollowFilter`, the commands' predicates as data.
+FollowProcess	displayName0	port	1b8e87c	0398b34e877c6f1f		`display_name`. The entities print through `entity_to_string`, which cannot know the game's class names (D40).
+FollowProcess	follow	port	1b8e87c	d142718dfa3c0e68		`FollowProcess::follow`; `Pathing::follow` is the call the command makes.
+FollowProcess	followable	port	1b8e87c	58886ce5066d2f70		The player itself is never in the list the glue gives. The distance is compared on squares as upstream, with the int product.
+FollowProcess	following	port	1b8e87c	f457e05d48f2c567		Worked out where it is read, not kept in a field.
+FollowProcess	isActive	port	1b8e87c	df2dc3e8c9811514		Reads the entities of the inputs and the player's position of the tick.
+FollowProcess	onLostControl	port	1b8e87c	40a1dc4cf6f1a700		Only the filter is kept; the cache is not a field.
+FollowProcess	onTick	port	1b8e87c	e774687a82c9e44c		`RevalidateGoalAndPath` with a `Goal::Composite` of the goals of `towards`.
+FollowProcess	pickup	port	1b8e87c	75d823431af51119		The `Predicate<ItemStack>` is a list of items (`FollowFilter::Items`). No command uses it, as upstream's.
+FollowProcess	scanWorld	port	1b8e87c	a794a49d26b7a5c0		Pure: returns the list, which upstream stores in `cache`. `distinct` is by entity id.
+FollowProcess	towards	port	1b8e87c	c9e548474908ecae		`GoalXZ.fromDirection` through the game's sine table (D40).
 GetToBlockProcess	<init>	redesign	1b8e87c	e1462b0576e82003		`GetToBlockProcess::new`.
 GetToBlockProcess	areAdjacent	port	1b8e87c	35bb2c42eff4417f		
 GetToBlockProcess	blacklistClosest	port	1b8e87c	1fb33c1ee9b790a1		
@@ -302,7 +302,7 @@ GoalXZ	<init>(BetterBlockPos)	redesign	1b8e87c	386277e203bf9284	cost-compare	A v
 GoalXZ	<init>(int,int)	redesign	1b8e87c	8ed1bc91568678f9	cost-compare	A variant of the `Goal` enum, with plain coordinates.
 GoalXZ	calculate	port	1b8e87c	8c75c64e88a62632	cost-compare	
 GoalXZ	equals	drop	1b8e87c	751544f45205961f		`Goal` derives PartialEq.
-GoalXZ	fromDirection	later	1b8e87c	b3a1ecae8e9aac5c		For a direction command, not in the first release.
+GoalXZ	fromDirection	port	1b8e87c	b3a1ecae8e9aac5c		`goal_xz_from_direction`; `Mth.sin` and `Mth.cos` are the game's table (`mth.rs`, D40).
 GoalXZ	getX	redesign	1b8e87c	4248f82302494111		The field of `Goal::Xz`.
 GoalXZ	getZ	redesign	1b8e87c	b99843e6d1a3c609		The field of `Goal::Xz`.
 GoalXZ	hashCode	drop	1b8e87c	a1d796ffe8f9eed0		No goal is hashed.

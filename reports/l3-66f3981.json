@@ -7,15 +7,15 @@
    "scenario": "s05_natural300_chat0",
    "chat": false,
    "status": "pass",
-   "ticks": 1955,
-   "ticks_from_command_to_arrival": 1934,
+   "ticks": 2143,
+   "ticks_from_command_to_arrival": 2122,
    "command_tick": 10,
-   "arrived_tick": 1944,
-   "distance_to_goal_xz": 0.26,
+   "arrived_tick": 2132,
+   "distance_to_goal_xz": 0.06,
    "min_health": 20.0,
    "successful_searches": 2,
    "chat_lines": [
-    "Going to: GoalXZ{x=278,z=8}",
+    "Going to: GoalXZ{x=269,z=5}",
     "Arrived."
    ],
    "failed_checks": []
@@ -24,15 +24,15 @@
    "scenario": "s10_far1500_chat0",
    "chat": false,
    "status": "pass",
-   "ticks": 9919,
-   "ticks_from_command_to_arrival": 9898,
+   "ticks": 9922,
+   "ticks_from_command_to_arrival": 9901,
    "command_tick": 10,
-   "arrived_tick": 9908,
-   "distance_to_goal_xz": 0.18,
-   "min_health": 19.0,
+   "arrived_tick": 9911,
+   "distance_to_goal_xz": 0.1,
+   "min_health": 20.0,
    "successful_searches": 7,
    "chat_lines": [
-    "Going to: GoalXZ{x=278,z=1508}",
+    "Going to: GoalXZ{x=269,z=1505}",
     "Arrived."
    ],
    "failed_checks": []
@@ -181,17 +181,19 @@
    "scenario": "s07_block_chat0",
    "chat": false,
    "status": "pass",
-   "ticks": 186,
-   "ticks_from_command_to_arrival": 165,
+   "ticks": 185,
+   "ticks_from_command_to_arrival": 164,
    "command_tick": 10,
-   "arrived_tick": 175,
-   "distance_to_goal_xz": 0.27,
+   "arrived_tick": 174,
+   "distance_to_goal_xz": 0.3,
    "min_health": 20.0,
    "successful_searches": 2,
    "chat_lines": [
     "Successfully set allowBreak to false",
     "Old value: true",
     "Going to: GoalBlock{x=4045,y=201,z=3004}",
+    "Value of setting freeLook:",
+    "true",
     "Arrived."
    ],
    "failed_checks": []
@@ -353,7 +355,7 @@
    "scenario": "b01_break_stone_chat0",
    "chat": false,
    "status": "pass",
-   "ticks": 86,
+   "ticks": 85,
    "blocks": {
     "broken": 1,
     "placed": 0,
@@ -362,19 +364,19 @@
     "segments": 1
    },
    "estimated_vs_actual_ticks": {
-    "estimated": 57.53,
-    "actual": 63,
-    "ratio": 1.095
+    "estimated": 61.09,
+    "actual": 62,
+    "ratio": 1.015
    },
    "slot_start": 5,
    "slot_end": 0,
    "slot_restored_after_the_path": false,
    "hotbar_start": "0:iron_pickaxe x1 d0",
    "hotbar_end": "0:iron_pickaxe x1 d1; 1:cobblestone x1 d0",
-   "ticks_from_command_to_arrival": 65,
+   "ticks_from_command_to_arrival": 64,
    "command_tick": 10,
-   "arrived_tick": 75,
-   "distance_to_goal_xz": 0.02,
+   "arrived_tick": 74,
+   "distance_to_goal_xz": 0.09,
    "min_health": 20.0,
    "successful_searches": 1,
    "chat_lines": [
@@ -396,9 +398,9 @@
     "segments": 1
    },
    "estimated_vs_actual_ticks": {
-    "estimated": 65.03,
+    "estimated": 68.59,
     "actual": 74,
-    "ratio": 1.138
+    "ratio": 1.079
    },
    "slot_start": 3,
    "slot_end": 0,
@@ -408,7 +410,7 @@
    "ticks_from_command_to_arrival": 76,
    "command_tick": 10,
    "arrived_tick": 86,
-   "distance_to_goal_xz": 0.02,
+   "distance_to_goal_xz": 0.09,
    "min_health": 20.0,
    "successful_searches": 1,
    "chat_lines": [
@@ -540,7 +542,7 @@
    "slot_end": 0,
    "slot_restored_after_the_path": false,
    "hotbar_start": "0:iron_pickaxe x1 d0",
-   "hotbar_end": "0:iron_pickaxe x1 d5; 1:cobblestone x4 d0",
+   "hotbar_end": "0:iron_pickaxe x1 d5; 1:cobblestone x5 d0",
    "ticks_from_command_to_arrival": 78,
    "command_tick": 10,
    "arrived_tick": 88,
@@ -709,11 +711,11 @@
    "scenario": "b10_head_sand_chat0",
    "chat": false,
    "status": "pass",
-   "ticks": 238,
-   "ticks_from_command_to_arrival": 217,
+   "ticks": 240,
+   "ticks_from_command_to_arrival": 219,
    "command_tick": 10,
-   "arrived_tick": 227,
-   "distance_to_goal_xz": 0.01,
+   "arrived_tick": 229,
+   "distance_to_goal_xz": 0.1,
    "min_health": 19.0,
    "successful_searches": 1,
    "chat_lines": [
@@ -987,7 +989,7 @@
    "slot_end": 0,
    "slot_restored_after_the_path": false,
    "hotbar_start": "0:iron_pickaxe x1 d0",
-   "hotbar_end": "0:iron_pickaxe x1 d2; 1:cobblestone x3 d0",
+   "hotbar_end": "0:iron_pickaxe x1 d2; 1:cobblestone x2 d0",
    "ticks_from_command_to_arrival": 73,
    "command_tick": 10,
    "arrived_tick": 83,
@@ -1179,7 +1181,7 @@
    "scenario": "m01_mine_cave3_chat0",
    "chat": false,
    "status": "pass",
-   "ticks": 338,
+   "ticks": 336,
    "blocks": {
     "broken": 6,
     "placed": 1,
@@ -1188,9 +1190,9 @@
     "segments": 3
    },
    "estimated_vs_actual_ticks": {
-    "estimated": 224.08,
-    "actual": 244,
-    "ratio": 1.089
+    "estimated": 220.51,
+    "actual": 243,
+    "ratio": 1.102
    },
    "slot_start": 5,
    "slot_end": 0,
@@ -1200,12 +1202,12 @@
    "command_tick": 10,
    "arrived_tick": null,
    "min_health": 20.0,
-   "successful_searches": 4,
+   "successful_searches": 3,
    "items_end": {
     "raw_iron": 3
    },
    "container_open_ticks": 0,
-   "ticks_from_command_to_done": 268,
+   "ticks_from_command_to_done": 266,
    "chat_lines": [
     "Mining [BlockOptionalMeta{block=Block{minecraft:iron_ore},properties={}}]",
     "Have 3 valid items"
@@ -1216,7 +1218,7 @@
    "scenario": "m02_mine_quantity_chat0",
    "chat": false,
    "status": "pass",
-   "ticks": 125,
+   "ticks": 124,
    "blocks": {
     "broken": 1,
     "placed": 0,
@@ -1243,7 +1245,7 @@
    },
    "container_open_ticks": 0,
    "ores_broken": 1,
-   "ticks_from_command_to_done": 55,
+   "ticks_from_command_to_done": 54,
    "chat_lines": [
     "Mining [BlockOptionalMeta{block=Block{minecraft:iron_ore},properties={}}]",
     "Have 3 valid items"
@@ -1254,7 +1256,7 @@
    "scenario": "m03_goto_table_wall_chat0",
    "chat": false,
    "status": "pass",
-   "ticks": 233,
+   "ticks": 232,
    "blocks": {
     "broken": 1,
     "placed": 0,
@@ -1279,7 +1281,7 @@
    "items_end": {},
    "container_open_ticks": 60,
    "distance_to_block_xz": 0.97,
-   "ticks_from_command_to_done": 163,
+   "ticks_from_command_to_done": 162,
    "chat_lines": [],
    "failed_checks": []
   },
@@ -1323,7 +1325,7 @@
    "scenario": "m01_mine_cave3_chat1",
    "chat": true,
    "status": "pass",
-   "ticks": 337,
+   "ticks": 336,
    "blocks": {
     "broken": 6,
     "placed": 1,
@@ -1333,8 +1335,8 @@
    },
    "estimated_vs_actual_ticks": {
     "estimated": 220.51,
-    "actual": 239,
-    "ratio": 1.084
+    "actual": 243,
+    "ratio": 1.102
    },
    "slot_start": 5,
    "slot_end": 0,
@@ -1344,12 +1346,12 @@
    "command_tick": 10,
    "arrived_tick": null,
    "min_health": 20.0,
-   "successful_searches": 4,
+   "successful_searches": 3,
    "items_end": {
     "raw_iron": 3
    },
    "container_open_ticks": 0,
-   "ticks_from_command_to_done": 267,
+   "ticks_from_command_to_done": 266,
    "chat_lines": [
     "Mining [BlockOptionalMeta{block=Block{minecraft:iron_ore},properties={}}]",
     "Have 3 valid items"
@@ -1366,12 +1368,12 @@
     "placed": 0,
     "water_cells": 0,
     "other": [],
-    "segments": 2
+    "segments": 1
    },
    "estimated_vs_actual_ticks": {
-    "estimated": 43.02,
-    "actual": 44,
-    "ratio": 1.023
+    "estimated": 39.45,
+    "actual": 42,
+    "ratio": 1.065
    },
    "slot_start": 5,
    "slot_end": 0,
@@ -1381,7 +1383,7 @@
    "command_tick": 10,
    "arrived_tick": null,
    "min_health": 20.0,
-   "successful_searches": 2,
+   "successful_searches": 1,
    "items_end": {
     "raw_iron": 3
    },
@@ -1398,7 +1400,7 @@
    "scenario": "m03_goto_table_wall_chat1",
    "chat": true,
    "status": "pass",
-   "ticks": 204,
+   "ticks": 212,
    "blocks": {
     "broken": 1,
     "placed": 0,
@@ -1423,7 +1425,7 @@
    "items_end": {},
    "container_open_ticks": 60,
    "distance_to_block_xz": 0.97,
-   "ticks_from_command_to_done": 134,
+   "ticks_from_command_to_done": 142,
    "chat_lines": [],
    "failed_checks": []
   },
@@ -1464,28 +1466,346 @@
    "ticks_until_still": 1,
    "coasting_distance_blocks": 0.0,
    "failed_checks": []
+  },
+  {
+   "scenario": "f01_follow_route_chat0",
+   "chat": false,
+   "status": "pass",
+   "ticks": 801,
+   "command_tick": 10,
+   "arrived_tick": null,
+   "min_health": 20.0,
+   "chat_lines": [
+    "Following these types of entities:",
+    "minecraft:villager",
+    "ok canceled"
+   ],
+   "follow": {
+    "reach": 4.5,
+    "steps": [
+     {
+      "from_tick": 10,
+      "to_tick": 199,
+      "catch_up_ticks": 52,
+      "distance_at_end": 3.13,
+      "hold_min": 3.13,
+      "hold_max": 3.13
+     },
+     {
+      "from_tick": 200,
+      "to_tick": 399,
+      "catch_up_ticks": 131,
+      "distance_at_end": 3.1,
+      "hold_min": 3.1,
+      "hold_max": 3.1
+     },
+     {
+      "from_tick": 400,
+      "to_tick": 599,
+      "catch_up_ticks": 134,
+      "distance_at_end": 3.08,
+      "hold_min": 3.08,
+      "hold_max": 3.08
+     },
+     {
+      "from_tick": 600,
+      "to_tick": 800,
+      "catch_up_ticks": 86,
+      "distance_at_end": 3.09,
+      "hold_min": 3.09,
+      "hold_max": 3.09
+     }
+    ],
+    "max_distance": 38.91,
+    "longest_jump": 35.9,
+    "max_speed_blocks_per_tick": 0.281
+   },
+   "failed_checks": []
+  },
+  {
+   "scenario": "f02_follow_only_pig_chat0",
+   "chat": false,
+   "status": "pass",
+   "ticks": 561,
+   "command_tick": 10,
+   "arrived_tick": null,
+   "min_health": 20.0,
+   "chat_lines": [
+    "Following these types of entities:",
+    "minecraft:pig",
+    "ok canceled"
+   ],
+   "follow": {
+    "reach": 4.5,
+    "steps": [
+     {
+      "from_tick": 10,
+      "to_tick": 260,
+      "catch_up_ticks": 112,
+      "distance_at_end": 3.01,
+      "hold_min": 3.01,
+      "hold_max": 3.01
+     },
+     {
+      "from_tick": 261,
+      "to_tick": 560,
+      "catch_up_ticks": 107,
+      "distance_at_end": 3.11,
+      "hold_min": 3.11,
+      "hold_max": 3.11
+     }
+    ],
+    "max_distance": 35.0,
+    "longest_jump": 35.23,
+    "distance_to_decoy_at_step_ends": [
+     41.99,
+     31.12
+    ],
+    "max_speed_blocks_per_tick": 0.281
+   },
+   "failed_checks": []
+  },
+  {
+   "scenario": "f02_follow_only_villager_chat0",
+   "chat": false,
+   "status": "pass",
+   "ticks": 561,
+   "command_tick": 10,
+   "arrived_tick": null,
+   "min_health": 20.0,
+   "chat_lines": [
+    "Following these types of entities:",
+    "minecraft:villager",
+    "ok canceled"
+   ],
+   "follow": {
+    "reach": 4.5,
+    "steps": [
+     {
+      "from_tick": 10,
+      "to_tick": 260,
+      "catch_up_ticks": 112,
+      "distance_at_end": 3.01,
+      "hold_min": 3.01,
+      "hold_max": 3.01
+     },
+     {
+      "from_tick": 261,
+      "to_tick": 560,
+      "catch_up_ticks": 107,
+      "distance_at_end": 3.11,
+      "hold_min": 3.11,
+      "hold_max": 3.11
+     }
+    ],
+    "max_distance": 35.0,
+    "longest_jump": 35.23,
+    "distance_to_decoy_at_step_ends": [
+     41.99,
+     31.12
+    ],
+    "max_speed_blocks_per_tick": 0.281
+   },
+   "failed_checks": []
+  },
+  {
+   "scenario": "f04_stop_follow_chat0",
+   "chat": false,
+   "status": "pass",
+   "ticks": 301,
+   "command_tick": 10,
+   "arrived_tick": null,
+   "min_health": 20.0,
+   "chat_lines": [
+    "Following these types of entities:",
+    "minecraft:villager",
+    "ok canceled"
+   ],
+   "speed_the_tick_before_the_stop": 0.281,
+   "ticks_until_still": 7,
+   "coasting_distance_blocks": 0.333,
+   "failed_checks": []
+  },
+  {
+   "scenario": "f01_follow_route_chat1",
+   "chat": true,
+   "status": "pass",
+   "ticks": 801,
+   "command_tick": 10,
+   "arrived_tick": null,
+   "min_health": 20.0,
+   "chat_lines": [
+    "Following these types of entities:",
+    "minecraft:villager",
+    "ok canceled"
+   ],
+   "follow": {
+    "reach": 4.5,
+    "steps": [
+     {
+      "from_tick": 10,
+      "to_tick": 199,
+      "catch_up_ticks": 52,
+      "distance_at_end": 3.13,
+      "hold_min": 3.13,
+      "hold_max": 3.13
+     },
+     {
+      "from_tick": 200,
+      "to_tick": 399,
+      "catch_up_ticks": 130,
+      "distance_at_end": 3.1,
+      "hold_min": 3.1,
+      "hold_max": 3.1
+     },
+     {
+      "from_tick": 400,
+      "to_tick": 599,
+      "catch_up_ticks": 136,
+      "distance_at_end": 3.08,
+      "hold_min": 3.08,
+      "hold_max": 3.08
+     },
+     {
+      "from_tick": 600,
+      "to_tick": 800,
+      "catch_up_ticks": 85,
+      "distance_at_end": 3.09,
+      "hold_min": 3.09,
+      "hold_max": 3.09
+     }
+    ],
+    "max_distance": 38.91,
+    "longest_jump": 35.9,
+    "max_speed_blocks_per_tick": 0.281
+   },
+   "failed_checks": []
+  },
+  {
+   "scenario": "f02_follow_only_pig_chat1",
+   "chat": true,
+   "status": "pass",
+   "ticks": 561,
+   "command_tick": 10,
+   "arrived_tick": null,
+   "min_health": 20.0,
+   "chat_lines": [
+    "Following these types of entities:",
+    "minecraft:pig",
+    "ok canceled"
+   ],
+   "follow": {
+    "reach": 4.5,
+    "steps": [
+     {
+      "from_tick": 10,
+      "to_tick": 260,
+      "catch_up_ticks": 112,
+      "distance_at_end": 3.01,
+      "hold_min": 3.01,
+      "hold_max": 3.01
+     },
+     {
+      "from_tick": 261,
+      "to_tick": 560,
+      "catch_up_ticks": 107,
+      "distance_at_end": 3.11,
+      "hold_min": 3.11,
+      "hold_max": 3.11
+     }
+    ],
+    "max_distance": 35.0,
+    "longest_jump": 35.23,
+    "distance_to_decoy_at_step_ends": [
+     41.99,
+     31.12
+    ],
+    "max_speed_blocks_per_tick": 0.281
+   },
+   "failed_checks": []
+  },
+  {
+   "scenario": "f02_follow_only_villager_chat1",
+   "chat": true,
+   "status": "pass",
+   "ticks": 561,
+   "command_tick": 10,
+   "arrived_tick": null,
+   "min_health": 20.0,
+   "chat_lines": [
+    "Following these types of entities:",
+    "minecraft:villager",
+    "ok canceled"
+   ],
+   "follow": {
+    "reach": 4.5,
+    "steps": [
+     {
+      "from_tick": 10,
+      "to_tick": 260,
+      "catch_up_ticks": 112,
+      "distance_at_end": 3.01,
+      "hold_min": 3.01,
+      "hold_max": 3.01
+     },
+     {
+      "from_tick": 261,
+      "to_tick": 560,
+      "catch_up_ticks": 107,
+      "distance_at_end": 3.11,
+      "hold_min": 3.11,
+      "hold_max": 3.11
+     }
+    ],
+    "max_distance": 35.0,
+    "longest_jump": 35.23,
+    "distance_to_decoy_at_step_ends": [
+     41.99,
+     31.12
+    ],
+    "max_speed_blocks_per_tick": 0.281
+   },
+   "failed_checks": []
+  },
+  {
+   "scenario": "f04_stop_follow_chat1",
+   "chat": true,
+   "status": "pass",
+   "ticks": 301,
+   "command_tick": 10,
+   "arrived_tick": null,
+   "min_health": 20.0,
+   "chat_lines": [
+    "Following these types of entities:",
+    "minecraft:villager",
+    "ok canceled"
+   ],
+   "speed_the_tick_before_the_stop": 0.281,
+   "ticks_until_still": 7,
+   "coasting_distance_blocks": 0.333,
+   "failed_checks": []
   }
  ],
  "overall_timing": {
   "search_micros": {
-   "max": 1191732.0,
-   "median_of_medians": 3490.5,
-   "runs": 58
+   "max": 1331335.0,
+   "median_of_medians": 2905.0,
+   "runs": 66
   },
   "snapshot_micros": {
-   "max": 1041.0,
-   "median_of_medians": 139.5,
-   "runs": 58
+   "max": 2200.0,
+   "median_of_medians": 128.5,
+   "runs": 66
   },
   "snapshot_chunks": {
    "max": 1057.0,
    "median_of_medians": 1057.0,
-   "runs": 58
+   "runs": 66
   },
   "mod_tick_micros": {
-   "max": 15977.0,
-   "median_of_medians": 32.5,
-   "runs": 58
+   "max": 13439.0,
+   "median_of_medians": 34.0,
+   "runs": 66
   }
  }
 }

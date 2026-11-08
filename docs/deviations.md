@@ -613,6 +613,37 @@ What the mod feeds the engine (`mod/runtime.rs`), where it differs from upstream
 - **Changes chosen paths:** (1) yes, when more than 64 matches are loaded, toward upstream's choice; (3) no.
 - **Decided by:** the R2 review findings; (1) is a port bug (upstream's behaviour was copied from the wrong class), (3) keeps the game responsive.
 
+### D40. `follow` (R2)
+
+- **Status:** active, in `process/follow.rs`, `command.rs`, `mth.rs`, `goals.rs`, `process/pathing.rs` and the glue (`mod/runtime.rs`).
+- **Upstream:** `FollowProcess` holds a `Predicate<Entity>` and a `List<Entity>` cache and reads `ctx.entitiesStream()`; `FollowCommand` makes the predicate from an enum and from `EntityClassById` / `NearbyPlayer`. `GoalXZ.fromDirection` uses `Mth.sin` and `Mth.cos`.
+- **Ours:**
+  1. **Entities are plain data.** The glue lists the entities each tick as `EntityInfo` (id, type id with namespace, player name, dropped item, position, living, alive) in `ProcessInputs::entities`, and only while the follow process holds a filter, because
+     `isActive` depends on them. The player itself is never listed (upstream's `followable` refuses it). The list is the mobs the game simulates (other players included, through the multiplayer player table) and the dropped items, capped at 4096. Other entity
+     kinds Horizon keeps in lists of their own (arrows and other projectiles, boats, minecarts, item frames, armor stands, experience orbs) are not listed, so `follow entity arrow` finds nothing.
+  2. **The filter is data.** `FollowFilter` is `Living`, `Players`, `Types`, `Entities` (by id, as `Entity.equals`) or `Items` (`pickup`); these are the only predicates the commands make.
+  3. **The cache is not a field.** `scanWorld` is a pure function called where upstream reads `cache`, with the inputs of the tick; `isActive` and `onTick` of one tick see the same list. `isActive` reads the player's position and the follow settings that
+     `Pathing::tick` stored at the start of its tick (the manager asks `isActive` outside any tick too).
+  4. **`distinct()` is by entity id**, the first occurrence kept, after the filters, as upstream's order. It uses a hash set, as upstream's stream does (a first version searched the answer for each entity: 8 ms per scan at 4096 entities, found in review and fixed, with a test).
+     The scan is still worked out at each read (`isActive` of the manager, `onTick`, the display name), as upstream's `scanWorld` runs in `onTick` only; it is linear now (the test scans 40000 entities in well under 500 ms, debug build) and not cached.
+  5. **`Mth.sin` / `Mth.cos`** are the game's table (`(i / 10430.378350470453).sin()` as `f32`, indexed through a `long`), in `mth.rs`. `GoalXZ.fromDirection` goes through it. Minecraft 1.21.4 (the branch of the pinned upstream) indexes with a float product; the game
+     this runs in (26.3) uses the double one. The two differ only for an angle that lands on the edge of a table step, which can move the goal by one block. The table is built here as `sin(i / 10430.378...)` as `f32`, while the game computes `i * pi * 2 / 65536`; the two can
+     differ by one unit in the last place of the `f32`. Not measured (the review read it; no game source at hand to compare). Only `followOffsetDistance` other than 0 reaches it.
+  6. **`Entity.toString`** (printed by `follow player <name>` and `displayName0`) cannot use the game's class names or display names. A player prints as `RemotePlayer['Name'/id, l='ClientLevel', x=0.00, y=0.00, z=0.00]` (`LocalPlayer` for the player itself, exact
+     but for the position); any other entity prints its registry path in camel case as the class and in title case as the name (`ZombieVillager['Zombie Villager'/12, ...]`). `%.2f` is Rust's rounding, which differs from Java's on a tie.
+  7. **The entity types are Horizon's.** `follow entity <type>` knows the ids of the mob types Horizon loads, `minecraft:player` and `minecraft:item`. Upstream knows every entry of `ENTITY_TYPE`. A type that exists in the game but not here answers
+     "Expected EntityClassById", as an unknown id does upstream.
+  8. **Tab completion of the types offers ids.** Upstream appends `Object::toString` of each `EntityType`, which in vanilla is the translation key (`entity.minecraft.pig`), not an id that `EntityClassById` accepts, then filters with
+     `filterPrefixNamespaced`, which assumes fully qualified ids. Read, not run (no vanilla source here to check `EntityType.toString`). Here the completion offers `minecraft:pig`. The rest of `tabComplete` (the groups, the lists, a done word that names nothing gives nothing)
+     is as upstream, and so is NearbyPlayer's (names of the players of the world, the player itself included).
+  9. **Error texts** carry the position upstream's exception gives (`Error at argument #2: Expected EntityClassById`), including its quirk: the argument that fails has been consumed, so the exception names the next one when there is one. The other
+     commands of this port leave the position out.
+  10. `follow player <name>` of a name nobody has sets an empty filter and then says "No valid entities in range!", as upstream (it sets the filter before it throws). The process is then inactive and stays so; a later `/b stop` clears the filter.
+  11. **The cap of 4096 entities drops the rest silently, mobs first.** The glue lists mobs, then other players, then dropped items, and stops at 4096. In a world with more than 4096 mobs no item is listed, and `follow entity item` finds nothing. Upstream has no cap.
+     The listing is O(entities) with one string per entity, which is why the cap exists. Changing the order or the cap is not a path change.
+- **Changes chosen paths:** no. The goals are upstream's (`GoalNear` in a `GoalComposite`, revalidated each tick); (5) can move an offset goal by one block in rare cases.
+- **Decided by:** the entities come from the game, which has no `Entity` class; the rest follows from keeping the process pure.
+
 ### Upstream behaviour kept, found in the R2 reviews (reported, not fixed)
 
 - **U17. A head stuck in a block is mined with no `allowBreak` check.** `Movement.update` presses the left button with the best tool for whatever the crosshair is on when `isInWall`, whatever `allowBreak`,
@@ -622,6 +653,8 @@ What the mod feeds the engine (`mod/runtime.rs`), where it differs from upstream
 - **U19. Some numeric settings have no bound.** `allowOnlyExposedOresDistance` loops over `(2r+1)^3` cells per candidate and `mineMaxOreLocationsCount` can make the scan keep every match; a huge value set by the user costs time or
   memory. Kept as upstream.
 - **U20. A button can stay pressed for one extra tick** when `MineProcess.onTick` returns before `clearAllKeys` (quantity reached, or a failed path with nothing to blacklist) while a paused path exists. Read, not measured. Kept.
+- **U21. A `GoalComposite` of N goals costs N for every search node** (`isInGoal` and `heuristic` ask each goal). `follow entities` with `followTargetMaxDistance 0` in a world with hundreds of mobs multiplies the search time by that number. Upstream's shape, kept; changing the heuristic would change which paths are found.
+  The default `followTargetMaxDistance 45` bounds the count in practice. Read and reasoned, not measured in the game.
 
 ## Where upstream's two branches disagree
 

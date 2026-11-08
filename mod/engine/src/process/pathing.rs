@@ -7,6 +7,7 @@
 // and takes their results, and never waits for one. Each search has a generation number. A result whose generation is not the one in
 // progress is dropped, and a search that was cancelled never installs a path.
 use super::custom_goal::{CustomGoalProcess, PathingCommand, PathingCommandType};
+use super::follow::{FollowEnv, FollowFilter, FollowProcess};
 use super::get_to_block::GetToBlockProcess;
 use super::mine::{MineProcess, ScanJob, ScanKind, ScanResult};
 use super::ProcessInputs;
@@ -194,16 +195,21 @@ enum ProcId {
     CustomGoal,
     Mine,
     GetToBlock,
+    Follow,
 }
 
-const PROCESSES: [ProcId; 3] = [ProcId::CustomGoal, ProcId::Mine, ProcId::GetToBlock];
+const PROCESSES: [ProcId; 4] = [ProcId::CustomGoal, ProcId::Mine, ProcId::GetToBlock, ProcId::Follow];
 
-/// `PathingBehavior` with `PathingControlManager` and the processes it drives: `CustomGoalProcess`, `MineProcess`, `GetToBlockProcess`.
+/// `PathingBehavior` with `PathingControlManager` and the processes it drives: `CustomGoalProcess`, `MineProcess`, `GetToBlockProcess`, `FollowProcess`.
 pub struct Pathing<R: SearchRunner<S>, S> {
     runner: R,
     process: CustomGoalProcess,
     mine: MineProcess,
     get_to_block: GetToBlockProcess,
+    follow: FollowProcess,
+    /// The player's position and the follow settings of the tick in progress (or the last): `FollowProcess.isActive` reads them outside a tick.
+    player_position: [f64; 3],
+    follow_settings: crate::settings::FollowSettings,
     aim: AimProcessor,
     controls: Controls,
 
@@ -252,6 +258,9 @@ impl<R: SearchRunner<S>, S> Pathing<R, S> {
             process: CustomGoalProcess::new(),
             mine: MineProcess::new(),
             get_to_block: GetToBlockProcess::new(),
+            follow: FollowProcess::new(),
+            player_position: [0.0; 3],
+            follow_settings: crate::settings::FollowSettings::default(),
             aim: AimProcessor::new(0.5),
             controls: Controls::default(),
             current: None,
@@ -315,6 +324,38 @@ impl<R: SearchRunner<S>, S> Pathing<R, S> {
     pub fn mine(&mut self, quantity: i32, filter: BlockOptionalMetaLookup, cfg: &Config) {
         self.last_cancel = None;
         self.mine.mine(quantity, Some(filter), cfg);
+    }
+
+    /// `FollowProcess.follow`, what `/b follow` does once `FollowCommand` has made the filter: from now the follow process wants control whenever an entity passes it.
+    pub fn follow(&mut self, filter: FollowFilter) {
+        self.last_cancel = None;
+        self.follow.follow(filter);
+    }
+
+    /// `FollowProcess.pickup`: follow the dropped items of these kinds, walking into them.
+    pub fn pickup(&mut self, items: Vec<String>) {
+        self.last_cancel = None;
+        self.follow.pickup(items);
+    }
+
+    /// The follow process, for the HUD and the tests.
+    pub fn follow_process(&self) -> &FollowProcess {
+        &self.follow
+    }
+
+    /// Whether the follow process holds a filter, which is when the glue must list the entities of the world in [`ProcessInputs::entities`]: whether it is
+    /// active depends on them.
+    pub fn wants_entities(&self) -> bool {
+        self.follow.has_filter()
+    }
+
+    /// The entities the follow process follows now, by the last inputs and tick.
+    pub fn following(&self) -> Vec<&crate::process::EntityInfo> {
+        self.follow.following(&self.follow_env())
+    }
+
+    fn follow_env(&self) -> FollowEnv<'_> {
+        FollowEnv { inputs: &self.inputs, player: self.player_position, settings: &self.follow_settings }
     }
 
     /// `GetToBlockProcess.getToBlock`, what `/b goto <block>` does: from now the get-to-block process wants control. `feet` is where the player is.
@@ -429,7 +470,7 @@ impl<R: SearchRunner<S>, S> Pathing<R, S> {
 
     /// Whether a process wants control: the goal process holds a goal (`goto`, `goal`), or `mine` or `goto <block>` runs.
     pub fn is_active(&self) -> bool {
-        self.process.is_active() || self.mine.is_active() || self.get_to_block.is_active()
+        self.process.is_active() || self.mine.is_active() || self.get_to_block.is_active() || self.follow.is_active(&self.follow_env())
     }
 
     /// `PathingBehavior.getCurrent`:
@@ -512,6 +553,8 @@ impl<R: SearchRunner<S>, S> Pathing<R, S> {
     pub fn tick<W: WorldView>(&mut self, env: &TickEnv<'_, W>, snapshot: &mut dyn FnMut() -> S) -> TickOutput {
         let ctx = env.tables.ctx(env.world, env.border);
         let mut tk = Tk { env, ctx: &ctx, snapshot };
+        self.player_position = [env.player.x, env.player.y, env.player.z];
+        self.follow_settings = env.exec.follow.clone();
         // results that came in since the last tick: upstream's thread installs them under `pathPlanLock`, between ticks
         while let Some(outcome) = self.runner.poll() {
             self.install(outcome, &tk);
@@ -602,6 +645,7 @@ impl<R: SearchRunner<S>, S> Pathing<R, S> {
             ProcId::CustomGoal => self.process.on_lost_control(),
             ProcId::Mine => self.mine.on_lost_control(),
             ProcId::GetToBlock => self.get_to_block.on_lost_control(&mut self.controls),
+            ProcId::Follow => self.follow.on_lost_control(),
         }
     }
 
@@ -611,6 +655,7 @@ impl<R: SearchRunner<S>, S> Pathing<R, S> {
             ProcId::CustomGoal => self.process.is_active(),
             ProcId::Mine => self.mine.is_active(),
             ProcId::GetToBlock => self.get_to_block.is_active(),
+            ProcId::Follow => self.follow.is_active(&self.follow_env()),
         }
     }
 
@@ -622,6 +667,7 @@ impl<R: SearchRunner<S>, S> Pathing<R, S> {
             ProcId::CustomGoal => Some(self.process.on_tick(calc_failed, tk.env.player.feet(), self.expected_segment_start, &tk.ctx.cfg.goal_settings())),
             ProcId::Mine => self.mine.on_tick(calc_failed, safe, &env, &self.inputs, &mut self.controls),
             ProcId::GetToBlock => Some(self.get_to_block.on_tick(calc_failed, safe, &env, &self.inputs, &mut self.controls)),
+            ProcId::Follow => Some(self.follow.on_tick(&self.follow_env())),
         }
     }
 

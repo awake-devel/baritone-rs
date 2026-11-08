@@ -577,6 +577,96 @@ def mine_scenarios():
     return out
 
 
+# ---------------------------------------------------------------- follow (R2)
+
+def summon(kind, tag, x, z):
+    """A mob that stands still (NoAI), cannot be hurt, and carries a tag so that the scenario can move it with `tp`."""
+    return f'summon minecraft:{kind} {x} {SKY + 1} {z} {{NoAI:1b,Silent:1b,Invulnerable:1b,PersistenceRequired:1b,Tags:["{tag}"]}}'
+
+
+def mob_tp(tag, x, z):
+    return f"tp @e[tag={tag},limit=1] {x} {SKY + 1} {z}"
+
+
+def follow_area(x0, z0, length, width):
+    a = Area(x0, z0, x0 + length, z0 + width)
+    a.add(*floor(x0, z0, x0 + length, z0 + width))
+    # No snow layers on the floor during the run (they showed up once in a cold biome and count as changed blocks).
+    a.add("kill @e[tag=l3chosen]", "kill @e[tag=l3decoy]", "weather clear 1000000")
+    return a
+
+
+def f01_follow_route(chat, x0=8400, z0=3000):
+    """`b follow entity villager` after a NoAI villager that the scenario moves along a route in three steps of about 35 blocks (the last one
+    back past the player). Each time the player must be within followRadius (3) plus 1.5 blocks of the villager within 180 ticks and stay there, and
+    must never be farther from it than the longest jump plus that radius."""
+    a = follow_area(x0, z0, 120, 16)
+    start = (x0 + 20.5, z0 + 8.5)
+    steps = [(0, *start), (200, x0 + 55.5, z0 + 4.5), (400, x0 + 90.5, z0 + 12.5), (600, x0 + 62.5, z0 + 6.5)]
+    a.add(summon("villager", "l3chosen", *start))
+    events = [{"t": 10, "command": "b follow entity villager"}]
+    events += [{"t": t, "console": mob_tp("l3chosen", x, z)} for t, x, z in steps[1:]]
+    events += [{"t": 796, "command": "b stop"}, {"t": 797, "console": "kill @e[tag=l3chosen]"}]
+    return scenario(
+        f"f01_follow_route_chat{int(chat)}", chat, a, (x0 + 2.5, SKY + 1, z0 + 8.5),
+        with_chat(chat, events),
+        end=800, stop_when="never",
+        check={"kind": "follow", "radius": 3, "tolerance": 1.5, "target": steps, "decoy": None, "catch_up_ticks": 180, "hold_ticks": 20, "blocks_changed": 0, "no_health_loss": True},
+        watch=(x0, SKY - 2, z0, x0 + 120, SKY + 8, z0 + 16))
+
+
+def f02_follow_type_filter(chat, chosen="pig", decoy="villager", x0=8600, z0=3000):
+    """Two kinds of NoAI mobs: `b follow entity CHOSEN`. The decoy stands 10 blocks from the player, the chosen one 35 blocks away on the other
+    side. The player must go to the chosen one and ignore the decoy; at tick 260 the decoy is moved next to the player and the chosen one 32 blocks
+    away, and the player must leave the decoy and go to the chosen one again (never nearer than 25 blocks to the decoy at the end of a step)."""
+    if chosen == "villager":
+        x0 += 200
+    a = follow_area(x0, z0, 120, 16)
+    p = (x0 + 50.5, z0 + 8.5)
+    target = [(0, x0 + 85.5, z0 + 8.5), (260, x0 + 50.5, z0 + 4.5)]
+    dec = [(0, x0 + 40.5, z0 + 8.5), (260, "rel", 2, 0)]
+    a.add(summon(chosen, "l3chosen", *target[0][1:]), summon(decoy, "l3decoy", *dec[0][1:]))
+    events = [
+        {"t": 10, "command": f"b follow entity {chosen}"},
+        {"t": 260, "console": "execute at @p run tp @e[tag=l3decoy,limit=1] ~2 ~ ~"},
+        {"t": 261, "console": mob_tp("l3chosen", *target[1][1:])},
+        {"t": 556, "command": "b stop"},
+        {"t": 557, "console": "kill @e[tag=l3chosen]"},
+        {"t": 557, "console": "kill @e[tag=l3decoy]"},
+    ]
+    return scenario(
+        f"f02_follow_only_{chosen}_chat{int(chat)}", chat, a, (*p[:1], SKY + 1, p[1]),
+        with_chat(chat, events),
+        end=560, stop_when="never",
+        check={"kind": "follow", "radius": 3, "tolerance": 1.5, "target": [(0, *target[0][1:]), (261, *target[1][1:])], "decoy": dec, "decoy_min_distance": 25,
+               "catch_up_ticks": 200, "hold_ticks": 20, "blocks_changed": 0, "no_health_loss": True},
+        watch=(x0, SKY - 2, z0, x0 + 120, SKY + 8, z0 + 16))
+
+
+def f04_stop_follow(chat, x0=9200, z0=3000):
+    """`b stop` while the player runs after a villager 88 blocks away (tick 90); at tick 130 the villager is moved. Same checks as `b stop` for a
+    goto: keys released at once, no path afterwards, the player stands still and does not move again, nothing in the world changed."""
+    a = follow_area(x0, z0, 120, 8)
+    a.add(summon("villager", "l3chosen", x0 + 92.5, z0 + 4.5))
+    events = [{"t": 10, "command": "b follow entity villager"}, {"t": 90, "command": "b stop"}, {"t": 130, "console": mob_tp("l3chosen", x0 + 20.5, z0 + 2.5)},
+              {"t": 295, "console": "kill @e[tag=l3chosen]"}]
+    return scenario(
+        f"f04_stop_follow_chat{int(chat)}", chat, a, (x0 + 2.5, SKY + 1, z0 + 4.5),
+        with_chat(chat, events),
+        end=300, stop_when="never",
+        check={"kind": "stop", "stop_tick": 90, "blocks_changed": 0},
+        watch=(x0, SKY - 2, z0, x0 + 120, SKY + 8, z0 + 8))
+
+
+def follow_scenarios():
+    out = []
+    for chat in (False, True):
+        out += [f01_follow_route(chat), f02_follow_type_filter(chat, "pig", "villager"), f02_follow_type_filter(chat, "villager", "pig"), f04_stop_follow(chat)]
+    for sc in out:  # a follow filter outlives the scenario that set it: clear it before the next one
+        sc["after"] = ["b stop"] + sc["after"]
+    return out
+
+
 def all_scenarios(include_far=True):
     # The natural-terrain ones come first, at the spawn, before any world building moves the player away.
     out = [s05_natural_300(False)]
@@ -589,4 +679,5 @@ def all_scenarios(include_far=True):
     out += [s06_sealed(False), s06_sealed(True)]
     out += new_scenarios()
     out += mine_scenarios()
+    out += follow_scenarios()
     return out

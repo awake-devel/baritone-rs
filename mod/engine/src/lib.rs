@@ -29,6 +29,7 @@ pub mod goals;
 pub mod inventory;
 pub mod look;
 pub mod movement;
+pub mod mth;
 pub mod plan;
 pub mod pos;
 pub mod process;

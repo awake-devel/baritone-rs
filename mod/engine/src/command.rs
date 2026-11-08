@@ -6,17 +6,9 @@
 // strings and each datatype answers `Option`: upstream's `peekDatatypePostOrNull` is `None` when the datatype throws.
 use crate::blockmeta::{BlockIndex, BlockOptionalMeta, BlockOptionalMetaLookup};
 use crate::goals::Goal;
+use crate::mth::floor as mth_floor;
 use crate::pos::Pos;
-
-/// Minecraft's `Mth.floor(double)` is `(int) d`, one less when that rounded up. A Java `int` cast saturates, and so does `as`. The subtraction wraps.
-fn mth_floor(d: f64) -> i32 {
-    let i = d as i32;
-    if d < f64::from(i) {
-        i.wrapping_sub(1)
-    } else {
-        i
-    }
-}
+use crate::process::follow::{entity_string, FollowFilter};
 
 /// The pattern of `RelativeCoordinate` is `^(~?)([+-]?(?:\d+(?:\.\d*)?|\.\d+)([kKmM]?)|)$`. Answers whether the number part (group 2) is
 /// well formed, and what it is. The empty group is allowed and is 0.
@@ -176,6 +168,152 @@ pub fn complete_blocks(current: &str, index: &BlockIndex) -> Vec<String> {
     index.block_names().into_iter().filter(|n| n.to_lowercase().starts_with(bare)).map(|n| n.to_string()).collect()
 }
 
+// ---------------------------------------------------------------- follow
+
+/// A player of the world, as `NearbyPlayer` finds them (`world().players()`): the player itself is one of them, though it is never followed.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PlayerRef {
+    /// The entity id. The player itself has none the glue knows: it gives `u32::MAX`, which prints as -1 and is never in the entity list.
+    pub id: u32,
+    pub name: String,
+    pub local: bool,
+    pub position: [f64; 3],
+}
+
+/// What `FollowCommand.execute` did. Upstream sets the filter and then prints, and `follow player` of nobody sets an empty filter and then throws
+/// `NoEntitiesException`: so the filter and the error can both be there. `filter` is `None` when nothing was set.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FollowOutcome {
+    pub filter: Option<FollowFilter>,
+    /// The `logDirect` lines.
+    pub lines: Vec<String>,
+    pub error: Option<CommandError>,
+}
+
+/// `ResourceLocation.tryParse`, as the id it makes (`minecraft:` when no namespace is given), or `None` when a character is not allowed.
+fn parse_resource_location(text: &str) -> Option<String> {
+    let (namespace, path) = match text.find(':') {
+        Some(0) => ("minecraft", &text[1..]),
+        Some(i) => (&text[..i], &text[i + 1..]),
+        None => ("minecraft", text),
+    };
+    let ns_ok = namespace.chars().all(|c| c.is_ascii_digit() || c.is_ascii_lowercase() || matches!(c, '_' | '-' | '.'));
+    let path_ok = path.chars().all(|c| c.is_ascii_digit() || c.is_ascii_lowercase() || matches!(c, '_' | '-' | '.' | '/'));
+    (ns_ok && path_ok).then(|| format!("{namespace}:{path}"))
+}
+
+/// Upstream's `EntityClassById.get`: the entity type with that id, or `None` when the text is not an id or no type has it.
+fn entity_type_by_id(text: &str, types: &[String]) -> Option<String> {
+    let id = parse_resource_location(text)?;
+    types.contains(&id).then_some(id)
+}
+
+/// Upstream's `NearbyPlayer.get`: the player with that name, ignoring case.
+fn player_by_name<'a>(name: &str, players: &'a [PlayerRef]) -> Option<&'a PlayerRef> {
+    let name = name.to_lowercase();
+    players.iter().find(|p| p.name.to_lowercase() == name)
+}
+
+/// `CommandInvalidTypeException`'s text for argument `index` (0-based, counted from the first word after `follow`).
+fn invalid_type(index: usize, expected: &str) -> CommandError {
+    format!("Error at argument #{}: Expected {expected}", index + 1)
+}
+
+/// `FollowCommand.execute`. `players` are the players of the world and `entity_types` the registry ids of the entity types.
+pub fn follow_command(args: &[&str], players: &[PlayerRef], entity_types: &[String]) -> FollowOutcome {
+    let fail = |error: CommandError| FollowOutcome { filter: None, lines: vec![], error: Some(error) };
+    if args.is_empty() {
+        return fail("Not enough arguments (expected at least 1)".to_string());
+    }
+    if args.len() == 1 {
+        let (filter, name) = match args[0].to_lowercase().as_str() {
+            "entities" => (FollowFilter::Living, "entities"),
+            "players" => (FollowFilter::Players, "players"),
+            _ => return fail(invalid_type(0, "FollowGroup")),
+        };
+        return FollowOutcome { filter: Some(filter), lines: vec![format!("Following all {name}")], error: None };
+    }
+    let is_entity = match args[0].to_lowercase().as_str() {
+        "entity" => true,
+        "player" => false,
+        _ => return fail(invalid_type(0, "FollowList")),
+    };
+    let mut classes: Vec<String> = vec![];
+    let mut found: Vec<&PlayerRef> = vec![];
+    for (i, word) in args.iter().enumerate().skip(1) {
+        if is_entity {
+            match entity_type_by_id(word, entity_types) {
+                Some(t) => classes.push(t),
+                // the argument is consumed when the datatype throws: the exception names the next one, if there is one
+                None => return fail(invalid_type(if i + 1 < args.len() { i + 1 } else { i }, "EntityClassById")),
+            }
+        } else if let Some(p) = player_by_name(word, players) {
+            found.push(p);
+        }
+    }
+    if is_entity {
+        let mut lines = vec!["Following these types of entities:".to_string()];
+        lines.extend(classes.iter().cloned());
+        return FollowOutcome { filter: Some(FollowFilter::Types(classes)), lines, error: None };
+    }
+    let filter = FollowFilter::Entities(found.iter().map(|p| p.id).collect());
+    if found.is_empty() {
+        return FollowOutcome { filter: Some(filter), lines: vec![], error: Some("No valid entities in range!".to_string()) };
+    }
+    let mut lines = vec!["Following these entities:".to_string()];
+    lines.extend(found.iter().map(|p| entity_string(if p.local { "LocalPlayer" } else { "RemotePlayer" }, &p.name, p.id as i32, p.position)));
+    FollowOutcome { filter: Some(filter), lines, error: None }
+}
+
+/// Upstream's `TabCompleteHelper.filterPrefixNamespaced`: the ids that start with the text, or whose path does when no namespace is typed; an explicit namespace is
+/// matched as given. Text that is not an id gives nothing.
+fn filter_prefix_namespaced(prefix: &str, ids: impl Iterator<Item = String>) -> Vec<String> {
+    let Some(loc) = parse_resource_location(prefix) else {
+        return vec![];
+    };
+    if prefix.contains(':') {
+        let want = loc.to_lowercase();
+        return ids.filter(|i| i.to_lowercase().starts_with(&want)).collect();
+    }
+    let search = prefix.to_lowercase();
+    ids.filter(|id| {
+        let c = id.to_lowercase();
+        c.starts_with(&search) || c.split_once(':').is_some_and(|(_, path)| path.starts_with(&search))
+    })
+    .collect()
+}
+
+/// Upstream's `FollowCommand.tabComplete`: `before` are the words after `follow` that are done, `current` the one being typed. With one word: the groups and the
+/// lists. Then the entity types, or the names of the players. A word that is done and names nothing gives no completion at all.
+///
+/// Upstream completes the types with `Object::toString` of each `EntityType`, which is its description id, not the id its filter wants (docs/deviations.md D40).
+pub fn complete_follow(before: &[&str], current: &str, players: &[PlayerRef], entity_types: &[String]) -> Vec<String> {
+    let cur = current.to_lowercase();
+    let Some((list, done)) = before.split_first() else {
+        return ["entities", "players", "entity", "player"].iter().filter(|w| w.starts_with(&cur)).map(|w| w.to_string()).collect();
+    };
+    let entity = match list.to_lowercase().as_str() {
+        "entity" => true,
+        "player" => false,
+        _ => return vec![],
+    };
+    for word in done {
+        let resolves = if entity { entity_type_by_id(word, entity_types).is_some() } else { player_by_name(word, players).is_some() };
+        if !resolves {
+            return vec![];
+        }
+    }
+    if entity {
+        let mut v = filter_prefix_namespaced(current, entity_types.iter().cloned());
+        v.sort_by_key(|s| s.to_lowercase());
+        v
+    } else {
+        let mut v: Vec<String> = players.iter().map(|p| p.name.clone()).filter(|n| n.to_lowercase().starts_with(&cur)).collect();
+        v.sort_by_key(|s| s.to_lowercase());
+        v
+    }
+}
+
 // ---------------------------------------------------------------- the other commands
 
 /// What a command refuses with: upstream's `CommandException` text, without the position of the argument.
@@ -301,7 +439,8 @@ pub fn eta_command(args: &[&str], in_control: bool, segment: Option<f64>, goal: 
 }
 
 /// The commands of this port, with the names they answer to and the short description `HelpCommand` lists.
-pub const COMMANDS: &[(&[&str], &str)] = &[(&["goal"], "Set or clear the goal"), (&["goto"], "Go to a coordinate or block"), (&["mine"], "Mine some blocks"), (&["path"], "Start heading towards the goal"), (&["cancel", "stop"], "Cancel what Baritone is currently doing"), (&["eta"], "View the current ETA"), (&["set", "setting", "settings"], "View or change settings")];
+pub const COMMANDS: &[(&[&str], &str)] =
+    &[(&["goal"], "Set or clear the goal"), (&["goto"], "Go to a coordinate or block"), (&["mine"], "Mine some blocks"), (&["follow"], "Follow entity things"), (&["path"], "Start heading towards the goal"), (&["cancel", "stop"], "Cancel what Baritone is currently doing"), (&["eta"], "View the current ETA"), (&["set", "setting", "settings"], "View or change settings")];
 
 /// Every name a command answers to, in the order of [`COMMANDS`].
 pub fn command_names() -> Vec<&'static str> {
@@ -545,5 +684,83 @@ mod tests {
         assert_eq!(complete_blocks("minecraft:oak", &idx), vec!["oak_log"]);
         assert!(complete_blocks("zzz", &idx).is_empty());
         assert!(complete_blocks("", &idx).len() >= 5);
+    }
+
+    fn players() -> Vec<PlayerRef> {
+        vec![PlayerRef { id: 11, name: "Alice".to_string(), local: false, position: [1.0, 64.0, 2.0] }, PlayerRef { id: 12, name: "bob_2".to_string(), local: false, position: [0.0, 70.5, -3.0] }, PlayerRef { id: u32::MAX, name: "Me".to_string(), local: true, position: [5.0, 64.0, 5.0] }]
+    }
+
+    fn types() -> Vec<String> {
+        ["minecraft:pig", "minecraft:cow", "minecraft:player", "minecraft:zombie", "minecraft:zombie_villager", "mymod:pig"].iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn follow_groups_set_a_filter_and_say_so() {
+        let o = follow_command(&["entities"], &players(), &types());
+        assert_eq!((o.filter, o.lines, o.error), (Some(FollowFilter::Living), vec!["Following all entities".to_string()], None));
+        let o = follow_command(&["PLAYERS"], &players(), &types());
+        assert_eq!((o.filter, o.lines), (Some(FollowFilter::Players), vec!["Following all players".to_string()]));
+    }
+
+    #[test]
+    fn follow_entity_takes_types_by_id_with_or_without_the_namespace() {
+        let o = follow_command(&["entity", "pig", "minecraft:zombie", "mymod:pig"], &players(), &types());
+        let want = vec!["minecraft:pig".to_string(), "minecraft:zombie".to_string(), "mymod:pig".to_string()];
+        assert_eq!(o.filter, Some(FollowFilter::Types(want.clone())));
+        assert_eq!(o.lines[0], "Following these types of entities:");
+        assert_eq!(o.lines[1..], want[..]);
+        assert_eq!(o.error, None);
+    }
+
+    #[test]
+    fn follow_player_finds_names_ignoring_case_and_complains_about_nobody() {
+        let o = follow_command(&["player", "alice", "ME", "nobody"], &players(), &types());
+        assert_eq!(o.filter, Some(FollowFilter::Entities(vec![11, u32::MAX])));
+        assert_eq!(o.lines[0], "Following these entities:");
+        assert_eq!(o.lines[1], "RemotePlayer['Alice'/11, l='ClientLevel', x=1.00, y=64.00, z=2.00]");
+        assert_eq!(o.lines[2], "LocalPlayer['Me'/-1, l='ClientLevel', x=5.00, y=64.00, z=5.00]", "the player's own id is not known here: -1");
+        assert_eq!(o.error, None);
+        // upstream sets the filter first and throws after: an empty filter is in place with the error
+        let o = follow_command(&["player", "nobody"], &players(), &types());
+        assert_eq!(o.filter, Some(FollowFilter::Entities(vec![])));
+        assert_eq!(o.error.as_deref(), Some("No valid entities in range!"));
+    }
+
+    #[test]
+    fn follow_errors_are_upstream_s_texts() {
+        let f = |a: &[&str]| follow_command(a, &players(), &types());
+        assert_eq!(f(&[]).error.as_deref(), Some("Not enough arguments (expected at least 1)"));
+        assert_eq!(f(&["pig"]).error.as_deref(), Some("Error at argument #1: Expected FollowGroup"));
+        assert_eq!(f(&["entity"]).error.as_deref(), Some("Error at argument #1: Expected FollowGroup"));
+        assert_eq!(f(&["pigs", "cow"]).error.as_deref(), Some("Error at argument #1: Expected FollowList"));
+        // the argument that fails is consumed, so the exception names the next one when there is one
+        assert_eq!(f(&["entity", "nothing"]).error.as_deref(), Some("Error at argument #2: Expected EntityClassById"));
+        assert_eq!(f(&["entity", "nothing", "pig"]).error.as_deref(), Some("Error at argument #3: Expected EntityClassById"));
+        assert_eq!(f(&["entity", "pig", "Pig"]).error.as_deref(), Some("Error at argument #3: Expected EntityClassById"));
+        assert_eq!(f(&["entity", "a:b:c", "pig"]).error.as_deref(), Some("Error at argument #3: Expected EntityClassById"));
+        assert_eq!(f(&["entity", "nothing"]).filter, None, "a failed command sets nothing");
+    }
+
+    #[test]
+    fn follow_completes_the_groups_the_types_and_the_players() {
+        let (p, t) = (players(), types());
+        assert_eq!(complete_follow(&[], "", &p, &t), ["entities", "players", "entity", "player"]);
+        assert_eq!(complete_follow(&[], "PL", &p, &t), ["players", "player"]);
+        assert_eq!(complete_follow(&[], "entity", &p, &t), ["entity"]);
+        // types: by id, or by the path when no namespace is typed; sorted
+        assert_eq!(complete_follow(&["entity"], "zomb", &p, &t), ["minecraft:zombie", "minecraft:zombie_villager"]);
+        assert_eq!(complete_follow(&["ENTITY"], "pi", &p, &t), ["minecraft:pig", "mymod:pig"]);
+        assert_eq!(complete_follow(&["entity"], "minecraft:p", &p, &t), ["minecraft:pig", "minecraft:player"]);
+        assert_eq!(complete_follow(&["entity"], "mymod:", &p, &t), ["mymod:pig"]);
+        assert_eq!(complete_follow(&["entity"], "Bad Id", &p, &t), Vec::<String>::new());
+        // players: names, the player itself included
+        assert_eq!(complete_follow(&["player"], "", &p, &t), ["Alice", "bob_2", "Me"]);
+        assert_eq!(complete_follow(&["player"], "B", &p, &t), ["bob_2"]);
+        // earlier words must resolve, or nothing is offered
+        assert_eq!(complete_follow(&["player", "alice"], "b", &p, &t), ["bob_2"]);
+        assert!(complete_follow(&["player", "nobody"], "", &p, &t).is_empty());
+        assert!(complete_follow(&["entity", "pig"], "co", &p, &t).contains(&"minecraft:cow".to_string()));
+        assert!(complete_follow(&["entity", "nothing"], "co", &p, &t).is_empty());
+        assert!(complete_follow(&["entities"], "", &p, &t).is_empty(), "a group takes no more words");
     }
 }
