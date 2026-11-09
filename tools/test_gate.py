@@ -1,10 +1,14 @@
 # baritone-rs test tool. LGPL-3.0-or-later, see LICENSE.
+import contextlib
+import io
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import check_public_tree as cpt  # noqa: E402
@@ -13,6 +17,18 @@ import run_compare as rc  # noqa: E402
 
 # Private-looking strings are built from pieces so that this file passes its own check.
 HOME = "/" + "home/someone/x"
+# The test repositories must not depend on the developer's git configuration (signing, hooks, templates).
+GIT_ENV = dict(os.environ, GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_SYSTEM=os.devnull,
+               GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@users.noreply.github.com",
+               GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@users.noreply.github.com")
+
+
+def quiet(fn, *args):
+    """Runs a gate step without its progress lines in the test output."""
+    with contextlib.redirect_stdout(io.StringIO()):
+        return fn(*args)
+
+
 def sample_lines(**override):
     """A comparison output with a line for every family; `override` replaces a family's line with the given text."""
     out = []
@@ -89,8 +105,9 @@ class ParseCompare(unittest.TestCase):
     def test_stale_report_deleted_on_failure(self):
         with tempfile.TemporaryDirectory() as d:
             report = os.path.join(d, "r.json")
-            open(report, "w").write("{}")
-            with self.assertRaises(Exception):
+            with open(report, "w") as f:
+                f.write("{}")
+            with self.assertRaises(rc.Fail):
                 rc.execute(os.path.join(d, "no-such-upstream"), d, d, 1, "x", report)
             self.assertFalse(os.path.exists(report))
 
@@ -131,6 +148,11 @@ class Mutation(unittest.TestCase):
         self.assertTrue(ok)
         self.assertIn("now caught", msgs[0])
 
+    def test_listed_but_unknown_is_a_note_only(self):
+        ok, msgs = gate.judge_mutation(["a: one"], [], [], {"z: gone": "hole"})
+        self.assertTrue(ok)
+        self.assertIn("no such mutation", msgs[0])
+
     def test_known_missed_format(self):
         k = gate.parse_known_missed("# c\n\nx: y | no effect: because\n")
         self.assertEqual(k, {"x: y": "no effect: because"})
@@ -140,12 +162,15 @@ class Mutation(unittest.TestCase):
             gate.parse_known_missed("x: y | \n")
 
     def test_shipped_known_missed_parses_and_is_listed_in_mutate(self):
+        for path in (gate.KNOWN_MISSED, gate.SEARCH_KNOWN_MISSED):
+            with open(path, encoding="utf-8") as f:
+                listed = gate.parse_known_missed(f.read())
+            with open(os.path.join(os.path.dirname(path), "mutate.py"), encoding="utf-8") as f:
+                src = f.read()
+            for name in listed:
+                self.assertIn(f'"{name}"),', src, path)
         with open(gate.KNOWN_MISSED, encoding="utf-8") as f:
             known = gate.parse_known_missed(f.read())
-        with open(os.path.join(gate.CRATE, "mutate.py"), encoding="utf-8") as f:
-            src = f.read()
-        for name in known:
-            self.assertIn(f'"{name}"),', src)
         self.assertNotIn("break: wrong tool table", known)
         self.assertNotIn("solid: trapdoor", known)
 
@@ -176,10 +201,28 @@ class CurrentReport(unittest.TestCase):
         self.assertFalse(gate.comparison_current(None, self.src, "c1", 5, "m1"))
 
 
+class CurrentSearchReport(unittest.TestCase):
+    def setUp(self):
+        self.src = {"tools/search-compare/src/main.rs": "a"}
+        self.rep = {"sources": dict(self.src, golden="g"), "upstream_commit": "c1", "worlds": 4, "cases_per_world": 9, "gate": {"mutation_inputs": "m1"}}
+
+    def test_same(self):
+        self.assertTrue(gate.search_current(self.rep, self.src, "c1", 4, 9, "m1"))
+
+    def test_any_changed_input(self):
+        for args in (({}, "c1", 4, 9, "m1"), (self.src, "c2", 4, 9, "m1"), (self.src, "c1", 5, 9, "m1"), (self.src, "c1", 4, 8, "m1"), (self.src, "c1", 4, 9, "m2")):
+            self.assertFalse(gate.search_current(self.rep, *args), args)
+
+    def test_no_report_or_no_gate_record(self):
+        self.assertFalse(gate.search_current(None, self.src, "c1", 4, 9, "m1"))
+        self.assertFalse(gate.search_current({k: v for k, v in self.rep.items() if k != "gate"}, self.src, "c1", 4, 9, "m1"))
+
+
 class FailedMutationIsNotForgotten(unittest.TestCase):
     """Regression: a failed mutation step used to leave the report behind, and the next run said UP TO DATE."""
 
-    def run_gate(self, mutation_ok):
+    def run_gate(self, mutation_ok, results=None, stale=True):
+        """Runs the comparison step on a fake comparison. `results` are the three runs' results, the same by default."""
         class A:
             quick = False
             no_mutation = False
@@ -188,21 +231,24 @@ class FailedMutationIsNotForgotten(unittest.TestCase):
             grids = "5"
             branch = "b"
 
-        report = {"upstream_commit": "c1", "grids": 5, "sources": {}, "results": {"traverse": {"evals": 1}, "descend": {"evals": 1}}}
         d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d)
         path = os.path.join(d, "r.json")
-        saved = (rc.resolve, rc.report_path_for, rc.upstream_commit, rc.source_hashes, rc.execute)
-        rc.resolve = lambda a: ("u", "j", d, 5, "b")
-        rc.report_path_for = lambda b: path
-        rc.upstream_commit = lambda u: "c1"
-        rc.source_hashes = lambda root=None: {}
-        rc.execute = lambda *a: json.loads(json.dumps(report))
-        try:
+        if stale:  # an earlier run's report, which no longer matches the inputs
+            with open(path, "w") as f:
+                f.write("{}")
+        runs = iter(results or [{"traverse": {"evals": 1}}] * 3)
+
+        def execute(upstream, jdk, scratch, grids, branch, report_path, port=None):
+            if os.path.exists(report_path):  # as the real one does
+                os.remove(report_path)
+            return {"upstream_commit": "c1", "grids": 5, "sources": {}, "results": next(runs)}
+
+        with mock.patch.multiple(rc, resolve=lambda a: ("u", "j", d, 5, "b"), report_path_for=lambda b: path,
+                                 upstream_commit=lambda u: "c1", source_hashes=lambda root=None: {}, execute=execute):
             g = gate.Gate(A())
             g.mutation = lambda golden: (g.record("mutation", gate.PASS if mutation_ok else gate.FAIL) or mutation_ok)
-            g.comparison()
-        finally:
-            rc.resolve, rc.report_path_for, rc.upstream_commit, rc.source_hashes, rc.execute = saved
+            quiet(g.comparison)
         return g, path
 
     def test_failed_mutation_leaves_no_report(self):
@@ -217,6 +263,45 @@ class FailedMutationIsNotForgotten(unittest.TestCase):
         with open(path) as f:
             self.assertIn("mutation_inputs", json.load(f)["gate"])
 
+    def test_differing_repeat_run_fails_and_leaves_no_report(self):
+        """Regression: this path removed a report that was already gone, and the gate died without a result."""
+        for stale in (True, False):
+            g, path = self.run_gate(True, [{"traverse": {"evals": 1}}, {"traverse": {"evals": 1}}, {"traverse": {"evals": 2}}], stale)
+            self.assertEqual([s["status"] for s in g.steps], [gate.PASS, gate.FAIL])
+            self.assertIn("run 3", g.steps[1]["detail"])
+            self.assertFalse(os.path.exists(path))
+
+
+class ExitStatus(unittest.TestCase):
+    """0 passed, 1 failed, 2 incomplete; the gate stops at the first failure and always writes its result."""
+
+    def run_gate(self, statuses):
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d)
+        result = os.path.join(d, "gate-result.json")
+        g = gate.Gate(None)
+        names = ("public_tree", "cargo", "python_tests", "ledger", "facts", "rules_26_3", "comparison", "search")
+        for name, status in zip(names, statuses, strict=True):
+            setattr(g, name, lambda name=name, status=status: g.record(name, status))
+        with mock.patch.object(gate, "RESULT", result):
+            code = quiet(g.run)
+        with open(result) as f:
+            return code, json.load(f)
+
+    def test_passed(self):
+        code, res = self.run_gate([gate.PASS] * 7 + [gate.CURRENT])
+        self.assertEqual((code, res["status"], res["skipped"]), (0, "passed", []))
+
+    def test_skipped_is_never_a_pass(self):
+        code, res = self.run_gate([gate.PASS, gate.SKIPPED] + [gate.PASS] * 6)
+        self.assertEqual((code, res["status"], res["skipped"]), (2, "incomplete", ["cargo"]))
+        self.assertEqual(len(res["steps"]), 8)
+
+    def test_stops_at_the_first_failure(self):
+        code, res = self.run_gate([gate.SKIPPED, gate.PASS, gate.FAIL] + [gate.PASS] * 5)
+        self.assertEqual((code, res["status"]), (1, "failed"))
+        self.assertEqual([s["step"] for s in res["steps"]], ["public_tree", "cargo", "python_tests"])
+
 
 class GateSkips(unittest.TestCase):
     def test_comparison_without_inputs_is_skipped(self):
@@ -229,7 +314,7 @@ class GateSkips(unittest.TestCase):
         saved = {k: os.environ.pop(k) for k in list(os.environ) if k.startswith("BARITONE_")}
         try:
             g = gate.Gate(A())
-            g.comparison()
+            quiet(g.comparison)
         finally:
             os.environ.update(saved)
         self.assertEqual([s["status"] for s in g.steps], [gate.SKIPPED] * 3)
@@ -240,52 +325,43 @@ class GateSkips(unittest.TestCase):
             quick = True
 
         g = gate.Gate(A())
-        g.comparison()
+        quiet(g.comparison)
         self.assertEqual([s["status"] for s in g.steps], [gate.SKIPPED] * 3)
 
 
-def make_repo(files):
-    d = tempfile.mkdtemp()
-    subprocess.run(["git", "init", "-q", d], check=True)
-    for name, data in files.items():
-        p = os.path.join(d, name)
-        os.makedirs(os.path.dirname(p), exist_ok=True)
-        with open(p, "wb") as f:
-            f.write(data)
-    subprocess.run(["git", "-C", d, "add", "-A"], check=True)
-    env = dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@users.noreply.github.com",
-               GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@users.noreply.github.com")
-    subprocess.run(["git", "-C", d, "commit", "-q", "-m", "init"], check=True, env=env)
-    return d
+def git(d, *args):
+    subprocess.run(["git", "-C", d, *args], check=True, env=GIT_ENV)
 
 
 class PublicTree(unittest.TestCase):
-    def run_check(self, files, deny=None, history=False):
-        d = make_repo(files)
-        env_old = os.environ.pop(cpt.ENV_DENY, None)
-        tmp = None
-        try:
-            if deny is not None:
-                fd, tmp = tempfile.mkstemp()
-                os.write(fd, deny.encode())
-                os.close(fd)
-                os.environ[cpt.ENV_DENY] = tmp
-            findings, _ = cpt.check_tree(d, cpt.load_denylist(os.environ.get(cpt.ENV_DENY)))
-            if history:
-                findings += cpt.check_history(d, cpt.load_denylist(os.environ.get(cpt.ENV_DENY)))[0]
-            return findings
-        finally:
-            os.environ.pop(cpt.ENV_DENY, None)
-            if env_old:
-                os.environ[cpt.ENV_DENY] = env_old
-            if tmp:
-                os.remove(tmp)
+    def make_repo(self, files):
+        d = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, d)
+        git(d, "init", "-q")
+        for name, data in files.items():
+            p = os.path.join(d, name)
+            os.makedirs(os.path.dirname(p), exist_ok=True)
+            with open(p, "wb") as f:
+                f.write(data)
+        git(d, "add", "-A")
+        git(d, "commit", "-q", "-m", "init")
+        return d
+
+    def run_check(self, files, deny=None):
+        """The findings on a repository of `files`; `deny` is the text of a deny list file."""
+        d = self.make_repo(files)
+        if deny is not None:
+            path = os.path.join(d, ".git", "denylist.txt")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(deny)
+            deny = cpt.load_denylist(path)
+        return cpt.check_tree(d, deny)[0]
 
     def test_clean(self):
         self.assertEqual(self.run_check({"a.md": b"hello\n", "tools/T.java": b"class T {}"}), [])
 
     def test_untracked_files_are_checked(self):
-        d = make_repo({"a.md": b"hello\n"})
+        d = self.make_repo({"a.md": b"hello\n"})
         for name, data in (("fake.jar", b"PK"), ("tools/new.py", ("x = '" + HOME + "'\n").encode())):
             p = os.path.join(d, name)
             os.makedirs(os.path.dirname(p), exist_ok=True)
@@ -318,9 +394,9 @@ class PublicTree(unittest.TestCase):
         self.assertIn("outside tools/", f[0])
 
     def test_private_paths(self):
-        for text in (HOME, "/" + "Users/x", "/" + "tmp/claude-1", "/" + "run/user/1000"):
-            f = self.run_check({"n.md": text.encode()})
-            self.assertEqual(len(f), 1, text)
+        texts = (HOME, "/" + "Users/x", "/" + "tmp/claude-1", "/" + "run/user/1000")
+        f = self.run_check({f"n{i}.md": t.encode() for i, t in enumerate(texts)})
+        self.assertEqual([m.split(":")[0] for m in f], [f"n{i}.md" for i in range(len(texts))], f)
 
     def test_email(self):
         self.assertEqual(len(self.run_check({"n.md": ("mail me: someone" + "@" + "private.example.net").encode()})), 1)
@@ -337,19 +413,15 @@ class PublicTree(unittest.TestCase):
         self.assertIsNone(cpt.load_denylist(None))
 
     def test_history_finds_removed_file(self):
-        d = make_repo({"n.md": HOME.encode()})
-        env = dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@users.noreply.github.com",
-                   GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@users.noreply.github.com")
-        subprocess.run(["git", "-C", d, "rm", "-q", "n.md"], check=True)
-        subprocess.run(["git", "-C", d, "commit", "-q", "-m", "rm"], check=True, env=env)
+        d = self.make_repo({"n.md": HOME.encode()})
+        git(d, "rm", "-q", "n.md")
+        git(d, "commit", "-q", "-m", "rm")
         self.assertEqual(cpt.check_tree(d, None)[0], [])
         self.assertEqual(len(cpt.check_history(d, None)[0]), 1)
 
     def test_history_commit_message(self):
-        d = make_repo({"a.md": b"x"})
-        env = dict(os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@users.noreply.github.com",
-                   GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@users.noreply.github.com")
-        subprocess.run(["git", "-C", d, "commit", "-q", "--allow-empty", "-m", "worked in " + HOME], check=True, env=env)
+        d = self.make_repo({"a.md": b"x"})
+        git(d, "commit", "-q", "--allow-empty", "-m", "worked in " + HOME)
         self.assertEqual(len(cpt.check_history(d, None)[0]), 1)
 
 

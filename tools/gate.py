@@ -318,19 +318,17 @@ class Gate:
             self.record("comparison", FAIL, "\n" + str(e))
             return
         # The report is written only after the repeat runs and the mutation step pass. A report on disk
-        # means all three passed, so a later run may call them UP TO DATE.
+        # means all three passed, so a later run may call them UP TO DATE. execute() deleted the earlier one.
         self.record("comparison", PASS, f"{branch}: " + ", ".join(f"{f} {r['evals']} evals" for f, r in first["results"].items()))
         with tempfile.TemporaryDirectory() as tmp:
             for i in (2, 3):
                 try:
                     again = rc.execute(upstream, jdk, scratch, grids, branch, os.path.join(tmp, f"run{i}.json"))
                 except rc.Fail as e:
-                    os.remove(path)
                     self.record("repeat runs", FAIL, f"run {i}: {e}")
                     return
                 if again != first:
-                    os.remove(path)
-                    self.record("repeat runs", FAIL, f"run {i} differs from run 1 (the report was deleted)")
+                    self.record("repeat runs", FAIL, f"run {i} differs from run 1 (no report is written)")
                     return
         self.record("repeat runs", PASS, "3 runs, identical reports")
         # The last run left the golden file in scratch; mutation uses it.
