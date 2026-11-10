@@ -337,6 +337,14 @@ pub fn goal_to_string(goal: &Goal, censor: bool) -> String {
         // the anonymous `GoalXZ` of the explore process prints as its superclass does
         Goal::Xz { x, z } | Goal::XzMaintainY { x, z, .. } => format!("GoalXZ{{x={},z={}}}", c(*x), c(*z)),
         Goal::YLevel { level } => format!("GoalYLevel{{y={}}}", c(*level)),
+        // `BuilderProcess.JankyGoalComposite.toString`
+        Goal::Janky { primary, fallback } => format!("JankyComposite Primary: {} Fallback: {}", goal_to_string(primary, censor), goal_to_string(fallback, censor)),
+        // `BuilderProcess.GoalBreak.toString`, `GoalAdjacent.toString`, `GoalPlace.toString`
+        Goal::Break { x, y, z } => format!("GoalBreak{{x={},y={},z={}}}", c(*x), c(*y), c(*z)),
+        Goal::Adjacent { x, y, z, .. } => format!("GoalAdjacent{{x={},y={},z={}}}", c(*x), c(*y), c(*z)),
+        Goal::Place { x, y, z } => format!("GoalPlace{{x={},y={},z={}}}", c(*x), c(*y), c(*z)),
+        // the anonymous `GoalGetToBlock` of `breakGoal` prints as its superclass does
+        Goal::BreakFromAbove { x, y, z } => format!("GoalGetToBlock{{x={},y={},z={}}}", c(*x), c(*y), c(*z)),
         other => format!("{other:?}"),
     }
 }
@@ -422,10 +430,11 @@ pub fn explore_command(args: &[&str], feet: Pos) -> Result<ExploreRequest, Comma
         return Err("Not enough arguments (expected at least 2)".to_string());
     }
     require_max(args, 2)?;
-    // `RelativeGoalXZ` fails on the first coordinate that is not one: the error names that argument
+    // `RelativeGoalXZ` fails on the first coordinate that is not one. That argument is consumed by then, and `getDatatypePost` names the
+    // next argument if there is one (`hasAny() ? peek() : consumed()`), else the failing one (D50)
     for (i, a) in args.iter().enumerate() {
         if relative_coordinate(a, 0.0).is_none() {
-            return Err(invalid_type(i, "RelativeGoalXZ"));
+            return Err(invalid_type(if i + 1 < args.len() { i + 1 } else { i }, "RelativeGoalXZ"));
         }
     }
     match relative_goal_xz(args, feet) {
@@ -447,6 +456,101 @@ pub fn explore_filter_command(args: &[&str]) -> Result<(String, bool), CommandEr
         Some(_) => return Err(invalid_type(1, "either \"invert\" or nothing")),
     };
     Ok(((*path).to_string(), invert))
+}
+
+// ---------------------------------------------------------------- the builder commands
+
+/// What `build` asks for: the file as typed (`RelativeFile` resolves it against the schematics folder, which is the glue's) and the origin.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BuildRequest {
+    pub file: String,
+    pub origin: Pos,
+}
+
+/// `BuildCommand.execute`: the arguments.
+/// `RelativeBlockPos.apply`: three coordinates, `~` for the feet.
+/// `BuildCommand.execute`, the arguments: a file, then nothing or three coordinates (`RelativeBlockPos`, `~` for the feet, floored as `Mth.floor` does). Upstream checks the
+/// file before it reads the coordinates, so that `build nosuch x` says "Cannot find" first; here the coordinates are read first (docs/deviations.md D48).
+pub fn build_command(args: &[&str], feet: Pos) -> Result<BuildRequest, CommandError> {
+    let Some(file) = args.first() else {
+        return Err("Not enough arguments (expected at least 1)".to_string());
+    };
+    let coords = &args[1..];
+    let origin = if coords.is_empty() {
+        feet
+    } else {
+        require_max(coords, 3)?;
+        let mut v = [0i32; 3];
+        let base = [feet.x, feet.y, feet.z];
+        for (j, slot) in v.iter_mut().enumerate() {
+            let arg = coords.get(j).ok_or_else(|| invalid_type(coords.len(), "RelativeBlockPos"))?;
+            // the failing coordinate is argument `j + 1` (the file is 0); `RelativeCoordinate` has consumed it, and `getDatatypePost` names the
+            // next argument if there is one (`hasAny() ? peek() : consumed()`), else the failing one (D50)
+            let c = relative_coordinate(arg, f64::from(base[j])).ok_or_else(|| invalid_type(if j + 2 < args.len() { j + 2 } else { j + 1 }, "RelativeBlockPos"))?;
+            *slot = mth_floor(c);
+        }
+        Pos::new(v[0], v[1], v[2])
+    };
+    Ok(BuildRequest { file: (*file).to_string(), origin })
+}
+
+/// `ExecutionControlCommands`' `resume`, the builder half: `requireMax(0)`, then "Not paused" unless the builder is paused. `Ok` is the line it prints.
+pub fn resume_command(args: &[&str], builder_paused: bool) -> Result<&'static str, CommandError> {
+    require_max(args, 0)?;
+    if !builder_paused {
+        return Err("Not paused".to_string());
+    }
+    Ok("Resumed")
+}
+
+/// `java.nio.file.Path.relativize` for two absolute, normalised paths: the way from `base` to `target`.
+fn relativize(base: &std::path::Path, target: &std::path::Path) -> std::path::PathBuf {
+    let b: Vec<_> = base.components().collect();
+    let t: Vec<_> = target.components().collect();
+    let common = b.iter().zip(&t).take_while(|(x, y)| x == y).count();
+    let mut out = std::path::PathBuf::new();
+    for _ in common..b.len() {
+        out.push("..");
+    }
+    for c in &t[common..] {
+        out.push(c.as_os_str());
+    }
+    out
+}
+
+/// A folder as the glue lists it: the canonical folder, and its entries as (name, is a folder).
+pub type Listing = (std::path::PathBuf, Vec<(String, bool)>);
+
+/// `BuildCommand.tabComplete`: the file names for the first word.
+/// `RelativeFile.tabComplete(IArgConsumer,File)`: the files of the folder the typed text points into, as the text would be typed (relative to `base`, or whole when it is an
+/// absolute path), with a separator after folders, kept when they start with the text (ignoring case) and hold no space. `base` is the canonical schematics
+/// folder. `list_dir` is the glue's: given a folder it gives the canonical folder and its entries (name, is a folder), or `None` when it cannot be listed.
+pub fn complete_relative_file(current: &str, base: &std::path::Path, list_dir: &dyn Fn(&std::path::Path) -> Option<Listing>) -> Vec<String> {
+    use std::path::{Path, MAIN_SEPARATOR};
+    let current_path = Path::new(current);
+    let absolute = current_path.is_absolute();
+    let use_parent = !current.is_empty() && !current.ends_with(MAIN_SEPARATOR);
+    // `components` drops a trailing separator, as `new File(base, text)` does
+    let current_file: std::path::PathBuf = if absolute { current_path.components().collect() } else { base.join(current).components().collect() };
+    let dir = if use_parent { current_file.parent().map(Path::to_path_buf).unwrap_or(current_file) } else { current_file };
+    let Some((dir, entries)) = list_dir(&dir) else {
+        return vec![];
+    };
+    let cur = current.to_lowercase();
+    entries
+        .into_iter()
+        .map(|(name, is_dir)| {
+            let full = dir.join(&name);
+            let shown = if absolute { full.to_string_lossy().into_owned() } else { relativize(base, &full).to_string_lossy().into_owned() };
+            if is_dir {
+                format!("{shown}{MAIN_SEPARATOR}")
+            } else {
+                shown
+            }
+        })
+        .filter(|s| s.to_lowercase().starts_with(&cur))
+        .filter(|s| !s.contains(' '))
+        .collect()
 }
 
 const ETA_UNITS: [&str; 5] = ["seconds", "minutes", "hours", "days", "weeks"];
@@ -498,6 +602,8 @@ pub const COMMANDS: &[(&[&str], &str)] = &[
     (&["follow"], "Follow entity things"),
     (&["explore"], "Explore things"),
     (&["explorefilter"], "Explore chunks from a json"),
+    (&["build"], "Build a schematic"),
+    (&["resume", "r", "unpause", "unpaws"], "Resumes Baritone after a pause"),
     (&["path"], "Start heading towards the goal"),
     (&["cancel", "stop"], "Cancel what Baritone is currently doing"),
     (&["eta"], "View the current ETA"),
@@ -528,6 +634,15 @@ pub fn complete(before: &[&str], current: &str, settings: &crate::set::Settings)
             if rest.is_empty() {
                 v.extend(["reset", "clear", "none", "~"].iter().map(|s| s.to_string()));
             } else if rest.len() < 3 && rest.iter().all(|a| relative_coordinate(a, 0.0).is_some()) {
+                v.push("~".to_string());
+            }
+            v.retain(|s| starts(s));
+            v
+        }
+        "build" => {
+            // upstream: the file name for the first word (the glue lists the files), then `~` for each coordinate that follows a coordinate, up to three
+            let mut v: Vec<String> = vec![];
+            if (1..=3).contains(&rest.len()) && rest[1..].iter().all(|a| relative_coordinate(a, 0.0).is_some()) {
                 v.push("~".to_string());
             }
             v.retain(|s| starts(s));
@@ -854,7 +969,7 @@ mod tests {
         assert_eq!(explore_command(&["10"], feet()), Err("Not enough arguments (expected at least 2)".to_string()));
         assert_eq!(explore_command(&["1", "2", "3"], feet()), Err("Too many arguments (expected at most 2)".to_string()));
         assert_eq!(explore_command(&["1", "x"], feet()), Err("Error at argument #2: Expected RelativeGoalXZ".to_string()));
-        assert_eq!(explore_command(&["x", "1"], feet()), Err("Error at argument #1: Expected RelativeGoalXZ".to_string()));
+        assert_eq!(explore_command(&["x", "1"], feet()), Err("Error at argument #2: Expected RelativeGoalXZ".to_string()));
         assert_eq!(ExploreRequest { x: 5, z: -7 }.message(false), "Exploring from GoalXZ{x=5,z=-7}");
         assert_eq!(ExploreRequest { x: 5, z: -7 }.message(true), "Exploring from GoalXZ{x=<censored>,z=<censored>}");
     }
@@ -881,5 +996,97 @@ mod tests {
         let names = command_names();
         assert!(names.contains(&"explore") && names.contains(&"explorefilter"));
         assert!(complete(&[], "explore", &s).contains(&"explorefilter".to_string()));
+    }
+
+    // ------------------------------------------------------------ build and resume
+
+    #[test]
+    fn build_takes_a_file_and_the_feet_or_three_coordinates() {
+        assert_eq!(build_command(&["box"], feet()), Ok(BuildRequest { file: "box".to_string(), origin: feet() }));
+        assert_eq!(build_command(&["sub/box.schem", "1", "2", "3"], feet()), Ok(BuildRequest { file: "sub/box.schem".to_string(), origin: Pos::new(1, 2, 3) }));
+        assert_eq!(build_command(&["box", "~", "~5", "~-2"], feet()).map(|r| r.origin), Ok(Pos::new(100, 69, -22)));
+        assert_eq!(build_command(&["box", "10.9", "-0.1", "1k"], feet()).map(|r| r.origin), Ok(Pos::new(10, -1, 1000)));
+    }
+
+    #[test]
+    fn build_refuses_what_upstream_refuses() {
+        assert_eq!(build_command(&[], feet()), Err("Not enough arguments (expected at least 1)".to_string()));
+        assert_eq!(build_command(&["box", "1", "2", "3", "4"], feet()), Err("Too many arguments (expected at most 3)".to_string()));
+        // a bad middle coordinate is consumed, and the error names the next argument (`hasAny() ? peek() : consumed()`, D50)
+        assert_eq!(build_command(&["box", "1", "x", "3"], feet()), Err("Error at argument #4: Expected RelativeBlockPos".to_string()));
+        assert_eq!(build_command(&["box", "x", "2", "3"], feet()), Err("Error at argument #3: Expected RelativeBlockPos".to_string()));
+        // a bad last coordinate has no next argument: it names itself
+        assert_eq!(build_command(&["box", "1", "2", "x"], feet()), Err("Error at argument #4: Expected RelativeBlockPos".to_string()));
+        // one or two coordinates are not a block position
+        assert_eq!(build_command(&["box", "1"], feet()), Err("Error at argument #2: Expected RelativeBlockPos".to_string()));
+        assert_eq!(build_command(&["box", "1", "2"], feet()), Err("Error at argument #3: Expected RelativeBlockPos".to_string()));
+    }
+
+    #[test]
+    fn resume_needs_a_paused_builder() {
+        assert_eq!(resume_command(&[], true), Ok("Resumed"));
+        assert_eq!(resume_command(&[], false), Err("Not paused".to_string()));
+        assert_eq!(resume_command(&["x"], true), Err("Too many arguments (expected at most 0)".to_string()));
+    }
+
+    #[test]
+    fn the_build_and_resume_commands_are_listed_and_completed() {
+        let names = command_names();
+        for n in ["build", "resume", "r", "unpause", "unpaws"] {
+            assert!(names.contains(&n), "{n}");
+        }
+        let s = crate::set::Settings::new();
+        assert_eq!(complete(&["build", "box"], "", &s), vec!["~".to_string()]);
+        assert_eq!(complete(&["build", "box", "1", "2"], "", &s), vec!["~".to_string()]);
+        assert!(complete(&["build", "box", "1", "2", "3"], "", &s).is_empty());
+        assert!(complete(&["build", "box", "x"], "", &s).is_empty());
+        assert!(complete(&["build"], "", &s).is_empty(), "the glue lists the files");
+        assert!(complete(&[], "bu", &s).contains(&"build".to_string()));
+        assert!(complete(&[], "res", &s).contains(&"resume".to_string()));
+    }
+
+    fn listing(dir: &std::path::Path) -> Option<Listing> {
+        // what the glue's canonicalisation does to the folder
+        let mut norm = std::path::PathBuf::new();
+        for c in dir.components() {
+            match c {
+                std::path::Component::ParentDir => {
+                    norm.pop();
+                }
+                c => norm.push(c.as_os_str()),
+            }
+        }
+        match norm.to_str()? {
+            "/s" => Some(("/s".into(), vec![("Box.schem".into(), false), ("House".into(), true), ("my plan.schem".into(), false), ("a.litematic".into(), false)])),
+            "/s/House" => Some(("/s/House".into(), vec![("wall.schem".into(), false)])),
+            "/other" => Some(("/other".into(), vec![("x.schem".into(), false), ("Sub".into(), true)])),
+            _ => None,
+        }
+    }
+
+    #[test]
+    fn file_completion_matches_relative_file_tab_complete() {
+        if !cfg!(unix) {
+            return;
+        }
+        let base = std::path::Path::new("/s");
+        let sorted = |mut v: Vec<String>| {
+            v.sort();
+            v
+        };
+        // nothing typed: everything in the folder, folders with a separator, names with a space dropped
+        assert_eq!(sorted(complete_relative_file("", base, &listing)), vec!["Box.schem", "House/", "a.litematic"]);
+        // a prefix, in any case, lists the parent
+        assert_eq!(sorted(complete_relative_file("b", base, &listing)), vec!["Box.schem"]);
+        assert_eq!(sorted(complete_relative_file("H", base, &listing)), vec!["House/"]);
+        // into a folder
+        assert_eq!(complete_relative_file("House/", base, &listing), vec!["House/wall.schem"]);
+        assert_eq!(complete_relative_file("House/w", base, &listing), vec!["House/wall.schem"]);
+        // up and out: the way back is written with ..
+        assert_eq!(sorted(complete_relative_file("../other/", base, &listing)), vec!["../other/Sub/", "../other/x.schem"]);
+        // an absolute path is listed and shown whole
+        assert_eq!(sorted(complete_relative_file("/other/", base, &listing)), vec!["/other/Sub/", "/other/x.schem"]);
+        // a folder that cannot be listed gives nothing
+        assert!(complete_relative_file("nowhere/", base, &listing).is_empty());
     }
 }

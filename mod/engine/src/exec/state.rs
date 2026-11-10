@@ -157,12 +157,15 @@ pub struct MoveState {
     pub use_pos: Option<Pos>,
     /// The hotbar slot the movement wants in the hand this tick: a tool to break with, a block to place, a bucket. Not kept between ticks.
     pub select: Option<usize>,
+    /// A stack of the main inventory (slot 9 to 35) the movement wants in hotbar slot 7 (`InventoryBehavior.throwaway` with `select` and `allowInventory`).
+    /// `update` hands the request to the inventory mover. Not kept between ticks.
+    pub swap_in: Option<usize>,
     pub failure: Option<MoveFailure>,
 }
 
 impl MoveState {
     pub fn new() -> MoveState {
-        MoveState { status: MoveStatus::Prepping, target: None, keys: Keys::default(), use_pos: None, select: None, failure: None }
+        MoveState { status: MoveStatus::Prepping, target: None, keys: Keys::default(), use_pos: None, select: None, swap_in: None, failure: None }
     }
 }
 
@@ -184,6 +187,8 @@ pub struct Controls {
     /// The hotbar slot a movement asked for this tick; consumed by `Pathing::tick` when it builds the intent. A slot stays selected
     /// until another is asked for, as in the game.
     pub select: Option<usize>,
+    /// `InventoryBehavior`: the moves from the main inventory to the hotbar (`allowInventory`), which `Pathing::tick` hands to the glue.
+    pub inventory: crate::inventory::InventoryMover,
 }
 
 impl Controls {

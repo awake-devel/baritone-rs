@@ -32,7 +32,7 @@ pub fn cost<W: WorldView>(ctx: &Ctx<'_, W>, x: i32, y: i32, z: i32) -> f64 {
     }
     let mut place_cost = 0.0;
     if !ladder {
-        place_cost = ctx.cost_of_placing_at(x, z, &from_state);
+        place_cost = ctx.cost_of_placing_at(x, y, z, from_state);
         if place_cost >= COST_INF {
             return COST_INF;
         }

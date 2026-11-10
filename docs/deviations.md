@@ -5,6 +5,8 @@ Each place where this port differs from upstream on purpose. The rules are in
 
 Entries 1 to 4 are active since R2 (the persistent cache, entry 41). Entry 5 is active and has no effect on any real search. Entries 6 to 10 are active (S3) and change no chosen path that a game can reach. Entries 11 to 23 are active (S4, executor, state machine and the mod): they change when a search is cancelled (12) and what `/b stop` waits for (13), and nothing a search returns. Entries 24 to 32 are active (S4, breaking, placing, settings, commands and the glue): none changes a search; 28 changes what the executor does when the settings forbid an action that a path in progress still asks for. Entry 35 is active (free look): it changes what the player's camera does while a path runs, and nothing a search returns. Entries 36 and 37 are active (R2, engine side of `mine` and `goto <block>`): they change which process asks for a search, and no search. Entry 41 (the persistent cache) changes what the search reads for chunks that are not loaded, as upstream's does. Entry 42 (`explore`) changes which process asks for a search, and no search.
 
+Entries 44 to 49 are active (R3, the builder, schematics, formats, the glue of `build` and the builder settings): they change which process asks for a search, and what the search overlay charges for placing and breaking while a build runs; entry 48 is uncompiled.
+
 ## How exceptions work today
 
 They don't. `tools/cost-compare` has no exception mechanism. Its comparison against `1.21.4` is exact and no deviation
@@ -14,8 +16,6 @@ When a deviation does change a compared function, an exception has to name the f
 never says "ignore this function". A difference with no entry here must still fail the check.
 
 ## Entries
-
-Fields: upstream, ours, why, changes chosen paths, decided by, expectation in the comparison.
 
 ### D1. Cached special blocks looked up 64 blocks too low
 
@@ -28,7 +28,6 @@ Fields: upstream, ours, why, changes chosen paths, decided by, expectation in th
 - **Ours:** store and look up with the same Y.
 - **Why:** the lookup is wrong. Special blocks (chests, spawners, and so on) come back as their plain pathing type.
 - **Changes chosen paths:** yes.
-- **Decided by:** the owner.
 - **Comparison:** none. `cache::chunk::tests::d1_a_special_block_comes_back_at_its_own_height` fails on upstream's key.
 
 ### D2. The bottom layer caution never applies
@@ -40,7 +39,6 @@ Fields: upstream, ours, why, changes chosen paths, decided by, expectation in th
 - **Ours:** compare the world Y.
 - **Why:** the check was meant to discourage breaking blocks near the bottom, where bedrock may be.
 - **Changes chosen paths:** yes, near the bottom layers.
-- **Decided by:** the owner.
 - **Comparison:** none. `cache::chunk::tests::d2_the_bottom_layers_are_cautious` fails on upstream's comparison.
 
 ### D3. Inverted flow test for water at chunk edges
@@ -56,7 +54,6 @@ Fields: upstream, ours, why, changes chosen paths, decided by, expectation in th
   cells; this is a reading of that rule, not a copy. It does not model the cancelling of two opposite flows. The block fact `blocks_fluid_flow` is compared with Java for every block state (`tools/facts-compare`); the rule itself is not.
 - **Why:** water at the edge of a chunk should be treated like water elsewhere.
 - **Changes chosen paths:** yes, around water at chunk edges.
-- **Decided by:** the owner.
 - **Comparison:** none. `cache::chunk::tests::d3_water_at_the_chunk_edge_is_not_inverted` fails on upstream's test.
 
 ### D4. Keep region files that fail to load
@@ -69,7 +66,7 @@ Fields: upstream, ours, why, changes chosen paths, decided by, expectation in th
   the failure is a line in the log.
 - **Why:** one bad read should not destroy cached data.
 - **Changes chosen paths:** no. It needs no decision.
-- **Decided by:** nobody needed. Fixes with no effect on paths are made and recorded.
+- **Decision:** none needed: a fix with no effect on paths is made and recorded.
 - **Comparison:** none. `cache::world::tests::d4_a_file_that_fails_to_load_is_kept` and `a_file_in_another_blocks_table_is_kept_too` fail on upstream's behaviour.
 
 ### D5. Goal search box that ends at the largest integer
@@ -80,7 +77,7 @@ Fields: upstream, ours, why, changes chosen paths, decided by, expectation in th
 - **Ours:** inclusive ranges, which stop at the end of the box.
 - **Why:** a hang helps nobody, and Rust's ranges do this without extra code.
 - **Changes chosen paths:** no. It needs coordinates about 70 times beyond the world border.
-- **Decided by:** nobody needed. Fixes with no effect on paths are made and recorded.
+- **Decision:** none needed: a fix with no effect on paths is made and recorded.
 - **Comparison:** none. The comparison does not call `heuristic()` on such goals, because upstream would not return.
 
 ### D6. The search stops on a node cap, a given clock and a flag
@@ -95,7 +92,6 @@ Fields: upstream, ours, why, changes chosen paths, decided by, expectation in th
 - **Why:** runs have to be comparable (L2), and tests need a fake clock. A cancel must not get lost.
 - **Changes chosen paths:** no. With no cap and a real clock the loop is upstream's. A search that ends on the cap ends at a
   node count, where upstream ends at a time.
-- **Decided by:** the stage plan.
 - **Comparison:** L2 (`tools/search-compare`) runs with a node cap and compares what both sides have after it. Java gets the same cap
   without a change to upstream: its goal is wrapped, and on the N-th `isInGoal` call (one per node taken out of the open set) the wrapper
   calls `cancel()`. The loop then ends after that node has been expanded; the harness takes `bestSoFar(false, numNodes)` and runs
@@ -114,7 +110,6 @@ Fields: upstream, ours, why, changes chosen paths, decided by, expectation in th
   (`AbstractNodeCostSearch.java:122-124`), so the caller of upstream sees the exception and never a result.
 - **Why:** the engine does not throw, and the three classes differ only in how they are made.
 - **Changes chosen paths:** no.
-- **Decided by:** nobody needed.
 - **Comparison:** none for the causes of the errors in upstream, since `calculate` swallows them (it logs and answers
   `EXCEPTION`). `tools/search-compare` compares that a search threw, and checks on the Rust side that the cause is the one the
   settings explain (a NaN heuristic, or a `pathCutoffFactor` above 1). The unit tests make each error.
@@ -127,7 +122,6 @@ Fields: upstream, ours, why, changes chosen paths, decided by, expectation in th
 - **Ours:** the costs are copied when the path is made.
 - **Why:** nodes are in an arena that the path does not borrow.
 - **Changes chosen paths:** no. `postProcess` is only called on the finished search.
-- **Decided by:** nobody needed.
 - **Comparison:** none.
 
 ### D9. The first cell key may equal the key that means "no cell yet"
@@ -142,7 +136,6 @@ Fields: upstream, ours, why, changes chosen paths, decided by, expectation in th
 - **Why:** the position is 70 times beyond the world border (30 million blocks), so no game reaches it. The same position
   at x + 16 or y = 9 gives another key and matched in a trial run.
 - **Changes chosen paths:** no, for every position a game can have.
-- **Decided by:** nobody needed.
 - **Comparison:** none. A trial run through upstream's classes, outside the committed corpus, with a start at `(-2147483647, 1, 1)`
   found exactly this difference in 2 of 2,825 searches and no other.
 
@@ -155,7 +148,6 @@ Fields: upstream, ours, why, changes chosen paths, decided by, expectation in th
   setting is not read.
 - **Why:** it is a debugging aid; the engine has no settings object to read at that point and no log.
 - **Changes chosen paths:** no. A timeout acts only on a search that runs out of time.
-- **Decided by:** nobody needed.
 - **Comparison:** none (the time limits never fire in L2).
 
 ### D11. The executor owns its movements, and splices in place
@@ -168,7 +160,6 @@ Fields: upstream, ours, why, changes chosen paths, decided by, expectation in th
   given (position, cost estimate and its index, ticks on the current movement) and resets what it resets (`ticksAway`, `sprintNextTick`).
 - **Why:** a path is plain data that a search hands over; nothing is shared between threads.
 - **Changes chosen paths:** no.
-- **Decided by:** nobody needed.
 
 ### D12. The best path so far of a running search cannot be read
 
@@ -182,7 +173,7 @@ Fields: upstream, ours, why, changes chosen paths, decided by, expectation in th
   passes through the player.
 - **Why:** reading it would mean running the search in slices, which changes the search code and its comparison with Java.
 - **Changes chosen paths:** it changes when a search is cancelled and restarted, not which path a search returns.
-- **Decided by:** nobody yet; reported. Review if the player is seen to walk back and forth while a long search runs.
+- **Open:** review if the player is seen to walk back and forth while a long search runs.
 
 ### D13. `/b stop` is `forceCancel`
 
@@ -193,7 +184,7 @@ Fields: upstream, ours, why, changes chosen paths, decided by, expectation in th
   `Intent`. `cancel_everything` is also there, with upstream's behaviour.
 - **Why:** with walking only, nothing needs a safe moment, and a stop that leaves keys held for some ticks is a surprise.
 - **Changes chosen paths:** no.
-- **Decided by:** the task for S4 ("stop always gives a neutral Intent").
+- **Decided:** S4: "stop always gives a neutral Intent".
 
 ### D14. A cancelled or replaced search is dropped by its generation, and does not block the next one
 
@@ -205,7 +196,6 @@ Fields: upstream, ours, why, changes chosen paths, decided by, expectation in th
   stops the one that runs, and a cancelled search delivers nothing.
 - **Why:** the plan (docs/PLAN.md): "results carry a generation number, so a stale result is dropped".
 - **Changes chosen paths:** no.
-- **Decided by:** the plan.
 
 ### D15. Closed doors and fence gates
 
@@ -220,7 +210,7 @@ Fields: upstream, ours, why, changes chosen paths, decided by, expectation in th
 - **Tested:** the engine's unit tests (door and gate, open and closed) and, in the game, L3 `b11_door` and `b12_gate` (chat closed and open: a corridor whose only exit is a closed oak door or fence gate; arrived,
   and only the door's own cells changed state). Not run in the game: iron doors, doors that open towards the player, trapdoors, hinge right, other wood types.
 - **Changes chosen paths:** no.
-- **Decided by:** the owner (the fix after v0.1.0). Before, the default was off and a closed door on the only route ended the movement and looped.
+- **Decided:** the fix after v0.1.0. Before, the default was off and a closed door on the only route ended the movement and looped.
 
 ### D16. Branches that swim, jump a gap or mine from inside a block fail by name
 
@@ -233,7 +223,6 @@ Fields: upstream, ours, why, changes chosen paths, decided by, expectation in th
   presses the left button, whatever the movement is doing, and the movement goes on (`MoveFailure::InsideWall` is gone). It aims nothing of its own, as upstream.
 - **Why:** these are outside the first release (docs/PLAN.md).
 - **Changes chosen paths:** no.
-- **Decided by:** the owner (the S4 cut, and the task for the breaking and placing step).
 
 ### D17. The aim
 
@@ -247,7 +236,6 @@ Fields: upstream, ours, why, changes chosen paths, decided by, expectation in th
   `Rotation::new` turns a NaN or an infinity into 0 where upstream throws.
 - **Why:** the first two differ by far less than the mouse grid (0.15 degrees).
 - **Changes chosen paths:** no.
-- **Decided by:** the task for S4.
 
 ### D18. Exceptions that upstream throws are values
 
@@ -259,7 +247,6 @@ Fields: upstream, ours, why, changes chosen paths, decided by, expectation in th
   planned next path. A process that is not active answers a command that does nothing. An unset `calculated_while_loaded` counts as loaded.
 - **Why:** the executor must not panic. None of these is reached by a path from the search.
 - **Changes chosen paths:** no.
-- **Decided by:** nobody needed.
 
 ### D19. Smaller differences
 
@@ -283,7 +270,6 @@ Fields: upstream, ours, why, changes chosen paths, decided by, expectation in th
   engine is unchanged.
 - **Why:** a first version should say that it arrived. In the game on 2026-11-06 a 30-block walk ended in the goal and the mod received no `AtGoal` event.
 - **Changes chosen paths:** no.
-- **Decided by:** nobody needed.
 
 ### D21. The mod reads the world from two places
 
@@ -294,7 +280,6 @@ Fields: upstream, ours, why, changes chosen paths, decided by, expectation in th
   (`Tables`, read only). The snapshot covers every loaded chunk, not a window around the player.
 - **Why:** docs/PLAN.md, "How it runs".
 - **Changes chosen paths:** no.
-- **Decided by:** the plan.
 
 ### D22. What the first version leaves out of the player's side
 
@@ -304,7 +289,6 @@ Fields: upstream, ours, why, changes chosen paths, decided by, expectation in th
   is no setting yet, so the executor's `ExecSettings` are upstream's defaults. `goto <block>` is refused with a message (the get-to-block process is not
   ported). A path to a goal in another dimension is not a thing: the goal is dropped when the dimension changes.
 - **Changes chosen paths:** `can_sprint` could, for a player who starts a walk hungry. Not seen.
-- **Decided by:** the task for S4.
 
 ### D23. A search that panics stops the goto
 
@@ -314,7 +298,7 @@ Fields: upstream, ours, why, changes chosen paths, decided by, expectation in th
 - **Ours:** the engine keeps that behaviour and only remembers the failure. The glue reads it, stops the goto and says so in the chat, once.
 - **Why:** upstream's loop would take a chunk snapshot every tick and log an error at 20 Hz while the player stands still and says nothing.
 - **Changes chosen paths:** no. It only applies when no path was found at all.
-- **Decided by:** nobody needed. A search now also cannot index past the block table: the glue reads an id the table lacks as air
+- **Also:** a search now also cannot index past the block table: the glue reads an id the table lacks as air
   (`world::known_state`, not upstream), which removes the one panic source found.
 
 ### D24. The hotbar is an interface, and tools are chosen by state
@@ -326,11 +310,10 @@ Fields: upstream, ours, why, changes chosen paths, decided by, expectation in th
 - **Ours:** the glue answers `Inventory` (the slot in hand, the nine stacks and the off hand as `SlotInfo`, and `speed_vs_state`, which is
   `ToolSet.calculateSpeedVsBlock` for one stack and one state). The choice (`get_best_slot`, ties, swords, `itemSaver`, silk touch, the
   material cost) is upstream's, over a state id read from the world; upstream reads the default state of the block, which has the same hardness and
-  tool rules but could differ for a block whose destroy speed depends on a property (none in vanilla). `allowInventory` is stored and printed but not
-  carried out, there is no cache (the glue keeps the table of strengths), and there is no builder, so `selectThrowawayForLocation` is the loop over
+  tool rules but could differ for a block whose destroy speed depends on a property (none in vanilla). `allowInventory` was stored and printed but not
+  carried out until D53, there is no cache (the glue keeps the table of strengths), and there is no builder, so `selectThrowawayForLocation` is the loop over
   `acceptableThrowawayItems` only.
 - **Changes chosen paths:** no. The costs read `Tables::tool_strength`, which the glue makes with `get_str_vs_block`.
-- **Decided by:** the task for this step.
 
 ### D25. Aiming works on whole cubes
 
@@ -346,7 +329,6 @@ Fields: upstream, ours, why, changes chosen paths, decided by, expectation in th
   decides what is hit: the glue reports it in `PlayerView::looking_at` and the movements press the button only when it is the block they want, or when the view is
   already really close to the aim they asked for (upstream's own fallback). A face that is wrongly judged costs a few ticks, not a wrong block.
 - **Changes chosen paths:** no.
-- **Decided by:** the task for this step.
 
 ### D26. Clicks are intent fields, and wait for the slot
 
@@ -358,7 +340,6 @@ Fields: upstream, ours, why, changes chosen paths, decided by, expectation in th
   is told of the slot in `remote_send_state`, which may run after the input step; see docs/PLAN.md). The glue stops a dig when `attack` goes from
   true to false and when the mod lets go of the player.
 - **Changes chosen paths:** no. A change of tool costs one tick.
-- **Decided by:** the task for this step.
 
 ### D27. A branch of `Movement.prepared` that cannot be reached
 
@@ -381,21 +362,19 @@ Fields: upstream, ours, why, changes chosen paths, decided by, expectation in th
   in the hotbar is `Unreachable` too. The incidental left clicks (the traverse's "something is in the way", the pillar's block at the feet) need `allowBreak` and are not pressed while the crosshair is on a block that
   must never be broken (`blocksToDisallowBreaking`, ice, an infested block; `may_click_left`, review finding R4). When the crosshair is on nothing or on another block they are pressed as upstream.
   The pick-up of the water after a bucket fall is not placing and is done whenever an empty bucket is in the hotbar, as upstream.
-- **Why:** the owner's task: the executor never attacks or places when the settings forbid it. Unit tests pin each guard (`exec/break_place_tests.rs`); a fixed-seed test in `sim.rs` over random worlds with edits pins that the right button is never pressed with `allowPlace` off (it fails if the guard is removed). The same test did not fail with the break guard removed, because the cost check cancels first in those worlds, so the break guard rests on its unit test.
+- **Why:** the executor never attacks or places when the settings forbid it. Unit tests pin each guard (`exec/break_place_tests.rs`); a fixed-seed test in `sim.rs` over random worlds with edits pins that the right button is never pressed with `allowPlace` off (it fails if the guard is removed). The same test did not fail with the break guard removed, because the cost check cancels first in those worlds, so the break guard rests on its unit test.
 - **Changes chosen paths:** no. It changes what a running path does in the few ticks in which upstream would have broken a block that the settings forbid.
-- **Decided by:** the task for this step.
 
 ### D29. The settings and the `set` command
 
 - **Status:** active, in `set.rs`.
 - **Ours:** one table of the settings of this port, with upstream's names, types and defaults (checked against `Settings.java` for each and against `Config::upstream_defaults` and
-  `ExecSettings::default` for all). Not carried: the settings of processes that do not exist (the mine and get-to-block settings are carried since R2, D37), the chat prefix and notifications. `renderPath` and `allowInventory` are stored
-  but read by nobody in the engine; `freeLook`, `blockFreeLook`, `antiCheatCompatibility`, `smoothLook` and `smoothLookTicks` are read through `look_settings` (D35). Names are matched without regard to case. Values are printed as Java prints them (`2.0`, `1.0E7`, a block without `minecraft:`, an item with it) and read as
+  `ExecSettings::default` for all). Not carried: the settings of processes that do not exist (the mine and get-to-block settings are carried since R2, D37), the chat prefix and notifications. `renderPath` is stored
+  but read by nobody in the engine (`allowInventory` is read since D53); `freeLook`, `blockFreeLook`, `antiCheatCompatibility`, `smoothLook` and `smoothLookTicks` are read through `look_settings` (D35). Names are matched without regard to case. Values are printed as Java prints them (`2.0`, `1.0E7`, a block without `minecraft:`, an item with it) and read as
   `SettingsUtil` reads them, except: a number is read with Rust's parser after trimming and a trailing `d` or `f` (no hexadecimal floats), "modified" means "not equal to the default" where
   upstream compares object identity, and the command's errors read `Expected a valid setting` without the position of the argument. `set save` and `set load` ask the glue for the file
   (`SetEffect`); `Settings::to_file_text` and `apply_file_text` are the file's text.
 - **Changes chosen paths:** only as the user's settings do.
-- **Decided by:** the task for this step.
 
 ### D30. The commands `goal`, `path`, `eta` and the completion
 
@@ -406,7 +385,6 @@ Fields: upstream, ours, why, changes chosen paths, decided by, expectation in th
   when the player is in the goal). `%.0f` is rounded half away from zero as Java does. Completion offers the command names, `~`, the words of `goal`, and for `set` what `SetCommand.tabComplete` offers;
   `goto` does not offer block names, because `goto <block>` is not ported.
 - **Changes chosen paths:** no.
-- **Decided by:** the task for this step.
 
 ### D31. Falling blocks need the glue
 
@@ -436,7 +414,6 @@ Fields: upstream, ours, why, changes chosen paths, decided by, expectation in th
   The test triggers (`BARITONE_RS_L3_SPEC`, `BARITONE_RS_SCENARIO_DIR`) run only in a single-player world whose name starts with `l3-`; `tools/l3/run.py` refuses a name that does not, and a name that already exists.
   Mod chat lines are also written to the game log, so coordinates in "Going to" are logged unless `censorCoordinates` is on. The note buffer for the test triggers is filled only while a trigger variable is set.
 - **Changes chosen paths:** no. A boot with Depth Strider or Frost Walker is not seen, so a player wearing them gets the costs of one who does not.
-- **Decided by:** the task for this step.
 
 ### D33. Smaller differences in `set` and `eta`
 
@@ -451,7 +428,7 @@ Fields: upstream, ours, why, changes chosen paths, decided by, expectation in th
 - **Status:** active, in `search/astar.rs` (the height check), `config.rs` (`SearchSettings::walk_on_build_limit`) and `set.rs`.
 - **Upstream:** the search drops any node whose feet are above `maxY`, so nothing moves from the top layer (U15).
 - **Ours:** a new setting, `allowWalkOnBuildLimit`, lets the feet be at `maxY + 1` and no higher. The mod's settings default it to
-  **true** (owner's choice, 2026-11-07, for 6b6t's spawn floor at y 319); `SearchSettings::default()` keeps it false, so the Java
+  **true** (chosen 2026-11-07, for 6b6t's spawn floor at y 319); `SearchSettings::default()` keeps it false, so the Java
   comparisons (L2) still run upstream's search. Test: `walking_on_the_top_layer_needs_the_build_limit_setting`.
 - **Changes chosen paths:** yes, but only for a player or a path on the top layer.
 
@@ -476,64 +453,8 @@ Fields: upstream, ours, why, changes chosen paths, decided by, expectation in th
   outgoing packets but set to the aim the tick carried; when the mode is `NONE` or there is no target it is the player's own view. (4) The player's third-person model and the lead of a held lead (`rope_rot_old`) are ticked
   inside the swap, so for that one tick they see the aim; the first-person view does not. (5) If the player's tick is skipped (the chunk is not loaded, an error), the swap is not made; if it ends early,
   the view is put back at the next input step. (6) Smooth look does not average the pitch (upstream does only while gliding).
-- **Why:** the owner's wish that the camera stays the player's own while the server and the movement follow the path (task of 2026-11-07).
+- **Why:** the camera should stay the player's own while the server and the movement follow the path (2026-11-07).
 - **Changes chosen paths:** no (the search never reads the view). It changes what the executor sees as its own rotation while a path runs (the aim is made against the rotation the server was sent, as upstream).
-- **Decided by:** the owner.
-
-### Upstream behaviour kept, found in S3 (reported, not fixed)
-
-The port does what upstream does here; a change would change paths, so it is the owner's call.
-
-- **U1. `getDistFromStartSq` is an `int` and wraps.** A best node 46,341 to 65,535 blocks from the start has a squared
-  distance that wraps to a value below 25 or negative, so the partial path is refused as "no path". In a one-wide corridor
-  both sides answered a segment at a cap of 46,000 nodes and a failure at caps from 46,343 to 65,536. The committed corpus has a
-  corridor of 70,000 blocks along z (caps 46,000, 46,400 and 65,540) for this.
-- **U2. The y part of the cell key repeats every 2048 blocks** (`(y >> 3) & 0xFF`, bug 4 in `tools/search-compare/known-missed.txt`). Two nodes
-  2048 blocks apart in y, with the same x and z, share a slot, so a search in a column higher than 2048 stops at 2048 nodes and
-  returns a segment. The committed corpus has a one-wide shaft 4064 high for this. A vanilla world is at most 384 high.
-
-### Upstream behaviour kept, found in S4 (reported, not fixed)
-
-- **U3. A new `goto` while a search runs does not stop that search.** `ForceRevalidate` only cancels when there is a current path, so
-  the search for the old goal finishes and its path is followed to its end; the new goal is searched from there.
-- **U4. A descend is never sprinted through into a traverse.** `canSprintFromDescendInto` compares the traverse's direction `(1, 0, 0)` with the
-  descend's `(1, -1, 0)`; older Baritone compared `next.getDirection().down()`. At 1b8e87c the descend into a traverse slows to a stop; a
-  descend into a descend, and into a diagonal, still sprints. Fixing it changes how fast stairs down are walked, so it is the owner's call.
-- **U5. When the goal is reached, `CustomGoalProcess` answers `CANCEL_AND_SET_GOAL` with a null goal** (it builds the command after `onLostControl`), and
-  `PathingBehavior` sets its goal to null. Harmless.
-- **U6. `CANCELED` is queued on every tick without a process** (`cancelSegmentIfSafe` runs each idle tick). The events are only for the chat.
-- **U7. While a path is followed, the player's own keys are ignored.** See `docs/PLAN.md`, decision 3.
-- **U8. Without Depth Strider, water costs the same as land.** `CalculationContext.waterSpeedMultiplier` ends in `return 1.0f` at 1b8e87c, and the
-  26.3 branch starts from the same `1.0f`. The formula `WALK_ONE_IN_WATER_COST * (1 - m) + WALK_ONE_BLOCK_COST * m` then gives 4.633 ticks a block, not 9.091,
-  so a player without boots is priced as faster in water than one with Depth Strider I (m = 0.33). The search takes water it should avoid. In the game (S4
-  scenarios 5 and 10) moves through deep water took about 2.2 times their estimate. A value of 0 would match the 9.091 constant. Fixing it changes
-  paths, so it is the owner's call.
-
-### Upstream behaviour kept, found in the breaking and placing step (reported, not fixed)
-
-- **U9. `attemptToPlaceABlock` aims at the lower quarter of the face.** `faceY = (placeAt.y + against.y + 0.5) * 0.5` is the point a quarter of a block above the lower edge of the
-  two blocks, not the middle of the face. It works for the faces it is used with. Kept.
-- **U10. `RotationUtils.reachable` tries the top of the block first of the faces.** See D25.
-- **U11. The traverse's "something is in the way" click breaks whatever the crosshair is on,** and the place and break buttons are decided by the crosshair of the previous frame in
-  Baritone and of the previous tick here. Kept, with the guard of D28 (`allowBreak`, and no click while the crosshair is on a block that must never be broken).
-- **U12. Diagonals never break.** `MovementDiagonal.prepared` is always true, and the cost lets a diagonal through only if one corner is free and the destination can be walked through,
-  so `toBreak` of a diagonal is empty for any path a search returns.
-- **U13. `ToolSet.getMaterialCost` always answers -1 for a tool.** It tests the stack against `ItemTags.WOODEN_TOOL_MATERIALS` and the other five, which hold the repair materials (`wooden_tool_materials` is `#minecraft:planks`, `iron_tool_materials` is the iron ingot; read in the 26.3 tag files, and 1.21.4's tags have the same names), not the tools.
-  A stone pickaxe and a diamond pickaxe are never told apart by material, so a tie in speed goes to the first slot (and to silk touch). The glue computes it the same way, with the same tags, so it is -1 for a tool here too. Fixing it
-  would change which of two equal tools is used, so it is the owner's call.
-- **U14. The pillar breaks the block at its feet with the throwaway block in hand.** `MovementPillar` selects the throwaway block (`selectThrowawayForLocation`) and then clicks the block at the feet
-  when it is neither air nor replaceable, with no `switchToBestToolFor`. It matters only for a block that the cost lets through but is neither walkable nor replaceable (a torch, a carpet, a sign): it is dug by hand.
-  Kept (`exec/review_tests.rs` R3).
-- **U15. No path at all from the top of the world.** `AStarPathFinder` drops a neighbour whose feet would be above `maxY`
-  (`minY + height - 1`, 319 in the Overworld), and a player standing on the highest block layer has feet at `maxY + 1`. So every
-  move from there, even a flat step, is refused and the search ends with no path. Found on 6b6t.org (2026-11-07), whose main-world
-  spawn is an obsidian floor at y 319: `/b goto` 50 blocks away on that floor answered "No path to the goal was found." at once. The
-  port kept this until the owner chose to change it: D34 (`allowWalkOnBuildLimit`, on by default in the mod).
-- **U16. Adventure mode is not considered.** Nothing in upstream reads the game mode or `mayBuild`, so with `allowBreak` on (the
-  default) the search still plans to dig. The game refuses the break, the movement times out after its cost plus
-  `movementTimeoutTicks`, the new search finds the same path, and the player stands still in that loop until stopped. Found in
-  6b6t.org's lobby (2026-11-07): an Ascend through dirt and grass (cost 43.6) repeated every 148 ticks. `/b set allowBreak false`
-  avoids it. The port does the same; the owner chose to keep it (2026-11-07).
 
 ### D36. Three processes, and the scans are jobs
 
@@ -553,7 +474,6 @@ The port does what upstream does here; a change would change paths, so it is the
   and `mostRecentCommand` (`Pathing::in_control` answers the first). The `safeToCancel` field starts false as upstream's does; nothing reads it with no path, except that a pause request is not honoured then, which is what
   upstream does too.
 - **Changes chosen paths:** no. A path is searched as before; what changes is which process asks for it.
-- **Decided by:** the task for this step.
 
 ### D37. `mine` and `goto <block>`
 
@@ -574,7 +494,7 @@ The port does what upstream does here; a change would change paths, so it is the
   7. **`GetToBlockCalculationContext`** (the context that ignores `allowBreak` when places are picked) is the same scan run with `allowBreak` on. The walk itself still obeys `allowBreak`.
   8. **The new goals print with `Debug`** (`goal_to_string`), as the other goals the commands do not make. No command prints them.
 - **Changes chosen paths:** no. The search and the costs are untouched; the goals the processes send are upstream's.
-- **Decided by:** the task for this step (the owner's R2: `mine` first).
+- **Decided:** R2 starts with `mine`.
 
 ### D38. The glue of `mine` and `goto <block>` (mod only, found by running it)
 
@@ -615,7 +535,7 @@ What the mod feeds the engine (`mod/runtime.rs`), where it differs from upstream
      length of the scan (15 to 25 ms with ore near; seconds when fewer than 64 matches are near and the scan covers every loaded chunk) instead of the game freezing. Before this change the first scan ran on the game thread and
      measured 0.17 s to 4.6 s of stall in the L3 run (`mod_tick_micros`).
 - **Changes chosen paths:** (1) yes, when more than 64 matches are loaded, toward upstream's choice; (3) no.
-- **Decided by:** the R2 review findings; (1) is a port bug (upstream's behaviour was copied from the wrong class), (3) keeps the game responsive.
+- **Why:** the R2 review findings; (1) is a port bug (upstream's behaviour was copied from the wrong class), (3) keeps the game responsive.
 
 ### D40. `follow` (R2)
 
@@ -646,85 +566,7 @@ What the mod feeds the engine (`mod/runtime.rs`), where it differs from upstream
   11. **The cap of 4096 entities drops the rest silently, mobs first.** The glue lists mobs, then other players, then dropped items, and stops at 4096. In a world with more than 4096 mobs no item is listed, and `follow entity item` finds nothing. Upstream has no cap.
      The listing is O(entities) with one string per entity, which is why the cap exists. Changing the order or the cap is not a path change.
 - **Changes chosen paths:** no. The goals are upstream's (`GoalNear` in a `GoalComposite`, revalidated each tick); (5) can move an offset goal by one block in rare cases.
-- **Decided by:** the entities come from the game, which has no `Entity` class; the rest follows from keeping the process pure.
-
-### Upstream behaviour kept, found in the R2 reviews (reported, not fixed)
-
-- **U17. A head stuck in a block is mined with no `allowBreak` check.** `Movement.update` presses the left button with the best tool for whatever the crosshair is on when `isInWall`, whatever `allowBreak`,
-  `blocksToDisallowBreaking` or `avoidBreaking` say. With `allowBreak false` the player still digs out of a block that lands on his head (sand, gravel) while a walk runs. Kept; a guard would not change a path, but it is the owner's call.
-- **U18. The shaft click of `mine` re-checks only `air` and `avoidBreaking`.** A dropped item resting in a cell of the player's own column (a torch, a flower) is a known place (`mineScanDroppedItems`), and `MineProcess.onTick` clicks
-  the block of the shaft without asking whether the filter or `allowBreak` would let the search break it. With `allowBreak false` and an `allowBreakAnyway` filter the mod can click such a cell. Kept.
-- **U19. Some numeric settings have no bound.** `allowOnlyExposedOresDistance` loops over `(2r+1)^3` cells per candidate and `mineMaxOreLocationsCount` can make the scan keep every match; a huge value set by the user costs time or
-  memory. Kept as upstream.
-- **U20. A button can stay pressed for one extra tick** when `MineProcess.onTick` returns before `clearAllKeys` (quantity reached, or a failed path with nothing to blacklist) while a paused path exists. Read, not measured. Kept.
-- **U21. A `GoalComposite` of N goals costs N for every search node** (`isInGoal` and `heuristic` ask each goal). `follow entities` with `followTargetMaxDistance 0` in a world with hundreds of mobs multiplies the search time by that number. Upstream's shape, kept; changing the heuristic would change which paths are found.
-  The default `followTargetMaxDistance 45` bounds the count in practice. Read and reasoned, not measured in the game.
-
-## Where upstream's two branches disagree
-
-Measured with `tools/cost-compare --port 26.3` on every movement family, the goals, the position predicates and the whole
-block-state registry (35,723 states of 26.3): 10,000 generated grids, one run, against upstream `26.3` (commit `25111da`).
-The Rust translation matches `1.21.4` on the same grids with 0 wrong and 0 close, so every difference below comes from
-the two Java branches (or from the game, see "Game differences").
-
-Unpatched, the engine differs from `26.3` in 22,349 results: downward 1,137, pillar 399, traverse 2,924, ascend 1,134,
-descend 1,228, diagonal 4,401, parkour 323, predicates 10,181, registry sweep 586 (all in `canWalkOnBlockState`), and in
-the goals `GoalRunAway` 34 and `GoalComposite` 2 (a composite holding a run-away goal). Every other goal and the fall
-table are identical.
-
-`tools/cost-compare/rules-26.3.patch` makes a scratch copy of the engine behave like `26.3`, one hunk group per rule below.
-With the whole patch every family is back to 0 wrong and 0 close, so these rules explain every difference found. Nothing
-is left over. To measure a rule alone, the table has the results that differ when only that rule's hunks are left out of the
-patch (the engine then differs from `26.3` in that rule alone). The counts overlap, so they do not add up to 22,349: one
-result can need two rules.
-
-| Rule | Where | Results that differ when it alone is left out | We follow | Status |
-|---|---|---|---|---|
-| Swimming | `1.21.4` adds `allowSwimming` and `SWIM_ONE_BLOCK_COST`, and caps the water walk speed with it (`CalculationContext`). `26.3` has neither. | 1,435: traverse 1,284, diagonal 151. Needs the swimming and sprint configs. | `1.21.4` | Decided by the owner |
-| `isWaterloggedSolidTop` in `canWalkOnBlockState` | Only in `1.21.4`: waterlogged top slabs, top stairs, top trapdoors and scaffolding are not water to walk on. `26.3` treats any water state as maybe. | 15,746: predicates 10,181, registry sweep 586, traverse 1,673, ascend 1,134, downward 1,137, descend 471, diagonal 317, parkour 235, pillar 12. Most of the other `isWaterloggedSolidTop` results ride on this one. | `1.21.4` | Decided by the owner |
-| `isWaterloggedSolidTop` in `MovementDescend` | The water landing branch skips a waterlogged solid top (`1.21.4`). | 471 descend | `1.21.4` | Decided by the owner |
-| `isWaterloggedSolidTop` in `MovementParkour` | The take-off test with `assumeWalkOnWater` skips a waterlogged solid top (`1.21.4`). | 88 parkour | `1.21.4` | Decided by the owner |
-| `isWaterloggedSolidTop` in `MovementPillar` | The last condition: `isLiquid(fromDown) && !isWaterloggedSolidTop(fromDown) && assumeWalkOnWater` in `1.21.4`, without the middle term in `26.3`. | 387 pillar | `1.21.4` | Decided by the owner |
-| `jumpPenalty` on the diagonal ascend | `1.21.4` adds `context.jumpPenalty` to a diagonal ascend. `26.3` does not. | 3,351 diagonal | `1.21.4` | Decided by the owner |
-| `isBlockingDoor` in `MovementDiagonal` | Only in `1.21.4`: an early return, the `ALow`/`BLow` test, and `+1` on the mining time of the two side cells. | 565 diagonal | `1.21.4` | Decided by the owner |
-| Magma corner in `MovementDiagonal` | `1.21.4` tests `cuttingOver2` for magma at the second corner. `26.3` tests `cuttingOver1` twice, so a magma block at that corner is not refused. This looks like a bug in `26.3`. | 108 diagonal | `1.21.4` | Decided by the owner |
-| `GoalRunAway.heuristic()` box | `26.3` has `maxX = Math.max(minX, ...)` (the same for Y and Z), so with several points its scan box is too small and the heuristic is wrong. `1.21.4` has `Math.max(maxX, ...)`. This is a bug in `26.3`. | 36: `GoalRunAway` 34 (14 wrong, 20 within 1e-9), `GoalComposite` 2 | `1.21.4` | Decided by the owner |
-| Doors in `canWalkThroughBlockState` | `1.21.4` asks `DoorBlock.isWoodenDoor`. `26.3` accepts every door and gate except `Blocks.IRON_DOOR`. | 0 (see below) | `1.21.4` | Decided by the owner |
-
-Reasoning:
-
-- All the rules but the door rule are rules that `1.21.4` has and `26.3` lacks, which fits `26.3` being the branch that
-  lags behind. The magma corner and `GoalRunAway` are bugs fixed in `1.21.4`.
-- For `isWaterloggedSolidTop`, the fact it relies on (whether the face is sturdy) is the same on both versions, so the rule is
-  not a game difference. The four use sites are separate lines of upstream's code and are measured separately.
-- Swimming is a setting rather than a fact about blocks, so the data cannot settle it.
-- Doors: in the game data of `26.3`, `DoorBlock.isWoodenDoor` is false for the iron door only (copper doors can be opened by
-  hand, and the 1,344 other door states are wooden or copper), so the two rules give the same answer for every one of the
-  1,408 door states in the registry, and the palette has oak, iron and copper doors. The earlier note that they differ for
-  copper doors was wrong. A modded door with another block set type is the only case where they would differ, and the
-  harness cannot test that.
-- `GoalAxis.equals` (a null check) and `GoalRunAway.hashCode` (`26.3` unboxes a null `maintainY` and throws) also differ.
-  Neither changes a cost or a heuristic, and the harness calls neither, so they have no hunk and no count.
-- The other differences read in the two branches (`canPlaceAgainst` and `avoidBreaking` through precomputed flags, `minY`
-  and `maxY`, the mining cache, `ToolSet` internals, `openDoors` and the other executor code) showed no change in results.
-
-The owner chose `1.21.4` for the swimming and `isWaterloggedSolidTop` rules on 2026-11-05, and for the other rules in the table on 2026-11-06. The risk for the first two was that Horizon's facts
-might differ from Java's for these blocks. S2 checked that: `tools/facts-compare` finds no difference on any state, including
-the 2,344 waterlogged states with a sturdy top. Swimming is a setting, so it has no block fact to check.
-
-Game differences: none showed. The engine reads the facts of the game version that ran (here the `26.3` jar), and the
-patched engine matches all 35,723 registry states and every generated grid, so no `26.3` fact (new classes, new blocks,
-changed tool speeds) is missing from the engine's set of facts.
-
-Not tested:
-
-- Horizon's facts in this comparison. They are Java's, from the `26.3` jar. `tools/facts-compare` compares them with Horizon's separately.
-- The parts of the movements after the cost functions, and positions other than the grid's centre (see
-  `tools/README.md`).
-- A rule that the generated worlds never reach. The patch was written from the diff of the two branches and then
-  confirmed, so a difference that neither the diff reading nor the worlds showed would be missed. The `26.3` run has no
-  mutation run behind it.
-- Other values of `jumpPenalty` than the three the configurations use (2, 5 and 0.25).
+- **Why:** the entities come from the game, which has no `Entity` class; the rest follows from keeping the process pure.
 
 ### D41. The persistent chunk cache (R2)
 
@@ -737,7 +579,7 @@ Not tested:
   `pruneRegionsFromRAM`, `chunkPackerQueueMaxSize`, `cachedChunksExpirySeconds`, `maxCachedWorldScanCount`, `extendCacheOnThreshold`, `repackOnAnyBlockChange`, with upstream's defaults. The search and the movement costs are not touched: the cache is a
   `WorldView` wrapper (`cache::WithCache`) under the snapshot the search and the scans read, and under the live world the executor re-checks against.
 - **Differs from upstream:**
-  1. **D1 to D4**, the fixes the owner decided: special blocks are looked up at the Y they were stored at; the caution near the bottom compares the world Y; the flow test at a chunk edge is the right way round; a region file that fails to load is kept.
+  1. **D1 to D4**, the fixes chosen for the cache: special blocks are looked up at the Y they were stored at; the caution near the bottom compares the world Y; the flow test at a chunk edge is the right way round; a region file that fails to load is kept.
   2. **Where the files are.** `<mod data folder>/cache/<key>/<namespace>/<dimension>_<logical height>/cache/r.<x>.<z>.bcr` (the mod data folder is `horizon-mods/.horizon-mod-data/baritone_rs/` of the game install; the code uses `native_data_dir`, no path of a home).
      `<key>` is `sp-<world name>` for a single player world and `srv-` and a hash of the address for a server, so no address is a folder name or in a log line. Every part is made safe as a folder name (`..`, separators and anything but letters, digits, `-`, `_`, `.` are replaced), so a world or
      dimension name cannot leave the folder. Upstream puts a server's cache under the address itself. A single player world is told apart by its name, not by its folder (the game does not give the folder to the mod); two worlds with the same name share a cache.
@@ -756,7 +598,6 @@ Not tested:
   10. **Not ported:** `renderCachedChunks` and `cachedChunksOpacity` (the cached chunks are not drawn), `pathThroughCachedOnly` (the wrapper has `cached_only`, no setting reaches it), `FindCommand`, `SaveAllCommand`, `ReloadAllCommand`, `WaypointCollection` and the waypoints, `FasterWorldScanner.repack` and `scanChunk`, and
      nothing else of the cache: `regionLoaded` and `tryLoadFromDisk(Async)` are ported with the explore process (D42).
 - **Changes chosen paths:** yes, as upstream's cache does: the search plans through chunks the game does not have loaded. D1 to D3 change what the cached blocks say. Nothing in the search or the costs changed.
-- **Decided by:** the task for this step; D1 to D4 by the owner.
 
 ### D42. `explore` and `explorefilter` (R2)
 
@@ -778,9 +619,8 @@ Not tested:
   6. **Reading a region.** `tryLoadFromDiskAsync` starts a thread of its own for each region, one at a time per region (upstream's `pendingLoads`), where upstream uses its executor.
   7. **Not ported:** `notificationOnExploreFinished`, and `IExploreProcess` as an interface. Only the two commands start the process, as upstream's (its mine and get-to-block processes do not call it).
 - **Changes chosen paths:** no. The goal a process hands to the search is upstream's.
-- **Decided by:** the task for this step.
 
-#### Upstream findings in `ExploreProcess` (reported, not changed)
+#### Upstream findings in `ExploreProcess` (kept)
 
 - **A chunk on an axis is listed twice.** `closestUncachedChunks` takes `dz = -zval` and `+zval`; when `zval` is 0 (`dx = +-dist`: the two chunks of each ring on the centre's row, and the centre's chunk in ring 0) both give the same chunk, so the chunk is added twice and counts twice towards `exploreChunkSetMinimumSize`. With the default of 10 the first set is 18 goals (rings 0 to 2), not 10. Ported as is.
 - **An inverted filter can end a ring before the second listed chunk.** The count of wanted chunks (the number of listed chunks the cache lacks) is reached by a chunk that is listed twice by the loop above, so the goal set can hold one chunk twice and not the other one (seen in `an_inverted_filter_lists_the_chunks_not_explored_and_everything_else_is_explored`). It does no harm: the next tick asks again.
@@ -791,7 +631,7 @@ Not tested:
 ### D43. Fixes from the R2 reviews (cache)
 
 - **Status:** active (R2, `cache::{world,region,worker,mod}` and the cache tick in `mod/runtime.rs`). Each has a test named `review_N_...` (or in `cache::worker` / `cache::mod`) that fails without it. They are fixes of faults in the port or of upstream faults that do not change a
-  chosen path, so they needed no decision; where one could, it is listed under "for the owner" below.
+  chosen path, so they needed no decision; where one could, it is listed under "Open points from the reviews" below.
 - **Ours, differs from upstream:**
   1. **`prune` with `chunkCaching` off.** Upstream's `save()` prunes far regions even when it writes nothing. The port kept a region that "has unsaved changes", and with `chunkCaching` off that flag never clears, so every region stayed in memory. Now such a region is pruned (nothing could save it).
   2. **One save at a time per world.** The timer's save and the save when the world is left (and the one at server stop) shared the temporary file names; a lock around `save` makes the second find nothing to write. Upstream's parallel saves have the same overlap.
@@ -805,21 +645,264 @@ Not tested:
   8. **A chunk outside the world border** (a region more than 58594 away) is not stored: its region id is 0, which is region (0,0)'s. `getRegion`, `getOrCreateRegion` and the updates answer "none", an empty region that is kept nowhere, and nothing.
   9. **A region load that panics** frees its entry in `pendingLoads`; before, `explore` would wait for that region until `/b stop`.
 - **Changes chosen paths:** no, apart from 3 to 5 which decide only which chunks are cached at all (more are now) and 8, which refuses what could never be a real place.
-- **Decided by:** the task for this step.
 
-#### For the owner (reported by the reviews, not changed)
+#### Open points from the reviews
 
-- **D3 at the chunk edge looked only at air.** Minecraft's flow vector counts any neighbour that does not block flow (grass, a torch, a plant) with water below it; `edge_flow` asked for air. **Done**, fixed on the owner's decision (2026-11-08): `edge_flow` now uses the fact `blocks_fluid_flow` (see D3). Cached types at chunk edges, and so paths, change for such cells.
+- **D3 at the chunk edge looked only at air.** Minecraft's flow vector counts any neighbour that does not block flow (grass, a torch, a plant) with water below it; `edge_flow` asked for air. **Done**, fixed (2026-11-08): `edge_flow` now uses the fact `blocks_fluid_flow` (see D3). Cached types at chunk edges, and so paths, change for such cells.
 - **Dimension folders carry the logical height only** (`<path>_<logical height>`, upstream's name). A server that changes `min_y` or `height` under the same dimension id and the same logical height shifts old data silently. A fix would add `min_y` to the folder name and so move every existing cache. Not changed.
-- **A world created again with the same name** reads the old world's cache (the game gives the mod a name, not a folder or a seed). Needs the seed or a world id from Horizon. **Owner (2026-11-08): kept as a known edge case, not fixed for now.**
-- **No cap on disk or memory.** `cachedChunksExpirySeconds` is -1, nothing counts the bytes, and the folders of deleted worlds stay (69 MB in 236 files in the test instance). **Owner (2026-11-08): not a concern, kept as is.** Memory is pruned only in `save` (every 10 minutes), a full region costs about 29 MB, an empty one 1.2 MB, and
+- **A world created again with the same name** reads the old world's cache (the game gives the mod a name, not a folder or a seed). Needs the seed or a world id from Horizon. **Kept as a known edge case (2026-11-08), not fixed for now.**
+- **No cap on disk or memory.** `cachedChunksExpirySeconds` is -1, nothing counts the bytes, and the folders of deleted worlds stay (69 MB in 236 files in the test instance). **Kept as is (2026-11-08): not a concern.** Memory is pruned only in `save` (every 10 minutes), a full region costs about 29 MB, an empty one 1.2 MB, and
   `WorldProvider` keeps every opened world and its two threads for the process. Upstream is the same.
-- **Quitting on a server saves on a detached thread** (no stop hook there): up to 10 minutes of cache can be lost. Quitting from a single player world saves on the server thread, which freezes in proportion to the dirty regions (0.86 s for a full noisy region in the review). **Owner (2026-11-08): kept as a known edge case.** Nothing is lost when the player disconnects and stays in the game a few seconds; region files are written to a temporary file and moved into place, so a cut save never corrupts them.
+- **Quitting on a server saves on a detached thread** (no stop hook there): up to 10 minutes of cache can be lost. Quitting from a single player world saves on the server thread, which freezes in proportion to the dirty regions (0.86 s for a full noisy region in the review). **Kept as a known edge case (2026-11-08).** Nothing is lost when the player disconnects and stays in the game a few seconds; region files are written to a temporary file and moved into place, so a cut save never corrupts them.
 - **Smaller:** `/b set cachedChunksExpirySeconds <small>` deletes cached chunks at the next save with nothing kept aside; region files get the default permissions (0644); `server_key` is an unsalted hash, so a guessed address can be tested; a panic outside `catch_unwind` in the pack or save thread stops it silently.
 
-### Upstream behaviour kept, found in the R2 cache reviews (reported, not fixed)
+### D44. The builder: process, order and snapshots (R3)
+
+- **Status:** active, `process/build.rs`, `process/pathing.rs`, `goals.rs`.
+- **Ours, differs from upstream:** `incorrectPositions` is a `BTreeSet`, so goals are equal between ticks, and every list made from it is in position order (the goals, the flowing liquids of "Unreplaceable liquids at at least", and the order in which the missing materials are first seen) where upstream's `HashSet` iterates in hash order; `missing` prints in first-seen order, not Java's hash order. `build(String,ISchematic,Vec3i)` leaves out the `buildOnlySelection` branch (D49); `build(File)` is the glue's parse and then `build_parsed`, which has no `SelectionSchematic` step. The skip mask and the layer bounds are applied when read, with the settings of the tick. `clearArea` uses a private air fill (a `FillSchematic` needs the block index; air has one state, so the result is the same). The skip mask's `desiredState` is not called when `buildSkipBlocks` is empty (no side effect). `calcFailed` is unused. The goals are variants of `Goal` (`Janky`, `Break`, `Adjacent`, `Place`, `BreakFromAbove`). `allowInventory` and `desirableOnHotbar` were not ported until D53.
+- **Changes chosen paths:** no.
+
+### D45. The search context hook, the throwaway hint and the ray trace (R3)
+
+- **Status:** active, `movement/helper.rs` (`CostOverlay`), `process/pathing.rs` (`ProcessContext`), `inventory.rs`, `exec/`.
+- **Ours:** `BuilderCalculationContext` is a `CostOverlay` over one context type, carried by the search job and by the executor (a second context, so the base one is not changed each tick). The overlay holds snapshots where upstream reads `approxPlaceable` and the settings live from the search thread. `selectThrowawayForLocation`'s builder branch is back, driven by a `ThrowawayHint` snapshot. The builder's ray trace is the game's `clip` through `BuildFacts`, not D25's cube ray. `cost_of_placing_at` takes the state at the position.
+- **Changes chosen paths:** only while a build runs.
+
+### D46. Schematics and masks (R3)
+
+- **Status:** active, `schematic/`.
+- **Ours:** `Schematic::reset` takes `&self` and `ReplaceSchematic`'s cache is atomic cells (a search thread reads the same object; upstream's array races). Null states are `Option`; `FillSchematic` and `SubstituteSchematic` treat `None` as no match where upstream throws. A gap in a `CompositeSchematic` answers air (`get_direct` and `get_column`: `None`; `map_art`: `Err`). Reads outside a box give air, `false` or `None` where upstream throws. `SubstituteSchematic` keeps no block-state cache; its map is keyed by normalised name, the last duplicate winning. Arithmetic that can overflow wraps. Tables are capped (replace cache 2^30 cells, `compute()` 2^28, map art 2^30). One `MaskSchematic` with a kind replaces Shell, Walls, Replace, MapArt and the anonymous `create` mask; `FillSchematic` returns state 0 (air) when it has no state. `Schematic::size` is added.
+- **Changes chosen paths:** no.
+
+### D47. Schematic formats (R3)
+
+- **Status:** active, `schematic/format/`.
+- **Ours:** the NBT reader holds the inflated size and an estimate of the memory of the tags to `ParseLimits`, checks every length against the bytes left, makes negative sizes errors (not `NegativeArraySizeException`), and sums cell counts over Litematica regions. It also refuses a Litematica composite whose bounding box has more cells than `max_cells`, and a file of more than 4096 regions (D50). An unpaired surrogate becomes U+FFFD. `HashMap` order is modelled for the key counts real files have (not a bucket of 8 or more) and follows 1.21.4's `CompoundTag`; 26.3 is unchecked. A closed enum of three formats replaces the registry. A name the block table lacks is air. A property value like `"01"` is matched as text. The legacy id table is written from the public 1.12 id list; an id missing from it is air (upstream: unverified).
+- **Changes chosen paths:** no.
+
+### D48. The glue of `build` (R3)
+
+- **Status:** active, `mod/runtime.rs`. **Not compiled**: written from the code around it and Horizon's source at `66f3981`, and read through only.
+- **Ours:** the file is resolved against `Game::game_dir()/schematics` (canonicalised, absolute paths and `..` allowed, nothing created), then read (cap 128 MiB compressed) and parsed on a thread, delivered to `Pathing::build_parsed` on a later tick; `/b stop`, or any command that starts something, bumps a generation number and drops a late result. The coordinates of `build` are read before the file is looked up (upstream looks up first), and an error names the failing argument as the other commands do. `BuildFacts` runs over a read-only `ReadLevel` that gives Horizon's `Behaviours` the loaded chunks (writes go to a scratch map): placement and survival are the game's rules, `Game::outline_boxes` and `Game::clip_ray` give shapes and the aim. Entity obstruction counts only the player, with the full cube for full-collision states and the outline for solid ones; light reads 0. The facts are built only while a build is loaded. The `BlockStates` table (rotate and mirror from the game's structure tables) is made with the `BlockIndex`. Completion lists files as `RelativeFile.tabComplete` does and offers `~` for coordinates. `/b resume` prints "Resumed" when the builder was paused and "Not paused" when it was not; upstream always resumes the builder and then prints "Not paused" unless the `pause` command (not ported) set its flag, so with `pause` missing it would print "Not paused" after resuming a builder that paused itself. Kept as the better behaviour while `pause` is missing (D50). `notificationOnBuildFinished` is read through `take_build_finished`; the desktop notification is not ported (as D37.6). There is no HUD in the mod: the builder's name is in the `/b trace` log. The L3 player gained a `sample` event and a `timeline`.
+- **Changes chosen paths:** no.
+
+### D49. The builder settings and their types (R3)
+
+- **Status:** active, `set.rs`.
+- **Ours:** every builder setting has upstream's name, type and default; `buildOnlySelection` is left out. New value types: `Map<Block, List<Block>>` (parsed by splitting at `,(?=[^,]*->)`, every block checked, a repeated key refused, printed in insertion order where upstream prints `HashMap` order), `List<String>`, `Vec3i` (three `Integer.parseInt` parts, no trimming, extra parts ignored), `Rotation` and `Mirror` (exact upper-case names). `notificationOnBuildFinished` and `schematicFallbackExtension` are the glue's. `allowInventory` was stored and unread here until D53 (`ToolSettings` reads it now). Updates D29.
+- **Changes chosen paths:** only as the settings do.
+
+### D50. Fixes from the R3 reviews (builder)
+
+- **Status:** active. Each has a test named `review_...` (or an updated one) that fails without it, except where it says the glue is not compiled (D48).
+- **Ours, differs from upstream or from the first port:**
+  1. **`VarInt.getSize` is not kept** (`sponge.rs`): upstream's size is the length of `serialize0`, which tests bit 7 only (U30). The first port used the bytes read, the second copied upstream, and D52 (2026-11-10) returns to the bytes read.
+  2. **MCEdit and Sponge boxes keep their raw sizes.** Upstream's two readers set `x`, `y` and `z` from the file and never zero them (only the `StaticSchematic(BlockState[][][])` constructor does, which Litematica regions use). `StaticSchematic::with_raw_sizes` is the reader's constructor; a 0 x 5 x 5 file is 0 x 5 x 5. Tests: `mcedit` and `sponge` empty-box tests. Visible in `buildInLayers` ("Starting layer" lines before "Done building") and in `schematicOrientationY`.
+  3. **The map art line goes to the log, not to chat.** Upstream prints it with `System.out.println`. `BuilderProcess::take_console_lines` carries it, and the glue writes it with `log::info!`. Test: `review_the_map_art_line_goes_to_the_console_and_not_to_chat`.
+  4. **`build` and `explore` name the next argument after a bad coordinate.** `getDatatypePost` reports `hasAny() ? peek() : consumed()` and the failing coordinate is already consumed, so `build box 1 x 3` says "Error at argument #4", and `explore x 1` says "#2". A bad last coordinate names itself. Tests: `build_refuses_what_upstream_refuses`, `explore_commands_complete_and_are_listed`.
+  5. **`placementGoal` reads the live world.** `ctx.world()` is the loaded world (an unloaded column is `void_air`); the search context also reads the cache, which saw a block above an unloaded column and set `allowSameLevel`. The two reads (here and above) now ask `contains_loaded_chunk` first and take air for an unloaded column. Test: `review_placement_goal_reads_the_live_world_not_the_cache_above`.
+  6. **A load that is still reading is dropped whenever the player state ends** (death, dimension change, no player, mod off), also when nothing else was running (`mod/runtime.rs`; the glue is not compiled, no test). Upstream parses synchronously, so it cannot have this state.
+  7. **One schematic is read at a time** (glue, not compiled): `/b build` while a read is out says "Still reading the previous schematic". A stopped or dropped read cannot be cancelled and runs to its end, and every command used to start another thread with its own copy of a big file. The file bytes are freed as soon as the tags are read (`SchematicFormat::parse_owned`).
+  8. **The NBT memory budget is an upper bound.** A list slot costs twice `size_of::<Tag>()` (vector growth), a compound entry twice the `Entry`, twice its key and an index slot, an array or string its heap bytes plus a header; a scalar has no cost beyond its slot. Before, a scalar was charged 32 bytes where the slot is 72, and a million byte tags passed at 33 MB. MCEdit's `AddBlocks` is read by nibble where it is wanted (no copy of twice its size) and the size is checked first. Test: `review_the_budget_charges_what_a_tag_really_costs`. The cells are still a `usize` each (8 bytes, 268 MB at the limit) beside the 128 MiB of file, the inflated data and the tags while the NBT is read; not changed.
+  9. **A Litematica box and its region count are limited** (U40, U41): the box that holds the regions may not have more cells than `max_cells`, and a file may not have more than 4096 regions. `CompositeSchematic::put` folds only the new entry into the box (the same box, since the maximum only grows), so a parse costs the number of entries and not its square. Tests: `review_regions_far_apart_make_a_box_that_is_refused`, `review_a_file_of_very_many_regions_is_refused` (the quadratic cost has no test: it was a matter of time only).
+  10. **The palette pattern is matched in linear time.** The loop over the end of each value was quadratic in the longest run (63 KB of one run took a quarter of a second; the budget allows about 3,900 keys). A difference array replaces it with the same answers. Test: `review_the_property_pattern_matches_as_before_and_in_linear_time` (every string over `a=,_ ` up to length 9 against the old loop, and 2 million bytes in one run).
+  11. **`can_place` asks Horizon's placement for the second step** (glue, not compiled): vanilla's `BlockPlaceContext.canPlace` asks the clicked block with `replaceClicked` true, then the block beside it with `replaceClicked` false. `directional_can_place` always sets the flag true, which gave the wrong answer for slabs and snow layers. The second step now goes through `placement_state`, which resolves the position and asks `canBeReplaced` as `BlockItem.place` does; it also checks survival and obstruction at that position, which `possibleToPlace` has checked for the same position.
+  12. **The pathing lets go of the builder's context** when `stop` is called, and once there is no path, no search out and the builder is not in control. Upstream keeps `PathingBehavior.context` until the next goal replaces it, which holds the whole parsed schematic (up to about 268 MB) after a finished build; the next goal sets it before any search reads it. Test: `review_a_finished_or_stopped_build_lets_go_of_its_schematic`.
+- **Checked and not a fault of the code:** U29 and the `CylinderMask` comment said a box one block wide divides by zero; it is two blocks (`centerA = 1`), one block gives 0.25 and none gives 1 (text fixed). U32: Java's `Math.log` agrees with the exact `ceil(log2(n))` for every n from 1 to 65536 (OpenJDK 27, x86-64); text updated.
+- **Changes chosen paths:** only 5 (the goal can differ for a far position in an unloaded column) and 11 (which block a slab or snow layer can be placed against).
+
+### D51. Found by running the builder in the game (R3, mod only)
+
+- **Status:** active. The first full client build of the R3 glue compiled without a change.
+- **Ours:** `SearchLogEntry` has `path_ends` (the first and last position of the path a search found) and `searches.txt` of the L3 run prints it, because "SuccessToGoal, 2 positions, every tick" could not be read without it. A test of the simulator (`a_closed_box_with_a_roof_is_built_from_inside_and_out`) builds the r01 box with a throwaway block in the hotbar. No glue behaviour changed. The one failure of the first run was upstream's (U42), so the scenario (not the port) was changed: r01 now carries cobblestone and a pickaxe and allows 6 changed cells outside the box.
+- **Changes chosen paths:** no.
+
+### D52. Sponge block data is read by the bytes consumed (R3)
+
+- **Status:** active. Decided on 2026-11-10: a fix of upstream's misread is kept locally, because the alternative garbles every Sponge file with more than 256 palette entries (any real large build) and gains nothing, since no path or other behaviour depends on the misread.
+- **Upstream:** `SpongeSchematic` advances through `BlockData` by `VarInt.getSize`, the length of `serialize0(value)`, which tests bit 7 of the value (U30). A canonical index of 256 to 383, 512 to 639 or 16384 counts as one byte although it was read from two or more, and a varint written with extra bytes counts as its shortest form.
+- **Ours:** `sponge.rs` advances by the number of bytes `read_var_int` actually read for each varint, so canonical large-palette files and over-long varints load as written. Everything else is as before: the value is built the same way, a sixth byte is an error, a varint cut off by the end of the data is an error, "No remaining bytes in BlockData for complete schematic" and the size limits are unchanged. `serialized_size` is removed. Tests: `var_ints`, `a_canonical_index_of_256_reads_correctly`, `a_non_canonical_varint_is_read_by_its_bytes`, `a_palette_of_more_than_256_entries_round_trips`. Replaces item 1 of D50.
+- **Changes chosen paths:** no. A file with 256 palette entries or fewer and canonical varints loads the same as before.
+
+### D53. allowInventory, glue and anything that differs (R3)
+
+- **Status:** active. Decided on 2026-11-10: `InventoryBehavior`'s moves from the main inventory to the hotbar are ported as upstream has them, off by default (`allowInventory` false, `ticksBetweenInventoryMoves` 1, `inventoryMoveOnlyIfStationary` false). The engine and its tests run; the glue (`mod/runtime.rs`, `window_swap` and the 36-slot reading) is **not compiled** and nothing of this has run in the game. Replaces the "not ported" of D24 and D44.
+- **Upstream:** `InventoryBehavior` is a behavior with state (`ticksSinceLastInventoryMove`, `lastTickRequestedMove`) that clicks the window itself (`windowClick(..., ClickType.SWAP, ...)`) inside `onTick`, inside `throwaway(select)` (called by movements) and inside `attemptToPutOnHotbar` (called by `BuilderProcess`); `InventoryPauserProcess` is a process of priority 5.1, temporary, always active.
+- **Ours, differs from upstream:**
+  1. **The engine decides, the glue clicks.** `InventoryMover` (in `Controls`) holds the state and the pauser's state; a move is a `SwapRequest` that `Pathing::tick` returns (`TickOutput::swaps`) and the glue carries out after the tick, before it selects the slot of the intent. Upstream clicks at the call, so code later in the same tick sees the inventory as it is after the click; here it sees the tick's snapshot.
+  2. **`throwaway` returns where the stack is** (`Throwaway::Hotbar(slot)` or `Throwaway::Inventory(slot)`), not a boolean with side effects. A movement that wants it in hand (`select`) puts the slot in `MoveState::select` and the main slot in `MoveState::swap_in`; `exec::movements::update` hands that to the mover (`requestSwapWithHotBar(i, 7)`) right after `updateState`, before the slot is selected. `InvSlot::Main(i)` is new for the builder's predicates over slots 9 to 35.
+  3. **`InventoryPauserProcess` is `ProcId::InventoryPauser`**, asked first each tick by `execute_processes` (5.1 against 0 for all the others), and treated as temporary: the processes behind it do not lose control, and `pre_tick` does not cancel the segment when control returns from it (upstream's `!inControlLastTick.isTemporary()`). `motion()` is the horizontal speed from `PlayerView`.
+  4. **`getTempHotbarSlot`'s `new Random()`** is a small generator of the mover (xorshift64*), seeded once from the clock of the first tick (`ProcessInputs::now_ms`, 0 when the glue never set it). It picks the same way (uniform over the candidates) but not the same numbers.
+  5. **The `logDebug` lines are dropped** ("Inventory move requested but delaying", "Remembering to move"). `TickEvent.Type.OUT` is not checked: the glue does not tick outside a world.
+  6. **`bestToolAgainst`** reads `PickaxeItem` as `SlotInfo::pickaxe` (as `throwaway` already does) and the state of stone from `BlockStates::default_state("stone")`; the glue prices each of the 36 stacks with `Inventory::main_speed_vs_state` (the same formula as the hotbar, efficiency read at the start of the tick, only while `allowInventory` is on).
+  7. **Glue (not compiled).** `window_swap` calls Horizon's menu engine: `Game::remote_menu_ops` on a server, `Game::menu_ops` in single player, with `(Some(slot), hotbar, Input::Swap)`. Horizon's slot numbers are `Inventory.items` indices, so the window slot of upstream (`inInventory < 9 ? inInventory + 36 : inInventory`) is only `SwapRequest::window_slot`, for tests. "A container is open" is `container_is_open` or a server menu (`remote_menu().0 != 0`); a swap asked for while one is open is dropped (upstream's `onTick` returns before asking, but a movement's `throwaway` does not check, and clicks window 0 anyway).
+  8. **`hasGenericThrowaway` with `allowInventory` reads the 36 stacks** each tick in `refresh_tables`, so the throwaway and the cost tables follow the main inventory. With the setting off nothing reads it.
+- **Same as upstream, on purpose:** the order of the checks in `onTick` (container, tick count, throwaway to slot 8, pickaxe to slot 0, remembered request), the spacing (`ticksSinceLastInventoryMove < ticksBetweenInventoryMoves`, the first tick counts before the first request), the pause while a move waits (`attemptToPutOnHotbar` false gives `REQUEST_PAUSE` from the builder), the usefulSlots rule, the candidates 1 to 7, slot 7 for `throwaway`, and `stationaryForInventoryMove`. The quirks are U43 to U45.
+- **Changes chosen paths:** no with the setting off (the pauser answers `DEFER`). With it on, as upstream: `hasThrowaway` is true for a block anywhere in the 36 slots, and the builder pauses for a move.
+
+## Upstream behaviour kept
+
+Bugs and odd behaviour found in upstream while porting. The port does the same as upstream in each case, unless the entry says it was fixed.
+
+### Found in S3
+
+The port does what upstream does here; a change would change paths, so it is not changed here.
+
+- **U1. `getDistFromStartSq` is an `int` and wraps.** A best node 46,341 to 65,535 blocks from the start has a squared
+  distance that wraps to a value below 25 or negative, so the partial path is refused as "no path". In a one-wide corridor
+  both sides answered a segment at a cap of 46,000 nodes and a failure at caps from 46,343 to 65,536. The committed corpus has a
+  corridor of 70,000 blocks along z (caps 46,000, 46,400 and 65,540) for this.
+- **U2. The y part of the cell key repeats every 2048 blocks** (`(y >> 3) & 0xFF`, bug 4 in `tools/search-compare/known-missed.txt`). Two nodes
+  2048 blocks apart in y, with the same x and z, share a slot, so a search in a column higher than 2048 stops at 2048 nodes and
+  returns a segment. The committed corpus has a one-wide shaft 4064 high for this. A vanilla world is at most 384 high.
+
+### Found in S4
+
+- **U3. A new `goto` while a search runs does not stop that search.** `ForceRevalidate` only cancels when there is a current path, so
+  the search for the old goal finishes and its path is followed to its end; the new goal is searched from there.
+- **U4. A descend is never sprinted through into a traverse.** `canSprintFromDescendInto` compares the traverse's direction `(1, 0, 0)` with the
+  descend's `(1, -1, 0)`; older Baritone compared `next.getDirection().down()`. At 1b8e87c the descend into a traverse slows to a stop; a
+  descend into a descend, and into a diagonal, still sprints. Fixing it changes how fast stairs down are walked, so it is not changed here.
+- **U5. When the goal is reached, `CustomGoalProcess` answers `CANCEL_AND_SET_GOAL` with a null goal** (it builds the command after `onLostControl`), and
+  `PathingBehavior` sets its goal to null. Harmless.
+- **U6. `CANCELED` is queued on every tick without a process** (`cancelSegmentIfSafe` runs each idle tick). The events are only for the chat.
+- **U7. While a path is followed, the player's own keys are ignored.** See `docs/PLAN.md`, decision 3.
+- **U8. Without Depth Strider, water costs the same as land.** `CalculationContext.waterSpeedMultiplier` ends in `return 1.0f` at 1b8e87c, and the
+  26.3 branch starts from the same `1.0f`. The formula `WALK_ONE_IN_WATER_COST * (1 - m) + WALK_ONE_BLOCK_COST * m` then gives 4.633 ticks a block, not 9.091,
+  so a player without boots is priced as faster in water than one with Depth Strider I (m = 0.33). The search takes water it should avoid. In the game (S4
+  scenarios 5 and 10) moves through deep water took about 2.2 times their estimate. A value of 0 would match the 9.091 constant. Fixing it changes
+  paths, so it is not changed here.
+
+### Found in the breaking and placing step
+
+- **U9. `attemptToPlaceABlock` aims at the lower quarter of the face.** `faceY = (placeAt.y + against.y + 0.5) * 0.5` is the point a quarter of a block above the lower edge of the
+  two blocks, not the middle of the face. It works for the faces it is used with. Kept.
+- **U10. `RotationUtils.reachable` tries the top of the block first of the faces.** See D25.
+- **U11. The traverse's "something is in the way" click breaks whatever the crosshair is on,** and the place and break buttons are decided by the crosshair of the previous frame in
+  Baritone and of the previous tick here. Kept, with the guard of D28 (`allowBreak`, and no click while the crosshair is on a block that must never be broken).
+- **U12. Diagonals never break.** `MovementDiagonal.prepared` is always true, and the cost lets a diagonal through only if one corner is free and the destination can be walked through,
+  so `toBreak` of a diagonal is empty for any path a search returns.
+- **U13. `ToolSet.getMaterialCost` always answers -1 for a tool.** It tests the stack against `ItemTags.WOODEN_TOOL_MATERIALS` and the other five, which hold the repair materials (`wooden_tool_materials` is `#minecraft:planks`, `iron_tool_materials` is the iron ingot; read in the 26.3 tag files, and 1.21.4's tags have the same names), not the tools.
+  A stone pickaxe and a diamond pickaxe are never told apart by material, so a tie in speed goes to the first slot (and to silk touch). The glue computes it the same way, with the same tags, so it is -1 for a tool here too. Fixing it
+  would change which of two equal tools is used, so it is not changed here.
+- **U14. The pillar breaks the block at its feet with the throwaway block in hand.** `MovementPillar` selects the throwaway block (`selectThrowawayForLocation`) and then clicks the block at the feet
+  when it is neither air nor replaceable, with no `switchToBestToolFor`. It matters only for a block that the cost lets through but is neither walkable nor replaceable (a torch, a carpet, a sign): it is dug by hand.
+  Kept (`exec/review_tests.rs` R3).
+- **U15. No path at all from the top of the world.** `AStarPathFinder` drops a neighbour whose feet would be above `maxY`
+  (`minY + height - 1`, 319 in the Overworld), and a player standing on the highest block layer has feet at `maxY + 1`. So every
+  move from there, even a flat step, is refused and the search ends with no path. Found on 6b6t.org (2026-11-07), whose main-world
+  spawn is an obsidian floor at y 319: `/b goto` 50 blocks away on that floor answered "No path to the goal was found." at once. The
+  port kept this until it was changed: D34 (`allowWalkOnBuildLimit`, on by default in the mod).
+- **U16. Adventure mode is not considered.** Nothing in upstream reads the game mode or `mayBuild`, so with `allowBreak` on (the
+  default) the search still plans to dig. The game refuses the break, the movement times out after its cost plus
+  `movementTimeoutTicks`, the new search finds the same path, and the player stands still in that loop until stopped. Found in
+  6b6t.org's lobby (2026-11-07): an Ascend through dirt and grass (cost 43.6) repeated every 148 ticks. `/b set allowBreak false`
+  avoids it. The port does the same; kept (decided 2026-11-07).
+
+### Found in the R2 reviews
+
+- **U17. A head stuck in a block is mined with no `allowBreak` check.** `Movement.update` presses the left button with the best tool for whatever the crosshair is on when `isInWall`, whatever `allowBreak`,
+  `blocksToDisallowBreaking` or `avoidBreaking` say. With `allowBreak false` the player still digs out of a block that lands on his head (sand, gravel) while a walk runs. Kept; a guard would not change a path, but it is not changed here.
+- **U18. The shaft click of `mine` re-checks only `air` and `avoidBreaking`.** A dropped item resting in a cell of the player's own column (a torch, a flower) is a known place (`mineScanDroppedItems`), and `MineProcess.onTick` clicks
+  the block of the shaft without asking whether the filter or `allowBreak` would let the search break it. With `allowBreak false` and an `allowBreakAnyway` filter the mod can click such a cell. Kept.
+- **U19. Some numeric settings have no bound.** `allowOnlyExposedOresDistance` loops over `(2r+1)^3` cells per candidate and `mineMaxOreLocationsCount` can make the scan keep every match; a huge value set by the user costs time or
+  memory. Kept as upstream.
+- **U20. A button can stay pressed for one extra tick** when `MineProcess.onTick` returns before `clearAllKeys` (quantity reached, or a failed path with nothing to blacklist) while a paused path exists. Read, not measured. Kept.
+- **U21. A `GoalComposite` of N goals costs N for every search node** (`isInGoal` and `heuristic` ask each goal). `follow entities` with `followTargetMaxDistance 0` in a world with hundreds of mobs multiplies the search time by that number. Upstream's shape, kept; changing the heuristic would change which paths are found.
+  The default `followTargetMaxDistance 45` bounds the count in practice. Read and reasoned, not measured in the game.
+
+### Found in the R2 cache reviews
 
 - **U22. Cache growth has no bound.** `cachedChunksExpirySeconds` defaults to -1, nothing counts bytes, the folders of old worlds stay, and regions leave memory only in `save` (every 10 minutes). Same in upstream.
 - **U23. The over-full pack queue drops the oldest chunks** (`chunkPackerQueueMaxSize`), and a dropped chunk is cached only if it is packed again. The port keeps the rule and avoids reaching it with `has_room` (D43.5).
-- **U24. The flow vector at a chunk edge counts any non-blocking neighbour**, not only air (see "For the owner" in D43). Upstream asks the fluid, so it is right there. **Fixed** (2026-11-08): the port's reading (D3) now counts the same neighbours.
+- **U24. The flow vector at a chunk edge counts any non-blocking neighbour**, not only air (see "Open points from the reviews" in D43). Upstream asks the fluid, so it is right there. **Fixed** (2026-11-08): the port's reading (D3) now counts the same neighbours.
 - **U25. The cache is keyed by a name that can repeat.** Upstream keys a single player world by its folder, which is unique; the game gives the mod only the name (D41.2, D43.3), so a world made again with the same name reads the old cache.
+
+### Found in R3 (build)
+
+- **U26. `MaskSchematic.reset` is not passed to the inner schematic.** Only `ReplaceSchematic` clears its own cache, so a reset does not reach a Replace or a Composite inside a Shell, Walls, Mask, MapArt or Substitute. (The builder's repeat calls `reset` on the skip mask, so it resets nothing: U36.)
+- **U27. In map art a column with no block gets height `Integer.MAX_VALUE`**, so nothing in it is part of the mask. The text says "letting them be whatever", but no block is built there.
+- **U28. `FillSchematic` and `SubstituteSchematic` throw on a null current state**, and `ReplaceSchematic` caches the first answer per cell until `reset`.
+- **U29. `BinaryOperatorMask` has no lower bound**, and `CylinderMask` divides by zero on a box two blocks wide on its circle axis (`centerA = 1`, so the radius squared `(centerA - 1)^2` is 0; one block gives 0.25, and a size of 0 gives 1).
+- **U30. `VarInt.getSize` is the length of `serialize0(value)`, not the number of bytes read, and `serialize0` tests only bit 7.** Its loop is `while ((value & 0x80) != 0)`, so a value from 256 up whose bit 7 is clear (256 to 383, 512 to 639, 16384, and so on) has size 1 although a canonical varint of it is 2 or more bytes. `SpongeSchematic` advances by that size, so in a Sponge file with a palette of more than 256 entries every cell after the first such index is read from the wrong place, in canonical files too. A varint written with extra bytes shifts the later cells the same way. The port no longer keeps this: it advances by the bytes read (D52, 2026-11-10), so those files load right and nothing changes for files under 256 palette entries. The palette pattern also accepts `a=bc=d` as `a` = `bc`.
+- **U31. MCEdit's `Data` is ignored, and ids go through `ItemIdFix` to pre-1.13 names**, so `grass`, `planks`, `log`, `wool` and the like are air in 26.3 (L3 r07 documents the id 2 cell).
+- **U32. `getBitsPerBlock` uses floating point `ceil(log n / log 2)`.** Tested for n = 1 to 65536 against the exact value: no difference with Rust's `ln` here, and none with Java's `Math.log` either, run on OpenJDK 27 on x86-64 (2026-11-09). That is platform-dependent in principle: `Math.log` is allowed an error of one unit in the last place, and `StrictMath.log` differs from it for 589 of those n on the same machine, so another JVM could round a quotient the other way at an exact power of two.
+- **U33. `getMinOfSubregion` is `min(a, a+b+1)`, and a region's volume is an `int` product** that wraps, then `abs` (`abs(MIN_VALUE)` stays negative); the bit array then rejects reads past it.
+- **U34. Litematica regions go into the composite in `HashMap` order of their names**, and the composite asks the first entry, so which of two overlapping regions wins depends on the names.
+- **U35. The orientation offsets use the unrotated schematic's size**, so a quarter turn with `schematicOrientation*` swaps X and Z wrongly.
+- **U36. `schematic.reset()` on a repeat does nothing**, because the skip mask's `reset` does not reach the chain (U26).
+- **U37. Turning `buildInLayers` off mid-build keeps the last layer wrapper.**
+- **U38. `aabbSideMultipliers` are inverted by `min*m + max*(1-m)`**, so 0.1 aims at 0.9.
+- **U39. Free placement ignores `allowPlace` and fluids.**
+- **U40. The box of a Litematica composite is not limited.** `recalcArr` grows it to reach every region, so two one-block regions a billion blocks apart make a box of 10^27 cells, and `BuilderProcess.recalc` walks the whole box (a position in no region is skipped before anything counts it, so the `incorrectSize` stop never comes). A file of a few hundred bytes hangs upstream's game thread. The port refuses such a box (D50).
+- **U41. `CompositeSchematic.getSchematic` is a linear scan, and `recalcArr` walks all entries on every `put`.** A Litematica file of very many regions costs the square of the count to read and the count at every lookup. The port reads it in linear time (D50) and refuses more than 4096 regions.
+- **U42. Air cells of the schematic are priced as placeable even with no block to place.** `BuilderCalculationContext.costOfPlacingAt` answers `placeBlockCost * 2` for a position where the schematic wants air, before it looks at `hasThrowaway` (the same TODO as U39). A search may therefore plan an Ascend or a Pillar that places a scaffolding block while the hotbar holds nothing in `acceptableThrowawayItems` (planks are not in it). The movement cannot place, fails the same tick, the builder starts the next search, and so on for ever: the player stands still and the build never ends. Found in game (L3 r01, a closed box whose roof is out of reach from inside, planks only). Kept; the scenario carries cobblestone, as a builder does.
+- **U43. `throwaway` swaps into hotbar slot 7 and selects it at once, `onTick` fills slot 8, and the swap may not be made.** `InventoryBehavior`'s own comment says "we're using 0 and 8 for pickaxe and throwaway", `onTick` asks for slot 8, but `throwaway(select)` asks for 7 (and slot 7 is also a candidate of `getTempHotbarSlot`). `throwaway` selects slot 7 whether or not `requestSwapWithHotBar` made the move (it is delayed by `ticksBetweenInventoryMoves` and by `inventoryMoveOnlyIfStationary`), so for a few ticks the movement may right click with whatever slot 7 holds. Kept (D53).
+- **U44. `attemptToPutOnHotbar` answers true when there is no slot to put the stack in**, and `getTempHotbarSlot` may choose a non-empty slot of 1 to 7 (a random one) when no empty one is free, so a stack of the hotbar goes to the main inventory. The builder then goes on with its tick as if the block were coming. Kept (D53).
+- **U45. `onTick` moves the best pickaxe of all 36 slots to slot 0 and a throwaway block to slot 8 whenever a path runs and none is on the hotbar**, whatever the path does (a swap displaces what is in slot 0 or 8), and `firstValidThrowaway` does not look at the off hand (its own TODO). A pickaxe that is already on the hotbar anywhere but slot 0 is not moved. Kept (D53).
+
+## Where upstream's two branches disagree
+
+Measured with `tools/cost-compare --port 26.3` on every movement family, the goals, the position predicates and the whole
+block-state registry (35,723 states of 26.3): 10,000 generated grids, one run, against upstream `26.3` (commit `25111da`).
+The Rust translation matches `1.21.4` on the same grids with 0 wrong and 0 close, so every difference below comes from
+the two Java branches (or from the game, see "Game differences").
+
+Unpatched, the engine differs from `26.3` in 22,349 results: downward 1,137, pillar 399, traverse 2,924, ascend 1,134,
+descend 1,228, diagonal 4,401, parkour 323, predicates 10,181, registry sweep 586 (all in `canWalkOnBlockState`), and in
+the goals `GoalRunAway` 34 and `GoalComposite` 2 (a composite holding a run-away goal). Every other goal and the fall
+table are identical.
+
+`tools/cost-compare/rules-26.3.patch` makes a scratch copy of the engine behave like `26.3`, one hunk group per rule below.
+With the whole patch every family is back to 0 wrong and 0 close, so these rules explain every difference found. Nothing
+is left over. To measure a rule alone, the table has the results that differ when only that rule's hunks are left out of the
+patch (the engine then differs from `26.3` in that rule alone). The counts overlap, so they do not add up to 22,349: one
+result can need two rules.
+
+| Rule | Where | Results that differ when it alone is left out | We follow | Status |
+|---|---|---|---|---|
+| Swimming | `1.21.4` adds `allowSwimming` and `SWIM_ONE_BLOCK_COST`, and caps the water walk speed with it (`CalculationContext`). `26.3` has neither. | 1,435: traverse 1,284, diagonal 151. Needs the swimming and sprint configs. | `1.21.4` | Decided |
+| `isWaterloggedSolidTop` in `canWalkOnBlockState` | Only in `1.21.4`: waterlogged top slabs, top stairs, top trapdoors and scaffolding are not water to walk on. `26.3` treats any water state as maybe. | 15,746: predicates 10,181, registry sweep 586, traverse 1,673, ascend 1,134, downward 1,137, descend 471, diagonal 317, parkour 235, pillar 12. Most of the other `isWaterloggedSolidTop` results ride on this one. | `1.21.4` | Decided |
+| `isWaterloggedSolidTop` in `MovementDescend` | The water landing branch skips a waterlogged solid top (`1.21.4`). | 471 descend | `1.21.4` | Decided |
+| `isWaterloggedSolidTop` in `MovementParkour` | The take-off test with `assumeWalkOnWater` skips a waterlogged solid top (`1.21.4`). | 88 parkour | `1.21.4` | Decided |
+| `isWaterloggedSolidTop` in `MovementPillar` | The last condition: `isLiquid(fromDown) && !isWaterloggedSolidTop(fromDown) && assumeWalkOnWater` in `1.21.4`, without the middle term in `26.3`. | 387 pillar | `1.21.4` | Decided |
+| `jumpPenalty` on the diagonal ascend | `1.21.4` adds `context.jumpPenalty` to a diagonal ascend. `26.3` does not. | 3,351 diagonal | `1.21.4` | Decided |
+| `isBlockingDoor` in `MovementDiagonal` | Only in `1.21.4`: an early return, the `ALow`/`BLow` test, and `+1` on the mining time of the two side cells. | 565 diagonal | `1.21.4` | Decided |
+| Magma corner in `MovementDiagonal` | `1.21.4` tests `cuttingOver2` for magma at the second corner. `26.3` tests `cuttingOver1` twice, so a magma block at that corner is not refused. This looks like a bug in `26.3`. | 108 diagonal | `1.21.4` | Decided |
+| `GoalRunAway.heuristic()` box | `26.3` has `maxX = Math.max(minX, ...)` (the same for Y and Z), so with several points its scan box is too small and the heuristic is wrong. `1.21.4` has `Math.max(maxX, ...)`. This is a bug in `26.3`. | 36: `GoalRunAway` 34 (14 wrong, 20 within 1e-9), `GoalComposite` 2 | `1.21.4` | Decided |
+| Doors in `canWalkThroughBlockState` | `1.21.4` asks `DoorBlock.isWoodenDoor`. `26.3` accepts every door and gate except `Blocks.IRON_DOOR`. | 0 (see below) | `1.21.4` | Decided |
+
+Reasoning:
+
+- All the rules but the door rule are rules that `1.21.4` has and `26.3` lacks, which fits `26.3` being the branch that
+  lags behind. The magma corner and `GoalRunAway` are bugs fixed in `1.21.4`.
+- For `isWaterloggedSolidTop`, the fact it relies on (whether the face is sturdy) is the same on both versions, so the rule is
+  not a game difference. The four use sites are separate lines of upstream's code and are measured separately.
+- Swimming is a setting rather than a fact about blocks, so the data cannot settle it.
+- Doors: in the game data of `26.3`, `DoorBlock.isWoodenDoor` is false for the iron door only (copper doors can be opened by
+  hand, and the 1,344 other door states are wooden or copper), so the two rules give the same answer for every one of the
+  1,408 door states in the registry, and the palette has oak, iron and copper doors. The earlier note that they differ for
+  copper doors was wrong. A modded door with another block set type is the only case where they would differ, and the
+  harness cannot test that.
+- `GoalAxis.equals` (a null check) and `GoalRunAway.hashCode` (`26.3` unboxes a null `maintainY` and throws) also differ.
+  Neither changes a cost or a heuristic, and the harness calls neither, so they have no hunk and no count.
+- The other differences read in the two branches (`canPlaceAgainst` and `avoidBreaking` through precomputed flags, `minY`
+  and `maxY`, the mining cache, `ToolSet` internals, `openDoors` and the other executor code) showed no change in results.
+
+`1.21.4` was chosen for the swimming and `isWaterloggedSolidTop` rules on 2026-11-05, and for the other rules in the table on 2026-11-06. The risk for the first two was that Horizon's facts
+might differ from Java's for these blocks. S2 checked that: `tools/facts-compare` finds no difference on any state, including
+the 2,344 waterlogged states with a sturdy top. Swimming is a setting, so it has no block fact to check.
+
+Game differences: none showed. The engine reads the facts of the game version that ran (here the `26.3` jar), and the
+patched engine matches all 35,723 registry states and every generated grid, so no `26.3` fact (new classes, new blocks,
+changed tool speeds) is missing from the engine's set of facts.
+
+Not tested:
+
+- Horizon's facts in this comparison. They are Java's, from the `26.3` jar. `tools/facts-compare` compares them with Horizon's separately.
+- The parts of the movements after the cost functions, and positions other than the grid's centre (see
+  `tools/README.md`).
+- A rule that the generated worlds never reach. The patch was written from the diff of the two branches and then
+  confirmed, so a difference that neither the diff reading nor the worlds showed would be missed. The `26.3` run has no
+  mutation run behind it.
+- Other values of `jumpPenalty` than the three the configurations use (2, 5 and 0.25).

@@ -289,7 +289,7 @@ on a connected game they go straight to the server.
 ## input-probe
 
 A native mod that answers, in the real game, whether a mod can walk, jump, sneak and sprint through the stable
-`native_movement_input` hook with the chat or the inventory open ([PLAN.md](../docs/PLAN.md#walking-with-the-chat-open)).
+`native_movement_input` hook with the chat or the inventory open ([RESULTS.md](../docs/RESULTS.md#walking-with-the-chat-open)).
 It runs by itself: with the environment variable `BARITONE_PROBE_DIR` set to a folder, it waits for the player to be in a
 world, sets up a stone platform at (980..1050, 99, 980..1050) through the single-player server's console (the call
 `horizon-ctl command` makes), teleports the player to a start point, opens the screen itself (`open_chat_method("")`, or
@@ -315,10 +315,10 @@ run, with the probe not yet typing: a single `t` reached the server as a chat me
 
 A native mod that answers, in the real game, whether a mod can switch the hotbar slot, break a block, place a block (against a
 floor, and under its own feet while jumping) and use a water bucket, with the chat closed and open
-([PLAN.md](../docs/PLAN.md#breaking-and-placing)). Like `input-probe` it runs by itself: with `BARITONE_BP_DIR` set to a folder it
+([RESULTS.md](../docs/RESULTS.md#breaking-and-placing)). Like `input-probe` it runs by itself: with `BARITONE_BP_DIR` set to a folder it
 waits for the player to be in a world, builds a stone platform, switches to survival, and runs 18 trials (each from the same
 start, with an empty inventory and then an iron pickaxe, 64 stone and a water bucket), asking the single-player server about the
-result every tick through the owner console. It writes `probe.csv` (one row per tick: feet height, slot, held item, buttons, the
+result every tick through the server console. It writes `probe.csv` (one row per tick: feet height, slot, held item, buttons, the
 three watched blocks as the client sees them), `probe-console.txt` (every command and its answer, with milliseconds since the
 trial started) and `summary.txt` (`RESULT` lines with the client and server ticks, `TOOL` lines with the game's own mining
 numbers). `runtime.rs` holds the trials and is plain `std` Rust, so `rustc --edition 2024 --crate-type lib runtime.rs` checks it.

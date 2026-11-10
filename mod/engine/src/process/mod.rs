@@ -3,6 +3,7 @@
 // `custom_goal` is `CustomGoalProcess` (the process behind `goto`), `mine` is `MineProcess`, `get_to_block` is `GetToBlockProcess`
 // (`goto <block>`) and `follow` is `FollowProcess` and `explore` is `ExploreProcess`. `pathing` is `PathingBehavior` with `PathingControlManager`: the process manager that hands control to one process
 // at a time, and the search running behind the `SearchRunner` trait.
+pub mod build;
 pub mod custom_goal;
 pub mod explore;
 pub mod follow;
@@ -12,12 +13,13 @@ pub mod pathing;
 
 use crate::pos::Pos;
 
+pub use build::{Aabb, BuildEnv, BuildFacts, BuilderProcess, InvSlot, NoBuildFacts, ValidRules};
 pub use custom_goal::{CustomGoalProcess, PathingCommand, PathingCommandType};
 pub use explore::{ExploreProcess, JsonChunkFilter};
 pub use follow::{FollowFilter, FollowProcess};
 pub use get_to_block::GetToBlockProcess;
 pub use mine::{MineProcess, ScanJob, ScanKind, ScanResult};
-pub use pathing::{path_start, PathEvent, Pathing, SearchJob, SearchOutcome, SearchRunner, Tables, TickEnv, TickOutput};
+pub use pathing::{path_start, PathEvent, Pathing, ProcessContext, SearchJob, SearchOutcome, SearchRunner, Tables, TickEnv, TickOutput};
 
 /// A dropped item the player could see: `ItemEntity` with the block its position is in (`Entity.blockPosition`).
 #[derive(Clone, Debug, PartialEq, Eq)]

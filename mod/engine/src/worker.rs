@@ -22,6 +22,8 @@ pub struct SearchLogEntry {
     pub cancelled: bool,
     /// The number of positions of the path found, 0 for none.
     pub path_positions: usize,
+    /// The first and the last position of the path found, as x, y, z.
+    pub path_ends: Option<([i32; 3], [i32; 3])>,
 }
 
 /// The most search log entries kept when nobody reads them (not upstream; the log is for the measurements).
@@ -96,7 +98,7 @@ impl<S: WorldView + Send + 'static> Worker<S> {
             if g.log.len() >= LOG_CAP {
                 g.log.remove(0);
             }
-            g.log.push(SearchLogEntry { generation, micros, kind: outcome.result.kind, cancelled: cancel.load(Ordering::SeqCst), path_positions: outcome.result.path.as_ref().map_or(0, |p| p.positions().len()) });
+            g.log.push(SearchLogEntry { generation, micros, kind: outcome.result.kind, cancelled: cancel.load(Ordering::SeqCst), path_positions: outcome.result.path.as_ref().map_or(0, |p| p.positions().len()), path_ends: outcome.result.path.as_ref().and_then(|p| Some((p.positions().first().map(|q| [q.x, q.y, q.z])?, p.positions().last().map(|q| [q.x, q.y, q.z])?))) });
             // a cancelled search never delivers, even if it finished a path before it saw the flag
             if !cancel.load(Ordering::SeqCst) {
                 g.results.push_back(outcome);
@@ -164,7 +166,7 @@ mod tests {
     use std::time::{Duration, Instant};
 
     fn job(generation: u64, goal_x: i32, tables: &Arc<Tables>, max_nodes: Option<u32>) -> SearchJob {
-        SearchJob { generation, start: Pos::new(1, 1, 1), goal: Goal::Block { x: goal_x, y: 1, z: 1 }, previous: None, feet: Pos::new(1, 1, 1), tables: Arc::clone(tables), border: Border { min_x: -3.0e7, max_x: 3.0e7, min_z: -3.0e7, max_z: 3.0e7 }, primary_timeout_ms: 500, failure_timeout_ms: 2000, max_nodes }
+        SearchJob { generation, start: Pos::new(1, 1, 1), goal: Goal::Block { x: goal_x, y: 1, z: 1 }, previous: None, feet: Pos::new(1, 1, 1), tables: Arc::clone(tables), border: Border { min_x: -3.0e7, max_x: 3.0e7, min_z: -3.0e7, max_z: 3.0e7 }, primary_timeout_ms: 500, failure_timeout_ms: 2000, max_nodes, context: None }
     }
 
     fn tables() -> Arc<Tables> {

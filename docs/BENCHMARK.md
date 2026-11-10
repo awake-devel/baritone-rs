@@ -1,7 +1,7 @@
 # Benchmark: search speed against upstream Baritone
 
 How fast is the port's search (`mod/engine`) next to upstream Baritone's real search, on the same world, start, goal and
-settings? The question comes from the owner: compare by seed (a comparison across different seeds means nothing; several seeds give
+settings? The comparison is made seed by seed (a comparison across different seeds means nothing; several seeds give
 more comparisons), and show how much further Rust gets in the same time limit. Every number below is a pair measured on one world.
 
 The tool is [`tools/run_bench.py`](../tools/README.md#bench). The run reported here took 33 minutes on 2026-11-07 and wrote

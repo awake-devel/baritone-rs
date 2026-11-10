@@ -175,6 +175,154 @@ class JudgeTests(unittest.TestCase):
             self.assertEqual(run.judge(d, sc, dict(base, arrived_tick=None))["status"], "fail")
 
 
+class BuildScenarioTests(unittest.TestCase):
+    def test_the_ten_build_scenarios_are_there_and_use_files_that_exist(self):
+        scs = scenarios.build_scenarios()
+        names = {s["name"] for s in scs}
+        for base in ("r01_build_schem_box", "r02_build_clear", "r05_missing_then_resume", "r06_stop_build"):
+            self.assertIn(base + "_chat0", names)
+            self.assertIn(base + "_chat1", names)
+        for base in ("r03_build_litematic_rotated", "r04_build_layers", "r07_mcedit_legacy", "r08_substitutes", "r09_repeat", "r10_fallback_extension"):
+            self.assertIn(base + "_chat0", names)
+        files = scenarios.build_files()
+        for s in scs:
+            self.assertEqual(s["check"]["kind"], "build")
+            self.assertTrue(s["files"] and all(f in files for f in s["files"]), s["name"])
+            self.assertTrue(any(e.get("command", "").startswith("b build") or e.get("set", "").startswith("b build") for e in s["events"]), s["name"])
+
+    def test_the_files_are_deterministic_and_gzip_nbt(self):
+        import gzip
+        a, b = scenarios.build_files(), scenarios.build_files()
+        self.assertEqual(a, b)
+        for name, data in a.items():
+            raw = gzip.decompress(data)
+            self.assertEqual(raw[0], 10, name)  # a compound
+            self.assertEqual(raw[1:3], b"\0\0", name)  # with an empty name
+            self.assertEqual(raw[-1], 0, name)  # closed by an End tag
+        self.assertEqual({n.rsplit(".", 1)[1] for n in a}, {"schem", "litematic", "schematic"})
+
+    def test_expected_cells_lie_in_the_box_and_the_areas_do_not_overlap(self):
+        spans = []
+        for s in scenarios.build_scenarios():
+            bx, by, bz, w, h, l = s["check"]["box"]
+            for c in s["check"]["expect"]:
+                self.assertTrue(bx <= c[0] < bx + w and by <= c[1] < by + h and bz <= c[2] < bz + l, (s["name"], c))
+            fx = re.match(r"forceload add (-?\d+) (-?\d+) (-?\d+) (-?\d+)", s["prep"][2]).groups()
+            spans.append((s["name"], int(fx[0]), int(fx[1]), int(fx[2]), int(fx[3])))
+        for i, a in enumerate(spans):
+            for b in spans[i + 1:]:
+                self.assertTrue(a[3] < b[1] or b[3] < a[1] or a[4] < b[2] or b[4] < a[2], (a, b))
+
+    def test_the_settings_of_a_build_scenario_are_reset_after_it(self):
+        by = {s["name"]: s for s in scenarios.build_scenarios()}
+        r09 = by["r09_repeat_chat0"]
+        self.assertIn({"t": 3, "set": "b set buildRepeat 6,0,0"}, r09["events"])
+        self.assertIn("b set reset buildRepeatCount", r09["after"])
+        self.assertIn({"t": 3, "set": "b set buildSubstitutes stone->cobblestone"}, by["r08_substitutes_chat0"]["events"])
+
+    def test_the_rotated_scenario_expects_the_turned_cells(self):
+        s = [s for s in scenarios.build_scenarios() if s["name"].startswith("r03")][0]
+        ox, oy, oz = s["check"]["box"][:3]
+        exp = {tuple(c[:3]): c[3] for c in s["check"]["expect"]}
+        self.assertEqual(exp[(ox, oy, oz + 1)], "minecraft:oak_stairs")
+        self.assertEqual(exp[(ox + 2, oy, oz + 2)], "minecraft:oak_planks")
+        self.assertNotIn((ox, oy, oz), exp)
+        self.assertEqual(s["check"]["sample_facing"]["has"], "facing=south")
+
+
+class BuildJudgeTests(unittest.TestCase):
+    BOX = [100, 201, 100, 2, 1, 2]
+
+    def judged(self, changes, chk_extra=None, notes=(), timeline="", rows=()):
+        chk = {"kind": "build", "box": self.BOX, "expect": [[100 + x, 201, 100 + z, "minecraft:oak_planks"] for x in range(2) for z in range(2)], "initial": [],
+               "outside_max": 0, "done_within": 100, "messages": ["Done building"], **(chk_extra or {})}
+        res = {"checks": {}, "notes": [], "chat_lines": [n[2] for n in notes if n[1] == "chat"]}
+        meta = {"all_changes": changes}
+        with tempfile.TemporaryDirectory() as d:
+            if timeline:
+                with open(os.path.join(d, "n.timeline.txt"), "w") as f:
+                    f.write(timeline)
+            run.judge_build(res, chk, meta, list(rows), list(notes), d, "n", 10)
+        return res
+
+    FULL = [f"{100 + x},201,{100 + z}: minecraft:air -> minecraft:oak_planks" for x in range(2) for z in range(2)]
+
+    def test_a_finished_build_passes(self):
+        r = self.judged(self.FULL, notes=[(60, "chat", "Done building")])
+        self.assertTrue(all(r["checks"].values()), r["checks"])
+
+    def test_a_wrong_cell_a_late_finish_and_a_stray_block_fail(self):
+        r = self.judged(self.FULL[:3], notes=[(60, "chat", "Done building")])
+        self.assertFalse(r["checks"]["every cell of the box is as the schematic says"])
+        r = self.judged(self.FULL, notes=[(200, "chat", "Done building")])
+        self.assertFalse(r["checks"]["'Done building' within 100 ticks of the command"])
+        r = self.judged(self.FULL + ["5,201,5: minecraft:air -> minecraft:oak_planks"], notes=[(60, "chat", "Done building")])
+        self.assertFalse(r["checks"]["at most 0 cells outside the box changed"])
+        r = self.judged(self.FULL, notes=[])
+        self.assertFalse(r["checks"]["said 'Done building'"])
+
+    def test_air_and_cave_air_are_the_same_and_stone_that_stays_is_a_failure(self):
+        chk = {"initial": [[100, 201, 100, "minecraft:stone"]], "expect": [[100, 201, 101, "minecraft:oak_planks"]]}
+        ch = ["100,201,100: minecraft:stone -> minecraft:cave_air", "100,201,101: minecraft:air -> minecraft:oak_planks"]
+        r = self.judged(ch, chk, notes=[(60, "chat", "Done building")])
+        self.assertTrue(all(r["checks"].values()), r["checks"])
+        r = self.judged(ch[1:], chk, notes=[(60, "chat", "Done building")])
+        self.assertFalse(r["checks"]["every cell of the box is as the schematic says"])
+
+    def test_layers_must_be_built_bottom_up(self):
+        box = [100, 201, 100, 1, 2, 1]
+        chk = {"box": box, "expect": [[100, 201, 100, "minecraft:oak_planks"], [100, 202, 100, "minecraft:oak_planks"]], "layers": {"height": 1}, "messages": [], "done_within": 100}
+        ch = ["100,201,100: minecraft:air -> minecraft:oak_planks", "100,202,100: minecraft:air -> minecraft:oak_planks"]
+        good = "20 100,201,100 minecraft:air minecraft:oak_planks\n30 100,202,100 minecraft:air minecraft:oak_planks\n"
+        bad = "20 100,202,100 minecraft:air minecraft:oak_planks\n30 100,201,100 minecraft:air minecraft:oak_planks\n"
+        notes = [(60, "chat", "Done building")]
+        self.assertTrue(all(self.judged(ch, chk, notes, good)["checks"].values()))
+        self.assertFalse(self.judged(ch, chk, notes, bad)["checks"]["no cell of a layer was placed before the layer below was complete"])
+
+    def test_a_stop_needs_quiet_after_it(self):
+        chk = {"partial": True, "stop_tick": 30, "quiet_after": 10, "messages": [], "expect": [[100, 201, 100, "minecraft:oak_planks"], [101, 201, 100, "minecraft:oak_planks"]]}
+        ch = ["100,201,100: minecraft:air -> minecraft:oak_planks"]
+        rows = [{"t": str(t), "forced": "0", "pathing": "0", "x": "1", "z": "1"} for t in range(0, 80)]
+        quiet = "20 100,201,100 minecraft:air minecraft:oak_planks\n"
+        self.assertTrue(all(self.judged(ch, chk, [], quiet, rows)["checks"].values()))
+        late = quiet + "55 101,201,100 minecraft:air minecraft:oak_planks\n"
+        self.assertFalse(self.judged(ch, chk, [], late, rows)["checks"]["no cell changed later than 10 ticks after the stop"])
+
+    def test_a_paused_build_keeps_the_player_still(self):
+        chk = {"paused_still": [20, 40], "messages": [], "partial": True}
+        rows = [{"t": str(t), "x": "5.0", "z": "5.0", "forced": "0", "pathing": "0"} for t in range(0, 60)]
+        self.assertTrue(self.judged([], chk, [], "", rows)["checks"]["the player stood still between ticks 20 and 40"])
+        rows[30]["x"] = "5.5"
+        self.assertFalse(self.judged([], chk, [], "", rows)["checks"]["the player stood still between ticks 20 and 40"])
+
+    def test_the_facing_and_the_missing_file_message_are_read_from_the_notes(self):
+        chk = {"messages": [], "partial": True, "sample_facing": {"tick": 90, "cells": [], "has": "facing=south"}}
+        ok_note = [(90, "sample", "1,2,3=minecraft:oak_stairs[facing=south,half=bottom] 1,2,4=minecraft:oak_stairs[facing=south,half=bottom]")]
+        self.assertTrue(all(self.judged([], chk, ok_note)["checks"].values()))
+        bad_note = [(90, "sample", "1,2,3=minecraft:oak_stairs[facing=east,half=bottom]")]
+        self.assertFalse(all(self.judged([], chk, bad_note)["checks"].values()))
+        want = f"Cannot find {os.path.join(run.SCHEMATICS, 'nosuch.schematic')}"
+        r = self.judged([], {"messages": [], "partial": True, "cannot_find": "nosuch.schematic"}, [(5, "chat", want)])
+        self.assertTrue(all(r["checks"].values()), r["checks"])
+
+    def test_the_files_are_written_once_and_removed_and_a_different_file_is_refused(self):
+        saved = run.SCHEMATICS
+        with tempfile.TemporaryDirectory() as d:
+            run.SCHEMATICS = os.path.join(d, "schematics")
+            try:
+                made, made_dir = run.write_schematics({"a.schem": b"1", "b.schem": b"2"}, {"a.schem"})
+                self.assertTrue(made_dir)
+                self.assertEqual(sorted(os.listdir(run.SCHEMATICS)), ["a.schem"])
+                made2, _ = run.write_schematics({"a.schem": b"1"}, {"a.schem"})
+                self.assertEqual(made2, [])
+                with self.assertRaises(SystemExit):
+                    run.write_schematics({"a.schem": b"other"}, {"a.schem"})
+                run.remove_schematics(made, made_dir)
+                self.assertFalse(os.path.exists(run.SCHEMATICS))
+            finally:
+                run.SCHEMATICS = saved
+
+
 class OwnershipTests(unittest.TestCase):
     def test_only_the_game_started_by_this_run_is_listed(self):
         import subprocess

@@ -36,6 +36,7 @@ pub mod pos;
 pub mod process;
 pub mod raytrace;
 pub mod scan;
+pub mod schematic;
 pub mod search;
 pub mod set;
 pub mod settings;

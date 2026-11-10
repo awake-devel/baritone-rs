@@ -9,6 +9,7 @@
 // marching along the look vector in small steps, which shares nothing with the engine's ray trace. It shows that the rules of the
 // executor lead a player to a goal in a world shaped like this, and that the state machine around them behaves. Whether a real player
 // does the same in the game is for the L3 scenarios.
+use crate::blockmeta::StateEntry;
 use crate::blocks::Direction;
 use crate::config::Config;
 use crate::exec::movements::GameFacts;
@@ -19,10 +20,12 @@ use crate::inventory::{get_str_vs_block, has_generic_throwaway, Inventory, SlotI
 use crate::look::Vec3;
 use crate::movement::helper::Border;
 use crate::pos::Pos;
+use crate::process::build::{Aabb, BuildEnv, BuildFacts, InvSlot, NoBuildFacts};
 use crate::process::pathing::{run_search, PathEvent, Pathing, SearchJob, SearchOutcome, SearchRunner, Tables, TickEnv, TickOutput};
 use crate::process::{EntityInfo, ItemEntity, ProcessInputs};
-use crate::raytrace::BlockHit;
-use crate::settings::ExecSettings;
+use crate::raytrace::{ray_trace_towards, BlockHit};
+use crate::schematic::{BlockStates, StateId};
+use crate::settings::{BuildSettings, ExecSettings};
 use crate::testing::{Fixture, TestWorld, AIR, ORE, STONE};
 use crate::world::WorldView;
 use std::collections::VecDeque;
@@ -53,6 +56,86 @@ pub struct SimPlayer {
     pub horizontal_collision: bool,
     /// The pose: crouching from the tick after sneaking was asked for.
     pub crouching: bool,
+}
+
+/// The block table of the builder in the simulator: the three states of the fixture, with the third named for what the build tests place with it.
+/// The ids are the world's: 0 air, 1 stone, 2 oak planks (the id the other tests call an ore).
+pub fn sim_block_states() -> Arc<BlockStates> {
+    let entries = vec![StateEntry { block: "air".into(), props: vec![] }, StateEntry { block: "stone".into(), props: vec![] }, StateEntry { block: "oak_planks".into(), props: vec![] }];
+    let defaults = [("air", 0), ("stone", 1), ("oak_planks", 2)].into_iter().map(|(k, v)| (k.to_string(), v)).collect();
+    Arc::new(BlockStates::new(entries, defaults, vec![true, false, false], vec![], vec![], 0))
+}
+
+/// The state an item places in the simulator: stone for the throwaway blocks, planks for planks, none for anything else.
+fn item_state(item: &str) -> Option<StateId> {
+    match item {
+        "stone" | "dirt" | "cobblestone" | "netherrack" => Some(1),
+        "oak_planks" => Some(2),
+        _ => None,
+    }
+}
+
+/// What the builder asks the game, answered over the simulator's world, hotbar and player.
+pub struct SimFacts<'a> {
+    pub world: &'a TestWorld,
+    pub tables: &'a Tables,
+    pub inv: &'a TestInventory,
+    pub player: SimPlayer,
+}
+
+impl BuildFacts for SimFacts<'_> {
+    fn approx_placeable(&self) -> Vec<StateId> {
+        let hotbar = self.inv.slots.iter().map(|s| if s.is_empty() { 0 } else { item_state(&s.item).unwrap_or(0) });
+        let rest = self.inv.main.iter().map(|s| if s.is_empty() { 0 } else { item_state(&s.item).unwrap_or(0) });
+        hotbar.chain(rest).chain(std::iter::repeat(0)).take(36).collect()
+    }
+    fn offhand_placeable(&self) -> StateId {
+        let o = &self.inv.offhand;
+        if o.is_empty() {
+            0
+        } else {
+            item_state(&o.item).unwrap_or(0)
+        }
+    }
+    fn item_block(&self, slot: InvSlot) -> Option<String> {
+        let s = match slot {
+            InvSlot::Hotbar(i) => self.inv.slots[i].clone(),
+            InvSlot::Main(i) => self.inv.main.get(i - 9).cloned().unwrap_or_else(SlotInfo::empty),
+            InvSlot::Offhand => self.inv.offhand.clone(),
+        };
+        if s.is_empty() {
+            return None;
+        }
+        item_state(&s.item).map(|id| if id == 2 { "oak_planks".to_string() } else { "stone".to_string() })
+    }
+    fn state_for_placement(&self, hotbar_slot: usize, hit: &BlockHit, _rot: crate::look::Rotation) -> Option<StateId> {
+        let s = &self.inv.slots[hotbar_slot];
+        if s.is_empty() {
+            return None;
+        }
+        let at = hit.pos.relative(hit.face, 1);
+        if self.world.state_id(at.x, at.y, at.z) != AIR as usize {
+            return None; // `canPlace`
+        }
+        item_state(&s.item)
+    }
+    fn can_survive(&self, _state: StateId, _pos: Pos) -> bool {
+        true
+    }
+    fn placement_plausible(&self, _state: StateId, pos: Pos) -> bool {
+        !self.player.overlaps_cell(pos.x, pos.y, pos.z)
+    }
+    fn outline_bounds(&self, pos: Pos) -> Option<Aabb> {
+        if self.world.state_id(pos.x, pos.y, pos.z) == AIR as usize {
+            None
+        } else {
+            Some(Aabb { min_x: 0.0, min_y: 0.0, min_z: 0.0, max_x: 1.0, max_y: 1.0, max_z: 1.0 })
+        }
+    }
+    fn ray_trace(&self, start: Vec3, rot: crate::look::Rotation, reach: f64) -> Option<BlockHit> {
+        let ctx = self.tables.ctx(self.world, Border { min_x: -3.0e7, max_x: 3.0e7, min_z: -3.0e7, max_z: 3.0e7 });
+        ray_trace_towards(&ctx, start, rot, reach)
+    }
 }
 
 const SNEAK_FACTOR: f64 = 0.3;
@@ -300,6 +383,8 @@ impl SimPlayer {
 pub struct ImmediateRunner {
     pub results: VecDeque<SearchOutcome>,
     pub started: Vec<(u64, Goal)>,
+    /// For each search in `started`: whether it was asked to use a process's context (`SearchJob::context`).
+    pub contexts: Vec<bool>,
     pub cancels: u32,
 }
 
@@ -307,6 +392,7 @@ impl SearchRunner<TestWorld> for ImmediateRunner {
     fn start(&mut self, job: SearchJob, snapshot: TestWorld) {
         let cancel = AtomicBool::new(false);
         self.started.push((job.generation, job.goal.clone()));
+        self.contexts.push(job.context.is_some());
         let out = run_search(&job, &snapshot, &cancel, &mut || 0);
         self.results.push_back(out);
     }
@@ -386,6 +472,12 @@ pub struct Rig<R: SearchRunner<TestWorld>> {
     pub scans_run: u32,
     /// The ticks in which the process in control was a given one: (tick, mine active, get-to-block active, goal process active).
     pub who: Vec<(u32, bool, bool, bool)>,
+    /// The builder's settings and block table, and whether it asks the simulator's facts (else it asks none and places nothing).
+    pub build_settings: BuildSettings,
+    pub block_states: Arc<BlockStates>,
+    pub build_facts: bool,
+    /// The window clicks `InventoryBehavior` asked for, in order; each was applied to `inv` as the game would (`TestInventory::apply_swap`).
+    pub swaps: Vec<crate::inventory::SwapRequest>,
 }
 
 impl<R: SearchRunner<TestWorld>> Rig<R> {
@@ -420,6 +512,10 @@ impl<R: SearchRunner<TestWorld>> Rig<R> {
             messages: vec![],
             scans_run: 0,
             who: vec![],
+            build_settings: BuildSettings::default(),
+            block_states: sim_block_states(),
+            build_facts: false,
+            swaps: vec![],
         }
     }
 
@@ -441,7 +537,7 @@ impl<R: SearchRunner<TestWorld>> Rig<R> {
         };
         let fx = Fixture::with_ore(cfg.clone());
         let mut cfg = cfg.clone();
-        cfg.has_throwaway = *allow_place && has_generic_throwaway(&self.inv, &self.exec.tool.acceptable_throwaway_items);
+        cfg.has_throwaway = *allow_place && has_generic_throwaway(&self.inv, &self.exec.tool.acceptable_throwaway_items, self.exec.tool.allow_inventory);
         let ts: &ToolSettings = &self.exec.tool;
         let strength = vec![1.0, get_str_vs_block(&self.inv, 1, "stone", ts), get_str_vs_block(&self.inv, ORE as usize, "diamond_ore", ts)];
         self.tables = Arc::new(Tables::new(fx.states, cfg, strength));
@@ -491,11 +587,11 @@ impl<R: SearchRunner<TestWorld>> Rig<R> {
             if self.use_cooldown == 0 {
                 self.use_cooldown = 4;
                 let held = self.inv.slots[self.inv.selected].clone();
-                if let (Some(h), true) = (hit, !held.is_empty() && matches!(held.item.as_str(), "stone" | "dirt" | "cobblestone" | "netherrack")) {
+                if let (Some(h), true) = (hit, !held.is_empty() && matches!(held.item.as_str(), "stone" | "dirt" | "cobblestone" | "netherrack" | "oak_planks")) {
                     let at = h.pos.relative(h.face, 1);
                     let inside = at.x >= 0 && at.x < self.world.w && at.z >= 0 && at.z < self.world.d && (0..16).contains(&at.y);
                     if inside && self.world.state_id(at.x, at.y, at.z) == AIR as usize && !self.p.overlaps_cell(at.x, at.y, at.z) {
-                        self.world.set(at.x, at.y, at.z, STONE);
+                        self.world.set(at.x, at.y, at.z, if held.item == "oak_planks" { ORE } else { STONE });
                         self.placed.push(at);
                         let slot = &mut self.inv.slots[self.inv.selected];
                         slot.count -= 1;
@@ -522,7 +618,10 @@ impl<R: SearchRunner<TestWorld>> Rig<R> {
         let head = (self.p.x.floor() as i32, (self.p.y + self.p.eye_height()).floor() as i32, self.p.z.floor() as i32);
         view.in_wall = solid(&self.world, head.0, head.1, head.2);
         let snap = self.world.clone();
-        let env = TickEnv { tables: &self.tables, world: &self.world, border: Border { min_x: -3.0e7, max_x: 3.0e7, min_z: -3.0e7, max_z: 3.0e7 }, player: &view, exec: &self.exec, inv: &self.inv, game: self.game };
+        let sim_facts = SimFacts { world: &self.world, tables: &self.tables, inv: &self.inv, player: self.p.clone() };
+        let facts: &dyn BuildFacts = if self.build_facts { &sim_facts } else { &NoBuildFacts };
+        let build = BuildEnv { facts, settings: &self.build_settings, states: &self.block_states };
+        let env = TickEnv { tables: &self.tables, world: &self.world, border: Border { min_x: -3.0e7, max_x: 3.0e7, min_z: -3.0e7, max_z: 3.0e7 }, player: &view, exec: &self.exec, inv: &self.inv, game: self.game, build };
         self.pathing.set_inputs(ProcessInputs { now_ms: i64::from(self.ticks) * 50, item_entities: self.entities.clone(), container_open: false, entities: self.mobs.clone() });
         let out = self.pathing.tick(&env, &mut || snap.clone());
         // the scans the processes asked for run between ticks, as the glue's worker does, and their answers come in before the next one
@@ -534,6 +633,11 @@ impl<R: SearchRunner<TestWorld>> Rig<R> {
         self.messages.extend(self.pathing.take_messages());
         self.who.push((self.ticks, self.pathing.mine_process().is_active(), self.pathing.get_to_block_process().is_active(), self.pathing.process().is_active()));
         self.intent = out.intent.clone();
+        // the window clicks come before the slot is selected
+        for swap in &out.swaps {
+            self.inv.apply_swap(*swap);
+            self.swaps.push(*swap);
+        }
         if let Some(slot) = out.intent.select_slot {
             self.inv.selected = slot;
         }
@@ -1086,7 +1190,8 @@ mod tests {
                 view.food_level = rng.below(21) as i32;
                 let snap = rig.world.clone();
                 rig.p.step(&rig.world, &rig.intent);
-                let env = TickEnv { tables: &rig.tables, world: &rig.world, border: Border { min_x: -3.0e7, max_x: 3.0e7, min_z: -3.0e7, max_z: 3.0e7 }, player: &view, exec: &rig.exec, inv: &rig.inv, game: rig.game };
+                let build = BuildEnv { facts: &NoBuildFacts, settings: &rig.build_settings, states: &rig.block_states };
+                let env = TickEnv { tables: &rig.tables, world: &rig.world, border: Border { min_x: -3.0e7, max_x: 3.0e7, min_z: -3.0e7, max_z: 3.0e7 }, player: &view, exec: &rig.exec, inv: &rig.inv, game: rig.game, build };
                 let out = rig.pathing.tick(&env, &mut || snap.clone());
                 rig.intent = out.intent;
                 if rig.pathing.has_path() {
@@ -2289,4 +2394,308 @@ mod explore_tests {
         assert!(!r.pathing.explore_process().is_active(), "it never gave up");
         assert!(r.messages.iter().any(|m| m == "Failed"), "{:?}", r.messages);
     }
+}
+
+#[cfg(test)]
+mod build_tests {
+    use super::*;
+    use crate::inventory::SlotInfo;
+    use crate::schematic::StaticSchematic;
+    use crate::testing::test_config;
+
+    fn rig(world: TestWorld, start: (i32, i32, i32), inv: TestInventory) -> Rig<ImmediateRunner> {
+        let cfg = Config { allow_break: true, allow_downward: true, allow_place_source: true, allow_place_flow: true, ..test_config() };
+        let mut rig = Rig::configured(world, start, ImmediateRunner::default(), cfg, true, inv);
+        rig.build_facts = true;
+        rig
+    }
+
+    /// A hotbar with planks in slot 0 and an iron pickaxe in slot 3.
+    fn planks_and_pick(planks: u32) -> TestInventory {
+        let mut inv = TestInventory::empty();
+        inv.put(0, SlotInfo::of("oak_planks", planks), &[0.0, 0.0, 0.0125]);
+        inv.put(3, SlotInfo { material_cost: 2, pickaxe: true, ..SlotInfo::of("iron_pickaxe", 1) }, &[0.0, 0.2, 0.2]);
+        inv
+    }
+
+    fn floor(w: i32, l: i32, state: usize) -> Arc<StaticSchematic> {
+        Arc::new(StaticSchematic::new(w, 1, l, vec![state; (w * l) as usize], 0))
+    }
+
+    fn start_build(rig: &mut Rig<ImmediateRunner>, name: &str, schem: Arc<StaticSchematic>, origin: Pos) {
+        let (bs, st) = (rig.build_settings.clone(), rig.block_states.clone());
+        rig.pathing.build(name.to_string(), schem, origin, &bs, &st);
+    }
+
+    fn run_build(rig: &mut Rig<ImmediateRunner>, max: u32) -> u32 {
+        for n in 0..max {
+            rig.tick();
+            if !rig.pathing.builder_process().is_active() {
+                return n + 1;
+            }
+        }
+        max
+    }
+
+    #[test]
+    fn a_floor_of_planks_is_built_from_the_hotbar() {
+        let mut rig = rig(TestWorld::flat(16, 16), (2, 1, 2), planks_and_pick(64));
+        start_build(&mut rig, "floor", floor(3, 3, PLANKS_ID), Pos::new(6, 1, 6));
+        let n = run_build(&mut rig, 2500);
+        assert!(!rig.pathing.builder_process().is_active(), "still building after {n} ticks at {:?}: {:?}", rig.p.feet(), rig.messages);
+        for x in 6..9 {
+            for z in 6..9 {
+                assert_eq!(rig.world.state_id(x, 1, z), PLANKS_ID, "({x}, 1, {z})");
+            }
+        }
+        assert!(rig.messages.iter().any(|m| m == "Done building"), "{:?}", rig.messages);
+        assert!(rig.pathing.take_build_finished());
+        assert!(rig.broken.is_empty(), "nothing had to be broken: {:?}", rig.broken);
+        // the blocks it put down were the nine, and nothing outside the floor but at most scaffolding (it has no throwaway block, so none)
+        assert_eq!(rig.placed.len(), 9, "{:?}", rig.placed);
+        eprintln!("floor of 9: {n} ticks");
+    }
+
+    /// `allowInventory`: the planks are only in the main inventory, so a floor of planks is built after the stack is swapped to the hotbar. Without the setting
+    /// the build finds no block, and pauses.
+    #[test]
+    fn a_floor_is_built_from_the_main_inventory_with_allow_inventory() {
+        let mut inv = TestInventory::empty();
+        inv.put_main(20, SlotInfo::of("oak_planks", 64), &[0.0, 0.0, 0.0125]);
+        inv.put(3, SlotInfo { material_cost: 2, pickaxe: true, ..SlotInfo::of("iron_pickaxe", 1) }, &[0.0, 0.2, 0.2]);
+        let mut rig = rig(TestWorld::flat(16, 16), (2, 1, 2), inv.clone());
+        rig.exec.tool.allow_inventory = true;
+        start_build(&mut rig, "floor", floor(3, 3, PLANKS_ID), Pos::new(6, 1, 6));
+        let n = run_build(&mut rig, 2500);
+        assert!(!rig.pathing.builder_process().is_active(), "still building after {n} ticks at {:?}: {:?}", rig.p.feet(), rig.messages);
+        for x in 6..9 {
+            for z in 6..9 {
+                assert_eq!(rig.world.state_id(x, 1, z), PLANKS_ID, "({x}, 1, {z})");
+            }
+        }
+        assert!(rig.messages.iter().any(|m| m == "Done building"), "{:?}", rig.messages);
+        assert!(!rig.swaps.is_empty(), "the stack was swapped to the hotbar");
+        assert_eq!(rig.swaps[0].in_inventory, 20);
+        assert!((1..8).contains(&rig.swaps[0].in_hotbar));
+        assert_eq!(rig.placed.len(), 9);
+        // the setting off: nothing is swapped and the builder says what it misses
+        let mut rig = rig_off(inv);
+        start_build(&mut rig, "floor", floor(3, 3, PLANKS_ID), Pos::new(6, 1, 6));
+        for _ in 0..200 {
+            rig.tick();
+        }
+        assert!(rig.swaps.is_empty());
+        assert!(rig.placed.is_empty());
+    }
+
+    /// `inventoryMoveOnlyIfStationary`: the move waits for the pauser (`InventoryPauserProcess`) to stop the path and for the player to stand still, and the
+    /// build still ends. The player does not move on the tick of the move.
+    #[test]
+    fn a_move_that_waits_for_the_player_to_stand_still_still_ends_the_build() {
+        let mut inv = TestInventory::empty();
+        inv.put_main(20, SlotInfo::of("oak_planks", 64), &[0.0, 0.0, 0.0125]);
+        let mut rig = rig(TestWorld::flat(16, 16), (2, 1, 2), inv);
+        rig.exec.tool.allow_inventory = true;
+        rig.exec.tool.inventory_move_only_if_stationary = true;
+        start_build(&mut rig, "floor", floor(2, 2, PLANKS_ID), Pos::new(6, 1, 6));
+        let mut at_swap = vec![];
+        for _ in 0..3000 {
+            let before = rig.swaps.len();
+            rig.tick();
+            if rig.swaps.len() > before {
+                at_swap.push((rig.p.vx, rig.p.vz));
+            }
+            if !rig.pathing.builder_process().is_active() {
+                break;
+            }
+        }
+        assert!(!rig.pathing.builder_process().is_active(), "still building at {:?}: {:?}", rig.p.feet(), rig.messages);
+        assert!(!rig.swaps.is_empty(), "the stack was moved");
+        for (vx, vz) in at_swap {
+            assert!((vx * vx + vz * vz).sqrt() < 0.01, "the player moved on the tick of the move: {vx} {vz}");
+        }
+        for x in 6..8 {
+            for z in 6..8 {
+                assert_eq!(rig.world.state_id(x, 1, z), PLANKS_ID);
+            }
+        }
+    }
+
+    fn rig_off(inv: TestInventory) -> Rig<ImmediateRunner> {
+        rig(TestWorld::flat(16, 16), (2, 1, 2), inv)
+    }
+
+    #[test]
+    fn review_a_finished_or_stopped_build_lets_go_of_its_schematic() {
+        let mut rig = rig(TestWorld::flat(16, 16), (2, 1, 2), planks_and_pick(64));
+        start_build(&mut rig, "floor", floor(2, 2, PLANKS_ID), Pos::new(6, 1, 6));
+        for _ in 0..5 {
+            rig.tick();
+        }
+        assert!(rig.pathing.holds_builder_context(), "a build in progress holds its context");
+        // a stop lets go at once
+        let _ = rig.pathing.stop();
+        assert!(!rig.pathing.holds_builder_context());
+        // and a finished build lets go too, once the last path is over
+        start_build(&mut rig, "floor", floor(2, 2, PLANKS_ID), Pos::new(6, 1, 6));
+        let n = run_build(&mut rig, 2500);
+        assert!(!rig.pathing.builder_process().is_active(), "still building after {n} ticks: {:?}", rig.messages);
+        for _ in 0..20 {
+            rig.tick();
+        }
+        assert!(!rig.pathing.holds_builder_context());
+    }
+
+    /// A hollow box of planks, 5 x 4 x 5, with a two high gap in the west wall (the L3 scenario r01): the roof cannot be reached from where the
+    /// player stands inside, and the builder has to raise itself.
+    #[test]
+    fn a_closed_box_with_a_roof_is_built_from_inside_and_out() {
+        let (w, h, l) = (5, 4, 5);
+        let mut states = vec![AIR as usize; (w * h * l) as usize];
+        let mut want = vec![];
+        for x in 0..w {
+            for y in 0..h {
+                for z in 0..l {
+                    let shell = x == 0 || x == w - 1 || z == 0 || z == l - 1 || y == 0 || y == h - 1;
+                    let gap = x == 0 && z == 2 && (y == 1 || y == 2);
+                    if shell && !gap {
+                        states[((x * l + z) * h + y) as usize] = PLANKS_ID;
+                        want.push((x, y, z));
+                    }
+                }
+            }
+        }
+        assert_eq!(want.len(), 80);
+        let schem = Arc::new(StaticSchematic::new(w, h, l, states, 0));
+        let mut rig = rig(TestWorld::flat(24, 24), (2, 1, 2), planks_and_pick(128));
+        start_build(&mut rig, "box", schem, Pos::new(8, 1, 8));
+        let n = run_build(&mut rig, 3000);
+        let missing: Vec<_> = want.iter().filter(|&&(x, y, z)| rig.world.state_id(8 + x, 1 + y, 8 + z) != PLANKS_ID).collect();
+        assert!(!rig.pathing.builder_process().is_active(), "still building after {n} ticks at {:?}: missing {missing:?}: {:?}", rig.p.feet(), rig.messages);
+        assert!(missing.is_empty(), "{missing:?}");
+    }
+
+    #[test]
+    fn a_2x2x2_of_stone_is_cleared_with_the_pickaxe() {
+        let mut w = TestWorld::flat(16, 16);
+        for x in 6..8 {
+            for y in 1..3 {
+                for z in 6..8 {
+                    w.set(x, y, z, STONE);
+                }
+            }
+        }
+        let mut rig = rig(w, (2, 1, 2), planks_and_pick(0));
+        let (bs, st) = (rig.build_settings.clone(), rig.block_states.clone());
+        rig.pathing.clear_area(Pos::new(7, 2, 7), Pos::new(6, 1, 6), &bs, &st);
+        let n = run_build(&mut rig, 2500);
+        assert!(!rig.pathing.builder_process().is_active(), "still clearing after {n} ticks at {:?}: {:?}", rig.p.feet(), rig.messages);
+        for x in 6..8 {
+            for y in 1..3 {
+                for z in 6..8 {
+                    assert_eq!(rig.world.state_id(x, y, z), AIR as usize, "({x}, {y}, {z})");
+                }
+            }
+        }
+        assert_eq!(rig.broken.len(), 8);
+        assert!(rig.messages.iter().any(|m| m == "Done building"));
+        eprintln!("clear 2x2x2: {n} ticks");
+    }
+
+    #[test]
+    fn a_missing_material_pauses_with_the_messages_and_resume_finishes() {
+        // the hotbar holds stone, the schematic wants planks
+        let mut inv = TestInventory::empty();
+        inv.put(1, SlotInfo::of("stone", 64), &[0.0, 0.0125]);
+        let mut rig = rig(TestWorld::flat(16, 16), (2, 1, 2), inv);
+        start_build(&mut rig, "floor", floor(2, 2, PLANKS_ID), Pos::new(6, 1, 6));
+        for _ in 0..40 {
+            rig.tick();
+        }
+        assert!(rig.pathing.builder_process().is_paused(), "{:?}", rig.messages);
+        assert_eq!(rig.messages, vec!["Missing materials for at least:", "4x Block{minecraft:oak_planks}", "Unable to do it. Pausing. resume to resume, cancel to cancel"]);
+        // it stands still while paused
+        let here = (rig.p.x, rig.p.z);
+        for _ in 0..30 {
+            rig.tick();
+            assert!(rig.intent.is_neutral(), "{:?}", rig.intent);
+        }
+        assert_eq!((rig.p.x, rig.p.z), here);
+        // nothing resumes by itself; then the planks arrive
+        assert!(rig.pathing.builder_process().is_paused());
+        rig.inv.put(2, SlotInfo::of("oak_planks", 64), &[0.0, 0.0, 0.0125]);
+        assert!(rig.pathing.resume_build());
+        assert!(!rig.pathing.resume_build(), "it was not paused the second time");
+        let n = run_build(&mut rig, 2500);
+        assert!(!rig.pathing.builder_process().is_active(), "{n} ticks, at {:?}: {:?}", rig.p.feet(), rig.messages);
+        for x in 6..8 {
+            for z in 6..8 {
+                assert_eq!(rig.world.state_id(x, 1, z), PLANKS_ID);
+            }
+        }
+    }
+
+    #[test]
+    fn stop_in_the_middle_of_a_build_lets_go_at_once() {
+        let mut rig = rig(TestWorld::flat(24, 24), (2, 1, 2), planks_and_pick(64));
+        start_build(&mut rig, "big", floor(8, 8, PLANKS_ID), Pos::new(8, 1, 8));
+        for _ in 0..120 {
+            rig.tick();
+        }
+        assert!(rig.pathing.builder_process().is_active(), "it finished too early to test the stop");
+        let placed_before = rig.placed.len();
+        assert!(placed_before > 0, "nothing was built in 120 ticks");
+        let intent = rig.pathing.stop();
+        assert!(intent.is_neutral());
+        rig.intent = intent;
+        let world = rig.world.clone();
+        for _ in 0..20 {
+            rig.tick();
+            assert!(rig.intent.is_neutral(), "{:?}", rig.intent);
+            assert!(!rig.pathing.has_path());
+        }
+        assert!(!rig.pathing.builder_process().is_active());
+        assert_eq!(rig.placed.len(), placed_before);
+        for x in 0..24 {
+            for z in 0..24 {
+                assert_eq!(rig.world.state_id(x, 1, z), world.state_id(x, 1, z));
+            }
+        }
+    }
+
+    #[test]
+    fn the_builders_context_reaches_every_search_and_a_goto_clears_it() {
+        let mut rig = rig(TestWorld::flat(24, 24), (2, 1, 2), planks_and_pick(64));
+        start_build(&mut rig, "big", floor(8, 8, PLANKS_ID), Pos::new(12, 1, 12));
+        for _ in 0..60 {
+            rig.tick();
+        }
+        let during = rig.pathing.runner_mut().contexts.clone();
+        assert!(!during.is_empty(), "the builder started no search");
+        assert!(during.iter().all(|c| *c), "a search of the builder had the plain context: {during:?}");
+        // a goto takes control: the builder is gone and the next search has no context
+        rig.pathing.goto(Goal::Block { x: 3, y: 1, z: 20 });
+        for _ in 0..5 {
+            rig.tick();
+        }
+        assert!(!rig.pathing.builder_process().is_active());
+        let after = rig.pathing.runner_mut().contexts.clone();
+        assert!(after.len() > during.len());
+        assert!(after[during.len()..].iter().all(|c| !*c), "{after:?}");
+    }
+
+    #[test]
+    fn a_build_without_the_games_facts_places_nothing() {
+        // NoBuildFacts: no slot places anything, so the builder is stuck, says what it is missing, and pauses
+        let mut rig = rig(TestWorld::flat(16, 16), (2, 1, 2), planks_and_pick(64));
+        rig.build_facts = false;
+        start_build(&mut rig, "floor", floor(2, 2, PLANKS_ID), Pos::new(6, 1, 6));
+        for _ in 0..40 {
+            rig.tick();
+        }
+        assert!(rig.placed.is_empty());
+        assert!(rig.pathing.builder_process().is_paused());
+    }
+
+    const PLANKS_ID: usize = 2;
 }

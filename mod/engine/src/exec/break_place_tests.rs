@@ -561,3 +561,60 @@ fn placing_decides_by_the_crosshair_and_the_throwaway() {
     p.looking_at = hit(2, 0, 3, Direction::East);
     assert_eq!(run(&p, true).0, PlaceResult::ReadyToPlace);
 }
+
+/// `InventoryBehavior.throwaway(true, ...)` with `allowInventory`, as `MovementHelper.attemptToPlaceABlock` calls it: a block that is only in the main inventory
+/// is asked for in hotbar slot 7 (`requestSwapWithHotBar(i, 7)`) and slot 7 is selected; with the setting off, there is nothing to place.
+#[test]
+fn a_block_in_the_main_inventory_is_swapped_into_slot_7_and_selected() {
+    let t = tables(Config { has_throwaway: true, ..breaking() });
+    let w = bridge_world();
+    let ctx = t.ctx(&w, BORDER);
+    let mut inv = TestInventory::empty();
+    inv.put_main(22, SlotInfo::of("stone", 64), &[]);
+    let p = player(2.9, 1.0, 3.5);
+    let place_at = Pos::new(3, 0, 3);
+    let mut set = ExecSettings::default();
+    set.tool.allow_inventory = true;
+    let mut env = Env::new(&ctx, &p, &set, p.feet());
+    env.inv = &inv;
+    let mut st = MoveState::new();
+    assert_eq!(attempt_to_place_a_block(&env, &mut st, place_at, false, true), PlaceResult::Attempting);
+    assert_eq!(st.select, Some(7));
+    assert_eq!(st.swap_in, Some(22));
+    // the setting off: the block is out of reach for the movement
+    let set = ExecSettings::default();
+    let mut env = Env::new(&ctx, &p, &set, p.feet());
+    env.inv = &inv;
+    let mut st = MoveState::new();
+    assert_eq!(attempt_to_place_a_block(&env, &mut st, place_at, false, true), PlaceResult::NoOption);
+    assert_eq!(st.swap_in, None);
+    assert_eq!(st.status, MoveStatus::Unreachable);
+}
+
+/// `Movement.update` with a swap asked for inside `throwaway`: the request reaches the inventory mover, which makes it when the spacing allows it (the
+/// default `ticksBetweenInventoryMoves` of 1 makes the first one wait for a tick of `InventoryBehavior`).
+#[test]
+fn update_hands_the_swap_to_the_inventory_mover() {
+    let t = tables(Config { has_throwaway: true, ..breaking() });
+    let w = bridge_world();
+    let mut inv = TestInventory::empty();
+    inv.put_main(22, SlotInfo::of("stone", 64), &[]);
+    let p = player(2.9, 1.0, 3.5);
+    let mv = traverse((2, 1, 3), (3, 1, 3));
+    let mut set = ExecSettings::default();
+    set.tool.allow_inventory = true;
+    set.allow_place = true;
+    let ctx = t.ctx(&w, BORDER);
+    let mut env = Env::new(&ctx, &p, &set, p.feet());
+    env.inv = &inv;
+    let mut rt = MoveRuntime::new(&mv);
+    let mut c = Controls::default();
+    update(&mv, &mut rt, &env, &mut c);
+    assert_eq!(c.select, Some(7), "the movement asked for the stack");
+    // delayed by the spacing, then made by the behavior's tick
+    assert!(c.inventory.take_requests().is_empty());
+    c.inventory.on_tick(&inv, &set.tool, false, false, None);
+    let moves = c.inventory.take_requests();
+    assert_eq!(moves.len(), 1);
+    assert_eq!((moves[0].in_inventory, moves[0].in_hotbar), (22, 7));
+}

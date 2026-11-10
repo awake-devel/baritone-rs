@@ -127,7 +127,7 @@ pub fn cost<W: WorldView>(ctx: &Ctx<'_, W>, x: i32, y: i32, z: i32, dir: Directi
         let dest_x = x.wrapping_add(i.wrapping_mul(x_diff));
         let dest_z = z.wrapping_add(i.wrapping_mul(z_diff));
         let to_replace = ctx.get(dest_x, y.wrapping_sub(1), dest_z);
-        let place_cost = ctx.cost_of_placing_at(dest_x, dest_z, &to_replace);
+        let place_cost = ctx.cost_of_placing_at(dest_x, y.wrapping_sub(1), dest_z, to_replace);
         if place_cost >= COST_INF {
             i -= 1;
             continue;

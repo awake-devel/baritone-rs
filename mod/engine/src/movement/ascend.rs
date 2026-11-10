@@ -10,7 +10,7 @@ pub fn cost<W: WorldView>(ctx: &Ctx<'_, W>, x: i32, y: i32, z: i32, dest_x: i32,
     let to_place = ctx.get(dest_x, y, dest_z);
     let mut additional_placement_cost = 0.0;
     if !ctx.can_walk_on(dest_x, y, dest_z, to_place) {
-        additional_placement_cost = ctx.cost_of_placing_at(dest_x, dest_z, &to_place);
+        additional_placement_cost = ctx.cost_of_placing_at(dest_x, y, dest_z, to_place);
         if additional_placement_cost >= COST_INF {
             return COST_INF;
         }

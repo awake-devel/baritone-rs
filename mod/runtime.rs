@@ -6,7 +6,7 @@
 //   * `on_movement` (native_movement_input, before the player moves): replaces the player's keys, only while a path runs.
 //   * `on_input_head` / `on_input_return` (the game's own input step, pinned): hold the left and right buttons for the executor, also
 //     with the chat open (the screen is Playing for that one call). The slot, the aim and the buttons come from the intent.
-//   * `on_command`: `/b goto` (coordinates or a block), `mine`, `goal`, `path`, `eta`, `set`, `stop`, `help`, `trace`. `suggest_provider`: the words after `/b` for the chat box.
+//   * `on_command`: `/b goto` (coordinates or a block), `mine`, `build`, `resume`, `goal`, `path`, `eta`, `set`, `stop`, `help`, `trace`. `suggest_provider`: the words after `/b` for the chat box.
 //   * `on_primitives`: the path, drawn in the world.
 //   * `on_level_gone`: the level was dropped, or the connection ends.
 // With no goal ever given, the mod touches no key and walks nowhere. It does read the chunks the game loads, in a world: the persistent chunk cache
@@ -14,23 +14,25 @@
 //
 // The block table comes from `baritone_rs_facts` (mod/glue/state_facts.rs, the file tools/facts-compare also compiles).
 // The test-only scenario trigger at the end does nothing unless BARITONE_RS_SCENARIO_DIR is set.
-use super::{Game, Screen};
+use super::{Game, Hit, Screen};
 use baritone_engine::blocks::{Direction, State};
 use baritone_engine::buttons::Buttons;
 use baritone_engine::blockmeta::{BlockIndex, StateEntry};
 use baritone_engine::cache::worker::{PackJob, WorldData, WorldProvider};
 use baritone_engine::cache::{CacheEnv, CacheReader, CachedWorld, Dimension, PackSource, WithCache};
-use baritone_engine::command::{complete_blocks, complete_follow, eta_command, explore_command, explore_filter_command, follow_command, goal_command, goal_to_string, goto_block, goto_goal, mine_command, path_command, GoalAction, GotoError, PathAction, PlayerRef};
+use baritone_engine::command::{build_command, complete_blocks, complete_relative_file, resume_command, complete_follow, eta_command, explore_command, explore_filter_command, follow_command, goal_command, goal_to_string, goto_block, goto_goal, mine_command, path_command, GoalAction, GotoError, PathAction, PlayerRef};
 use baritone_engine::config::Config;
 use baritone_engine::exec::movements::GameFacts;
 use baritone_engine::exec::state::{CancelReason, PlayerView};
 use baritone_engine::goals::Goal;
-use baritone_engine::inventory::{calculate_speed_vs_block, get_str_vs_block, potion_amplifier, Inventory, SlotInfo, ToolSettings, HOTBAR};
+use baritone_engine::inventory::{calculate_speed_vs_block, get_str_vs_block, potion_amplifier, Inventory, SlotInfo, SwapRequest, ToolSettings, HOTBAR, MAIN};
 use baritone_engine::look::Vec3;
 use baritone_engine::movement::helper::Border;
 use baritone_engine::pos::Pos;
 use baritone_engine::process::pathing::{PathEvent, Pathing, Tables, TickEnv};
-use baritone_engine::process::{EntityInfo, ItemEntity as DroppedItem, ProcessInputs, ScanJob, ScanResult};
+use baritone_engine::process::{Aabb as BuildAabb, BuildEnv, BuildFacts, EntityInfo, InvSlot, ItemEntity as DroppedItem, NoBuildFacts, ProcessInputs, ScanJob, ScanResult};
+use baritone_engine::schematic::format::{extension_of, ParseLimits, SchematicFormat};
+use baritone_engine::schematic::{BlockStates, StaticSchematicView};
 use baritone_engine::raytrace::BlockHit;
 use baritone_engine::set::{Registry, SetEffect, Settings};
 use baritone_engine::freelook::{restored_view, LookSettings, LookState, Plan};
@@ -44,6 +46,8 @@ use horizon_items::blocks::BlockFacts;
 use horizon_items::items::{ItemStack, Items};
 use horizon_client_render::chunk::Chunk;
 use horizon_client_render::world::World;
+use horizon_core::position::BlockPos;
+use horizon_world::level::{Behaviours, LevelAccess, PlaceContext, Ticks};
 use horizon_world::registry::{BlockRegistry, BlockStateId};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
@@ -51,7 +55,7 @@ use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 pub const ID: &str = "baritone_rs";
 pub const NAME: &str = "baritone-rs";
 pub const VERSION: &str = "0.1.0";
-pub const DESCRIPTION: &str = "Pathfinding. /b goto <x> <y> <z> or <block>, /b mine <block>, /b follow <entities>, /b explore [x z], /b explorefilter <file> [invert], /b goal, /b path, /b eta, /b set, /b stop. Walks, sprints, breaks and places blocks. Parkour and swimming are off.";
+pub const DESCRIPTION: &str = "Pathfinding. /b goto <x> <y> <z> or <block>, /b mine <block>, /b build <schematic> [x y z], /b resume, /b follow <entities>, /b explore [x z], /b explorefilter <file> [invert], /b goal, /b path, /b eta, /b set, /b stop. Walks, sprints, breaks and places blocks. Parkour and swimming are off.";
 
 const PREFIX: &str = "[baritone-rs]";
 
@@ -163,6 +167,8 @@ struct Base {
     air_like: Vec<bool>,
     /// The blocks, their states and what they drop, for `mine` and `goto <block>`.
     index: BlockIndex,
+    /// What schematics and the builder need to know of each state: properties, default states, rotation and mirror tables (docs/deviations.md D48).
+    block_states: Arc<BlockStates>,
 }
 
 /// Scans run off the game thread (the mine and get-to-block processes' `rescan`): a request goes in, the answer comes back and is handed to the
@@ -243,6 +249,13 @@ struct Mod {
     reported_cancel: Option<CancelReason>,
     /// Stop the sprint on the next tick: the path ended where no player was at hand.
     unsprint: bool,
+    /// Schematic files that finished loading on their own threads (`/b build`, D48), and the number the current `/b build` was given: an answer
+    /// of another number is dropped (`/b stop`, or any other command, bumps it).
+    build_tx: std::sync::mpsc::Sender<BuildLoad>,
+    build_rx: std::sync::mpsc::Receiver<BuildLoad>,
+    build_generation: u64,
+    /// A schematic is being read on its thread. One at a time (D50): the parse cannot be cancelled, only its result dropped.
+    build_loading: Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl Mod {
@@ -386,6 +399,9 @@ struct Hotbar {
     off_info: SlotInfo,
     selected: usize,
     amplifier: f64,
+    /// For all 36 main slots: the same efficiency number. Only read when `allowInventory` is on (`InventoryBehavior.bestToolAgainst` prices every slot);
+    /// empty otherwise.
+    main_efficiency: Vec<f32>,
 }
 
 /// `ToolSet.getMaterialCost`'s tags, cheapest first. Upstream tests the stack against the tags of the tool *materials* (planks, cobblestone, iron
@@ -406,22 +422,19 @@ fn slot_info(items: &Items, stack: &ItemStack) -> SlotInfo {
     }
 }
 
-fn read_hotbar(game: &Game<'_>) -> Hotbar {
+fn read_hotbar(game: &Game<'_>, with_main: bool) -> Hotbar {
     let items = game.items();
     let stacks: Vec<Option<ItemStack>> = (0..HOTBAR).map(|i| game.inventory.get(i).and_then(|s| s.clone()).filter(|s| s.count > 0)).collect();
     let offhand = game.offhand.clone().filter(|s| s.count > 0);
-    let efficiency = stacks
-        .iter()
-        .map(|s| {
-            s.as_ref()
-                .and_then(|stack| game.stations().enchantments.attributes(stack).into_iter().find(|(attr, _, _, _)| attr == "minecraft:mining_efficiency"))
-                .map_or(0.0, |(_, _, amount, _)| amount as f32)
-        })
-        .collect();
+    let efficiency_of = |s: Option<&ItemStack>| {
+        s.and_then(|stack| game.stations().enchantments.attributes(stack).into_iter().find(|(attr, _, _, _)| attr == "minecraft:mining_efficiency")).map_or(0.0, |(_, _, amount, _)| amount as f32)
+    };
+    let efficiency = stacks.iter().map(|s| efficiency_of(s.as_ref())).collect();
+    let main_efficiency = if with_main { (0..MAIN).map(|i| efficiency_of(game.inventory.get(i).and_then(|s| s.as_ref()).filter(|s| s.count > 0))).collect() } else { Vec::new() };
     let infos = stacks.iter().map(|s| s.as_ref().map_or_else(SlotInfo::empty, |st| slot_info(items, st))).collect();
     let off_info = offhand.as_ref().map_or_else(SlotInfo::empty, |st| slot_info(items, st));
     let effects = &game.potions.effects;
-    Hotbar { stacks, offhand, efficiency, infos, off_info, selected: game.selected.min(HOTBAR - 1), amplifier: potion_amplifier(effects.amplifier("haste"), effects.amplifier("mining_fatigue")) }
+    Hotbar { stacks, offhand, efficiency, infos, off_info, selected: game.selected.min(HOTBAR - 1), amplifier: potion_amplifier(effects.amplifier("haste"), effects.amplifier("mining_fatigue")), main_efficiency }
 }
 
 /// The hotbar as the engine's `Inventory`. The speed is `ToolSet.calculateSpeedVsBlock` over Horizon's tool numbers.
@@ -450,6 +463,14 @@ impl Inventory for GameInv<'_> {
         let item_speed = self.items.mining_speed(stack, &f.name);
         let correct = stack.is_some() && self.items.correct_for_drops(stack, &f.name);
         calculate_speed_vs_block(f.hardness, item_speed, self.hb.efficiency.get(slot).copied().unwrap_or(0.0), f.requires_tool, stack.is_none(), correct)
+    }
+    /// `ToolSet.calculateSpeedVsBlock` for a stack of the 36 (`game.inventory[slot]`), with the efficiency read at the start of the tick.
+    fn main_speed_vs_state(&self, slot: usize, state: usize) -> f64 {
+        let f = self.facts.get(BlockStateId(state as u32));
+        let stack = self.main.get(slot).and_then(|s| s.as_ref()).filter(|s| s.count > 0);
+        let item_speed = self.items.mining_speed(stack, &f.name);
+        let correct = stack.is_some() && self.items.correct_for_drops(stack, &f.name);
+        calculate_speed_vs_block(f.hardness, item_speed, self.hb.main_efficiency.get(slot).copied().unwrap_or(0.0), f.requires_tool, stack.is_none(), correct)
     }
     fn potion_amplifier(&self) -> f64 {
         self.hb.amplifier
@@ -501,9 +522,10 @@ fn build_base(game: &Game<'_>) -> Result<Base, String> {
         paths.push(desc.name.strip_prefix("minecraft:").unwrap_or(&desc.name).to_string());
     }
     log::info!("{PREFIX} block facts of {n} states read in {} ms", started.elapsed().as_millis());
-    let index = build_index(game, registry);
+    let (index, entries) = build_index(game, registry);
     log::info!("{PREFIX} block index (states and drops) ready in {} ms", started.elapsed().as_millis());
-    Ok(Base { states, default_of, paths, air_like, index })
+    let block_states = Arc::new(build_block_states(game, registry, entries, &states));
+    Ok(Base { states, default_of, paths, air_like, index, block_states })
 }
 
 /// The name the engine keeps a block under (`BlockUtils.blockToString`): the path for `minecraft:`, the whole name otherwise.
@@ -555,7 +577,7 @@ fn table_items(table: &serde_json::Value) -> Vec<String> {
 }
 
 /// Every block state with its block and properties, and the items each block drops (from the vanilla loot tables, `blocks/<name>`).
-fn build_index(game: &Game<'_>, registry: &BlockRegistry) -> BlockIndex {
+fn build_index(game: &Game<'_>, registry: &BlockRegistry) -> (BlockIndex, Vec<StateEntry>) {
     let mut states = Vec::with_capacity(registry.len());
     let mut names: Vec<String> = Vec::new();
     let mut seen = std::collections::HashSet::new();
@@ -584,7 +606,37 @@ fn build_index(game: &Game<'_>, registry: &BlockRegistry) -> BlockIndex {
         }
         Err(e) => log::warn!("{PREFIX} loot tables cannot be read ({e}); mine will not know what blocks drop"),
     }
-    BlockIndex::new(states, drops)
+    (BlockIndex::new(states.clone(), drops), states)
+}
+
+/// The block facts schematics need (`BlockStates`): the entries of the index, the default state of each block, which states are air, and the
+/// rotate and mirror tables of the game's structure templates (`StateTransforms`, the same tables `StructureTemplate.placeInWorld` uses). When the
+/// tables cannot be read the states stay as they are under a rotation or a mirror, which the engine documents.
+fn build_block_states(game: &Game<'_>, registry: &BlockRegistry, entries: Vec<StateEntry>, states: &[State]) -> BlockStates {
+    use horizon_world::worldgen::structure::{Mirror, Rotation};
+    let n = registry.len();
+    let mut default_state: HashMap<String, usize> = HashMap::new();
+    for i in 0..n {
+        if let Some(desc) = registry.state(BlockStateId(i as u32)) {
+            if let Some(d) = registry.default_state(&desc.name) {
+                default_state.entry(block_key(&desc.name)).or_insert(d.0 as usize);
+            }
+        }
+    }
+    let is_air: Vec<bool> = states.iter().map(|s| s.air).collect();
+    let (mut rotate, mut mirror) = (vec![], vec![]);
+    match game.state_transforms() {
+        Some(t) => {
+            for i in 0..n {
+                let id = BlockStateId(i as u32);
+                rotate.push([t.rotate(id, Rotation::Clockwise90).0 as usize, t.rotate(id, Rotation::Clockwise180).0 as usize, t.rotate(id, Rotation::Counterclockwise90).0 as usize]);
+                mirror.push([t.mirror(id, Mirror::LeftRight).0 as usize, t.mirror(id, Mirror::FrontBack).0 as usize]);
+            }
+        }
+        None => log::warn!("{PREFIX} the structure block tables cannot be read; rotated and mirrored schematics keep their block states"),
+    }
+    let air = registry.default_state("minecraft:air").map_or(0, |a| a.0 as usize);
+    BlockStates::new(entries, default_state, is_air, rotate, mirror, air)
 }
 
 /// The block names for tab completion: the registry's distinct names, with no states and no drops. Made once, with the first tick.
@@ -621,7 +673,7 @@ fn refresh_tables(game: &Game<'_>, m: &mut Mod, hb: &Hotbar, food: i32) {
     }
     let nether = game.dim.id() == "minecraft:the_nether";
     let inv = GameInv { items: game.items(), facts: game.res.facts(), hb, main: &game.inventory, main_infos: OnceCell::new() };
-    let has_throwaway = m.settings.get_bool("allowPlace") && baritone_engine::inventory::has_generic_throwaway(&inv, &m.ts.acceptable_throwaway_items);
+    let has_throwaway = m.settings.get_bool("allowPlace") && baritone_engine::inventory::has_generic_throwaway(&inv, &m.ts.acceptable_throwaway_items, m.ts.allow_inventory);
     let has_water_bucket = m.settings.get_bool("allowWaterBucketFall") && baritone_engine::inventory::find_hotbar_slot(&inv, "water_bucket").is_some() && !nether;
     let can_sprint = m.settings.get_bool("allowSprint") && food > 6;
     let sig = Sig {
@@ -690,9 +742,10 @@ fn ensure_started(game: &Game<'_>) -> Result<(), String> {
         cfg.allow_walk_on_magma = true;
         Arc::new(CacheEnv::new(&base.states, &base.default_of, &base.air_like, &|s: &State| baritone_engine::movement::helper::avoid_walking_into(s, &cfg)))
     };
-    let mut m = Mod { pathing, cache_env, tables, base, scanner, sig: None, settings, settings_rev, ts, exec, look_settings, look: LookState::new(), dim: game.dim.id(), target: None, was_active: false, auto_jump_saved: None, reported_cancel: None, unsprint: false };
+    let (build_tx, build_rx) = std::sync::mpsc::channel::<BuildLoad>();
+    let mut m = Mod { pathing, cache_env, tables, base, scanner, sig: None, settings, settings_rev, ts, exec, look_settings, look: LookState::new(), dim: game.dim.id(), target: None, was_active: false, auto_jump_saved: None, reported_cancel: None, unsprint: false, build_tx, build_rx, build_generation: 0, build_loading: Arc::new(std::sync::atomic::AtomicBool::new(false)) };
     let food = game.player.as_ref().map_or(20, |p| p.health.food.food);
-    refresh_tables(game, &mut m, &read_hotbar(game), food);
+    refresh_tables(game, &mut m, &read_hotbar(game, false), food);
     let mut s = state();
     if s.is_none() {
         *s = Some(m);
@@ -732,7 +785,11 @@ fn player_view(game: &Game<'_>, p: &PlayerMotion, tables: &Tables) -> PlayerView
 
 /// What the game's crosshair is on, if it is a block: `Minecraft.hitResult` as `IPlayerContext.getSelectedBlock` reads it.
 fn looking_at(game: &Game<'_>) -> Option<BlockHit> {
-    let hit = game.pick()?;
+    block_hit_of(&game.pick()?)
+}
+
+/// The game's `Hit` as the engine's `BlockHit`.
+fn block_hit_of(hit: &Hit) -> Option<BlockHit> {
     let face = match hit.face {
         [0, 1, 0] => Direction::Up,
         [0, -1, 0] => Direction::Down,
@@ -750,6 +807,8 @@ fn looking_at(game: &Game<'_>) -> Option<BlockHit> {
 /// Hands the player back: the search is cancelled, the keys are the player's again, the path is not drawn. `player` is the
 /// local player when the caller can reach it; otherwise the sprint is stopped on the next tick.
 fn release(m: &mut Mod, player: Option<&mut PlayerMotion>) {
+    // a schematic that is still loading is no longer wanted
+    m.build_generation += 1;
     let _ = m.pathing.stop();
     m.target = None;
     m.look.clear();
@@ -814,6 +873,26 @@ fn container_is_open(game: &Game<'_>) -> bool {
     game.container.is_some() || game.station.is_some() || game.craft_table.is_some() || (game.screen == Screen::Inventory && game.craft_size == 3)
 }
 
+/// `ctx.player().containerMenu != ctx.player().inventoryMenu`, for `InventoryBehavior.onTick` and the swaps it makes: any container, station or crafting
+/// table the player has open, or a menu a server opened (`remote_menu` answers window 0 when none is). The player's own inventory screen does not count.
+fn inventory_menu_blocked(game: &Game<'_>) -> bool {
+    container_is_open(game) || (game.remote.is_some() && game.remote_menu().0 != 0)
+}
+
+/// `InventoryBehavior.requestSwapWithHotBar`'s `playerController().windowClick(inventoryMenu.containerId, slot, hotbar, ClickType.SWAP, player)`: the stack
+/// in `swap.in_inventory` and hotbar slot `swap.in_hotbar` change places, as the number keys do over a slot of the inventory screen (`inventory_hotkey`
+/// calls `menu_click(Some(slot), n, Input::Swap)`). Horizon's slot numbers are `Inventory.items` indices (0 to 8 the hotbar, 9 to 35 the rest), so the
+/// upstream window slot (`SwapRequest::window_slot`) is not needed. On a server the click is predicted and sent (`remote_menu_ops`, window 0 while no
+/// server menu is open); in single player the menu engine applies it to the player's inventory (`menu_ops`).
+fn window_swap(game: &mut Game<'_>, swap: SwapRequest) {
+    use horizon_client::menu::Input;
+    let ops = [(Some(swap.in_inventory), swap.in_hotbar as i32, Input::Swap)];
+    let done = if game.remote.is_some() { game.remote_menu_ops(&ops) } else { game.menu_ops(&ops) };
+    if !done {
+        log::warn!("{PREFIX} the inventory move {} -> hotbar {} was refused by the menu engine", swap.in_inventory, swap.in_hotbar);
+    }
+}
+
 fn tick_path(game: &mut Game<'_>) {
     let mut guard = state();
     let Some(m) = guard.as_mut() else {
@@ -840,6 +919,10 @@ fn tick_path(game: &mut Game<'_>) {
         None
     };
     if let Some(why) = why {
+        // A schematic that is still loading is no longer wanted, whether or not anything else was going on: `release` drops it only when
+        // something was (D50), and a load counts as none of the things that `busy` and the test below look at.
+        m.build_generation += 1;
+        while m.build_rx.try_recv().is_ok() {}
         let was_busy = m.busy();
         // Nothing to hand back when nothing was going on; releasing every tick would only queue events that nobody drains.
         if was_busy || input().is_some() || m.target.is_some() || m.pathing.wants_entities() {
@@ -855,7 +938,7 @@ fn tick_path(game: &mut Game<'_>) {
     let Some(p) = game.player.as_ref() else {
         return;
     };
-    let hotbar = read_hotbar(game);
+    let hotbar = read_hotbar(game, m.ts.allow_inventory);
     refresh_tables(game, m, &hotbar, p.health.food.food);
     // `IPlayerContext.playerRotations` and `objectMouseOver`: with free look, the executor sees the rotation the server was sent, and the
     // crosshair is the ray along it, not along the player's view.
@@ -878,6 +961,8 @@ fn tick_path(game: &mut Game<'_>) {
     let registry: &BlockRegistry = game.pack.assets.registry;
     // What `mine` and `goto <block>` read besides the world: the clock, the dropped items, whether a container is open. The answers of the scans
     // that finished since the last tick go to their processes first.
+    // `InventoryBehavior.onTick` ticks on its own, whether or not a process is active
+    m.pathing.set_container_open(inventory_menu_blocked(game));
     if m.pathing.is_active() || m.pathing.wants_entities() {
         let item_entities = game
             .dropped
@@ -891,12 +976,41 @@ fn tick_path(game: &mut Game<'_>) {
     while let Ok(result) = m.scanner.rx.try_recv() {
         m.pathing.deliver_scan(result, &m.tables.cfg, &m.exec);
     }
+    // The schematics that finished loading since the last tick go to the builder (a result of an older command is dropped).
+    let mut build_lines: Vec<String> = Vec::new();
+    while let Ok(load) = m.build_rx.try_recv() {
+        if load.generation != m.build_generation {
+            continue;
+        }
+        let bs = m.settings.build_settings();
+        m.dim = dim;
+        m.reported_cancel = None;
+        m.target = None;
+        let origin = load.origin;
+        let started = load.result.and_then(|parsed| m.pathing.build_parsed(load.name, parsed, origin, &bs, &m.base.block_states));
+        match started {
+            Ok(()) => {
+                let c = m.settings.get_bool("censorCoordinates");
+                build_lines.push("Successfully loaded schematic for building".to_string());
+                build_lines.push(format!("Origin: {}", better_block_pos_text(origin, c)));
+            }
+            Err(why) => {
+                log::warn!("{PREFIX} the schematic could not be loaded: {why}");
+                build_lines.push("Couldn't load the schematic. Either your schematic is corrupt or this is a bug.".to_string());
+            }
+        }
+    }
+    let build_settings = m.settings.build_settings();
     let reader = cache_reader();
     let out = {
+        let build_facts = GameBuildFacts { game: &*game, behaviours: game.res.behaviours(), states: &m.base.block_states, feet: view.feet(), position: Vec3::new(view.x, view.y, view.z) };
+        let no_build_facts = NoBuildFacts;
+        // the facts cost a read of the inventory and a few placement queries: only while a build is loaded
+        let facts_ref: &dyn BuildFacts = if m.pathing.builder_process().is_active() { &build_facts } else { &no_build_facts };
         let live = WithCache::new(Live { world: &game.world, registry, falling: falling_positions(game) }, reader.clone());
         let inv = GameInv { items: game.items(), facts: game.res.facts(), hb: &hotbar, main: &game.inventory, main_infos: OnceCell::new() };
         let facts = GameFacts { reach: game.block_reach, nether: game.dim.id() == "minecraft:the_nether", aim: baritone_engine::look::AimProcessor::new(m.exec.mouse_sensitivity) };
-        let env = TickEnv { tables: &m.tables, world: &live, border, player: &view, exec: &m.exec, inv: &inv, game: facts };
+        let env = TickEnv { tables: &m.tables, world: &live, border, player: &view, exec: &m.exec, inv: &inv, game: facts, build: BuildEnv { facts: facts_ref, settings: &build_settings, states: &m.base.block_states } };
         let mut snapshot = || {
             let began = std::time::Instant::now();
             let snap = Snapshot::take(&game.world, registry.len());
@@ -910,7 +1024,16 @@ fn tick_path(game: &mut Game<'_>) {
         m.pathing.tick(&env, &mut snapshot)
     };
 
-    let mut lines: Vec<String> = m.pathing.take_messages();
+    let mut lines: Vec<String> = build_lines;
+    lines.extend(m.pathing.take_messages());
+    // what upstream prints with `System.out.println` (the map art line) goes to the log, not to chat (D50)
+    for line in m.pathing.take_console_lines() {
+        log::info!("{PREFIX} {line}");
+    }
+    // `notificationOnBuildFinished`: the desktop notification is not ported (D48); the flag is read so that it does not pile up
+    if m.pathing.take_build_finished() && m.settings.get_bool("notificationOnBuildFinished") {
+        log::info!("{PREFIX} the build is finished");
+    }
     // The scans the processes want (one per process at a time): the chunks are copied here, the search of them runs on the scan thread.
     let jobs = m.pathing.take_scan_jobs();
     let mut scan_died = false;
@@ -969,6 +1092,14 @@ fn tick_path(game: &mut Game<'_>) {
         }
     }
 
+    // The window clicks of `InventoryBehavior` come first: the slot of the intent is picked after them, as upstream's `throwaway` swaps and then selects.
+    // (A refused click is not asked again by the engine; it asks anew on the next tick if it still wants the stack.)
+    if !out.swaps.is_empty() && !inventory_menu_blocked(game) {
+        for swap in &out.swaps {
+            window_swap(game, *swap);
+        }
+    }
+
     // Apply the intent. The keys go to the next tick's movement; the view and the sprint are the player's now.
     let intent = &out.intent;
     *input() = intent.active.then(|| Held { forward: intent.forward_impulse(), strafe: intent.strafe_impulse(), jump: intent.jump, sneak: intent.sneak });
@@ -1015,6 +1146,9 @@ fn tick_path(game: &mut Game<'_>) {
     }
     if TRACE.load(std::sync::atomic::Ordering::Relaxed) {
         trace_row(game, m, intent);
+        if m.pathing.builder_process().is_active() {
+            log::info!("{PREFIX} builder: {}", m.pathing.builder_process().display_name());
+        }
     }
     m.was_active = intent.active;
     publish_draw(m, view.y);
@@ -1484,6 +1618,7 @@ fn help_lines() -> Vec<String> {
     lines.push("/b help - This list".to_string());
     lines.push("/b trace - One log line per tick while a path runs, for bug reports".to_string());
     lines.push("/b goto <block>, /b mine [quantity] <block> [<block>...]: blocks by name (minecraft: is optional), also with properties, as stone or oak_stairs[facing=east]".to_string());
+    lines.push("/b build <file> [x y z]: build a schematic (.schematic, .schem or .litematic) from the schematics folder of the game folder, at you or at x y z (a file name with no extension gets schematicFallbackExtension). /b resume carries on after \"Unable to do it. Pausing.\"; /b stop ends the build.".to_string());
     lines.push("/b follow entities | players | entity <type...> | player <name...>: follow those (entity types by id, as pig or minecraft:pig). /b stop ends it.".to_string());
     lines.push("/b explore [x z]: walk to the closest chunks the cache lacks, around you or around x z. /b explorefilter <file> [invert]: a JSON list [{\"x\":0,\"z\":0},...] of chunks (not blocks) to count as explored, or with invert as the only ones not explored; a relative path is in the mod data folder.".to_string());
     lines.push("/b goto <x> <y> <z> | <x> <z> | <y>, /b goal [x y z | clear], /b set <name> [value] | list | modified | reset | toggle | save | load".to_string());
@@ -1508,6 +1643,8 @@ pub(super) fn on_command(game: &mut Game<'_>, command: &str, ran: &mut bool) {
     match name.as_deref() {
         Some("goto") => cmd_goto(game, rest),
         Some("mine") => cmd_mine(game, rest),
+        Some("build") => cmd_build(game, rest),
+        Some("resume" | "r" | "unpause" | "unpaws") => cmd_resume(game, rest),
         Some("follow") => cmd_follow(game, rest),
         Some("explore") => cmd_explore(game, rest),
         Some("explorefilter") => cmd_explore_filter(game, rest),
@@ -1543,7 +1680,11 @@ fn start_and_feet(game: &mut Game<'_>) -> Option<Pos> {
         say(game, &format!("Not pathing: {why}."));
         return None;
     }
-    let guard = state();
+    let mut guard = state();
+    // every command that starts something drops a schematic that is still loading; `/b build` takes its own number after this
+    if let Some(m) = guard.as_mut() {
+        m.build_generation += 1;
+    }
     let (Some(m), Some(p)) = (guard.as_ref(), game.player.as_ref()) else {
         return None;
     };
@@ -1997,6 +2138,17 @@ fn suggest_provider(text: &str, target: Option<[i32; 3]>) -> Option<(usize, Vec<
             }
         }
     }
+    // The files of the schematics folder for the first word after `build` (`RelativeFile.tabComplete`).
+    if before.len() == 1 && before[0].eq_ignore_ascii_case("build") {
+        let base = canonical_or_lexical(&Game::game_dir().join("schematics"));
+        for name in complete_relative_file(current, &base, &|dir| {
+            let dir = std::fs::canonicalize(dir).ok()?;
+            let entries = std::fs::read_dir(&dir).ok()?.filter_map(|e| e.ok()).map(|e| (e.file_name().to_string_lossy().into_owned(), e.path().is_dir())).collect();
+            Some((dir, entries))
+        }) {
+            list.push((name, None));
+        }
+    }
     // The types and the players after `follow`.
     if before.first().is_some_and(|f| f.eq_ignore_ascii_case("follow")) {
         let w = COMPLETION_WORLD.lock().unwrap_or_else(|e| e.into_inner());
@@ -2027,6 +2179,362 @@ fn register_completion(game: &Game<'_>) {
     if !REGISTERED.swap(true, std::sync::atomic::Ordering::SeqCst) {
         completion_blocks(game);
         horizon_client::command::baritone_rs_suggest::register(suggest_provider);
+    }
+}
+
+// ---------------------------------------------------------------- the builder (docs/deviations.md D44 to D49)
+//
+// NOT COMPILED: written from the patterns of the code around it and from Horizon's source (revision 66f3981), and only read through, until a client build runs.
+
+/// A schematic file that was read and parsed on its own thread, for the tick to hand to the builder.
+struct BuildLoad {
+    generation: u64,
+    name: String,
+    origin: Pos,
+    result: Result<Arc<dyn StaticSchematicView>, String>,
+}
+
+/// `BetterBlockPos.toString`, with `censorCoordinates`.
+fn better_block_pos_text(p: Pos, censor: bool) -> String {
+    let c = |v: i32| if censor { "<censored>".to_string() } else { v.to_string() };
+    format!("BetterBlockPos{{x={},y={},z={}}}", c(p.x), c(p.y), c(p.z))
+}
+
+/// The biggest schematic file `build` reads (compressed). The parser has its own limits for what it makes of it (`ParseLimits`).
+const MAX_SCHEMATIC_FILE: u64 = 128 << 20;
+
+/// `File.getCanonicalFile` for a path that may not exist: the real path when it does, else the path with `.` and `..` folded away.
+fn canonical_or_lexical(path: &std::path::Path) -> std::path::PathBuf {
+    if let Ok(real) = std::fs::canonicalize(path) {
+        return real;
+    }
+    let mut out = std::path::PathBuf::new();
+    for c in path.components() {
+        match c {
+            std::path::Component::ParentDir => {
+                out.pop();
+            }
+            std::path::Component::CurDir => {}
+            c => out.push(c.as_os_str()),
+        }
+    }
+    out
+}
+
+/// What `BuildCommand.execute` does with the file argument before it builds: `RelativeFile` against the schematics folder (absolute paths and `..` allowed,
+/// nothing is created), the fallback extension, and the three refusals. `Ok` is the file and its format.
+fn resolve_schematic(schematics: &std::path::Path, typed: &str, fallback_extension: &str) -> Result<(std::path::PathBuf, SchematicFormat), String> {
+    let file0 = canonical_or_lexical(&schematics.join(typed));
+    let mut file = file0.clone();
+    if extension_of(&file.to_string_lossy()).is_empty() {
+        file = std::path::PathBuf::from(format!("{}.{}", file.to_string_lossy(), fallback_extension));
+    }
+    if !file.exists() {
+        if file0.exists() {
+            return Err(format!("Cannot load {} because I do not know which schematic format that is. Please rename the file to include the correct file extension.", file.display()));
+        }
+        return Err(format!("Cannot find {}", file.display()));
+    }
+    let name = file.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    match SchematicFormat::for_file_name(&name) {
+        Some(format) => Ok((file, format)),
+        None => Err(format!("Unsupported schematic format. Reckognized file extensions are: {}", SchematicFormat::file_extensions().join(", "))),
+    }
+}
+
+/// Reads and parses a schematic file. Runs on its own thread.
+fn load_schematic(path: &std::path::Path, format: SchematicFormat, states: &BlockStates) -> Result<Arc<dyn StaticSchematicView>, String> {
+    use std::io::Read;
+    let meta = std::fs::metadata(path).map_err(|e| format!("cannot read {}: {e}", path.display()))?;
+    if !meta.is_file() {
+        return Err("not a file".to_string());
+    }
+    if meta.len() > MAX_SCHEMATIC_FILE {
+        return Err(format!("the file is too big (over {} MiB)", MAX_SCHEMATIC_FILE >> 20));
+    }
+    let mut bytes = Vec::new();
+    // the size can grow after the check: read no more than the limit plus one byte
+    std::fs::File::open(path).and_then(|f| f.take(MAX_SCHEMATIC_FILE + 1).read_to_end(&mut bytes)).map_err(|e| format!("cannot read {}: {e}", path.display()))?;
+    if bytes.len() as u64 > MAX_SCHEMATIC_FILE {
+        return Err(format!("the file is too big (over {} MiB)", MAX_SCHEMATIC_FILE >> 20));
+    }
+    // the bytes are freed as soon as the tags are read (D50)
+    format.parse_owned(bytes, states, &ParseLimits::default()).map_err(|e| e.0)
+}
+
+/// `/b build <file> [x y z]`: `BuildCommand`. The file is read and parsed on a thread; the tick hands the result to the builder.
+fn cmd_build(game: &mut Game<'_>, args: &[&str]) {
+    // one load at a time: a stopped or dropped load still runs to its end, and a second one would hold a second copy of a big file in memory (D50)
+    if state().as_ref().is_some_and(|m| m.build_loading.load(std::sync::atomic::Ordering::SeqCst)) {
+        say(game, "Still reading the previous schematic. Try again in a moment.");
+        return;
+    }
+    let Some(feet) = start_and_feet(game) else {
+        return;
+    };
+    let request = match build_command(args, feet) {
+        Ok(r) => r,
+        Err(e) => {
+            say(game, &e);
+            return;
+        }
+    };
+    let fallback = with_settings(game, |st, _| st.get_text("schematicFallbackExtension").to_string());
+    let schematics = Game::game_dir().join("schematics");
+    let (file, format) = match resolve_schematic(&schematics, &request.file, &fallback) {
+        Ok(r) => r,
+        Err(e) => {
+            say(game, &e);
+            return;
+        }
+    };
+    let name = file.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let started = {
+        let mut guard = state();
+        let Some(m) = guard.as_mut() else {
+            return;
+        };
+        // this command's own number (`start_and_feet` already dropped the loads of older commands)
+        m.build_generation += 1;
+        let (generation, origin) = (m.build_generation, request.origin);
+        let states = Arc::clone(&m.base.block_states);
+        let tx = m.build_tx.clone();
+        let loading = Arc::clone(&m.build_loading);
+        loading.store(true, std::sync::atomic::Ordering::SeqCst);
+        let flag = Arc::clone(&loading);
+        let spawned = std::thread::Builder::new().name("baritone-rs-build-load".into()).spawn(move || {
+            let began = std::time::Instant::now();
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| load_schematic(&file, format, &states))).unwrap_or_else(|_| Err("the parser panicked".to_string()));
+            log::info!("{PREFIX} schematic read in {} ms, ok {}", began.elapsed().as_millis(), result.is_ok());
+            let _ = tx.send(BuildLoad { generation, name, origin, result });
+            flag.store(false, std::sync::atomic::Ordering::SeqCst);
+        });
+        if spawned.is_err() {
+            loading.store(false, std::sync::atomic::Ordering::SeqCst);
+        }
+        spawned
+    };
+    if let Err(e) = started {
+        log::warn!("{PREFIX} could not start the schematic thread: {e}");
+        say(game, "Couldn't load the schematic. Either your schematic is corrupt or this is a bug.");
+    }
+}
+
+/// `/b resume`: the builder half of `ExecutionControlCommands`' `resume`.
+fn cmd_resume(game: &mut Game<'_>, args: &[&str]) {
+    let paused = state().as_ref().is_some_and(|m| m.pathing.builder_process().is_paused());
+    match resume_command(args, paused) {
+        Ok(line) => {
+            if let Some(m) = state().as_mut() {
+                m.pathing.resume_build();
+            }
+            say(game, line);
+        }
+        Err(e) => say(game, &e),
+    }
+}
+
+/// A level for the placement rules of `horizon_world`, over the loaded chunks, that cannot be written: a write goes to a scratch map, as the dry level the
+/// game's own placement preview uses (`remote.rs`). It stands in for `GameLevel`, which needs the game mutably (D48).
+struct ReadLevel<'a, 'g> {
+    game: &'a Game<'g>,
+    changed: HashMap<BlockPos, BlockStateId>,
+    random: horizon_core::random::LegacyRandom,
+}
+
+impl<'a, 'g> ReadLevel<'a, 'g> {
+    fn new(game: &'a Game<'g>) -> Self {
+        ReadLevel { game, changed: HashMap::new(), random: horizon_core::random::LegacyRandom::new(0) }
+    }
+}
+
+impl LevelAccess for ReadLevel<'_, '_> {
+    fn block_state(&self, pos: BlockPos) -> BlockStateId {
+        self.changed.get(&pos).copied().unwrap_or_else(|| self.game.world.block(pos.x, pos.y, pos.z))
+    }
+    fn set_raw(&mut self, pos: BlockPos, state: BlockStateId) -> Option<BlockStateId> {
+        let previous = self.block_state(pos);
+        self.changed.insert(pos, state);
+        Some(previous)
+    }
+    fn is_loaded(&self, pos: BlockPos) -> bool {
+        self.game.world.loaded(pos.x, pos.z)
+    }
+    fn min_y(&self) -> i32 {
+        self.game.world.bottom_y()
+    }
+    fn max_y(&self) -> i32 {
+        self.game.world.top_y()
+    }
+    /// `Level.isUnobstructed`: the state's shape against the entities that block building. Only the player counts here, and the shape is the full cube
+    /// for a state with full collision, the outline for a solid one, and nothing otherwise (`GameLevel` reads the real collision shapes and every
+    /// entity). A mob in the cell is found by the server, which refuses the block; the builder tries again.
+    fn is_unobstructed(&self, pos: BlockPos, state: BlockStateId) -> bool {
+        let f = self.game.res.facts().get(state);
+        let boxes: Vec<[f64; 6]> = if f.full_collision {
+            vec![[0.0, 0.0, 0.0, 1.0, 1.0, 1.0]]
+        } else if f.legacy_solid {
+            f.outline.to_vec()
+        } else {
+            return true;
+        };
+        let Some(p) = self.game.player.as_ref().filter(|_| !self.game.spectator()) else {
+            return true;
+        };
+        let w = f64::from(p.dimensions.width) / 2.0;
+        let h = f64::from(p.dimensions.height);
+        let (lo, hi) = ([p.position.x - w, p.position.y, p.position.z - w], [p.position.x + w, p.position.y + h, p.position.z + w]);
+        let at = [f64::from(pos.x), f64::from(pos.y), f64::from(pos.z)];
+        !boxes.iter().any(|b| (0..3).all(|i| lo[i] < at[i] + b[i + 3] && hi[i] > at[i] + b[i]))
+    }
+    fn random(&mut self) -> &mut horizon_core::random::LegacyRandom {
+        &mut self.random
+    }
+    fn game_time(&self) -> i64 {
+        0
+    }
+}
+
+fn core_direction(d: Direction) -> horizon_core::geometry::Direction {
+    use horizon_core::geometry::Direction as D;
+    match d {
+        Direction::Down => D::Down,
+        Direction::Up => D::Up,
+        Direction::North => D::North,
+        Direction::South => D::South,
+        Direction::West => D::West,
+        Direction::East => D::East,
+    }
+}
+
+/// What the builder asks the game (`BuildFacts`), answered from the game's own rules: `Behaviours` for placement and survival, the outline boxes and the block ray
+/// of `Game` for the shapes and the aim. Built for each tick that has a build, and only read from.
+struct GameBuildFacts<'a, 'g> {
+    game: &'a Game<'g>,
+    behaviours: &'a Behaviours,
+    states: &'a Arc<BlockStates>,
+    /// `IPlayerContext.playerFeet` and the player's position, for `approxPlaceable`.
+    feet: Pos,
+    position: Vec3,
+}
+
+impl GameBuildFacts<'_, '_> {
+    fn air(&self) -> usize {
+        self.states.air()
+    }
+
+    fn stack_in(&self, slot: InvSlot) -> Option<ItemStack> {
+        match slot {
+            InvSlot::Hotbar(i) | InvSlot::Main(i) => self.game.inventory.get(i).and_then(|s| s.clone()),
+            InvSlot::Offhand => self.game.offhand.clone(),
+        }
+        .filter(|s| s.count > 0)
+    }
+
+    /// The block of a block item: its default state, and its `BlockId` for the behaviours.
+    fn block_item(&self, stack: &ItemStack) -> Option<BlockStateId> {
+        self.game.items().get(&stack.item)?.block
+    }
+
+    fn place_context(&self, stack: &ItemStack, clicked: Pos, face: Direction, point: Vec3, yaw: f32, pitch: f32) -> PlaceContext {
+        PlaceContext {
+            clicked_pos: BlockPos::new(clicked.x, clicked.y, clicked.z),
+            face: core_direction(face),
+            hit: horizon_core::geometry::Vec3::new(point.x, point.y, point.z),
+            inside: false,
+            yaw,
+            pitch,
+            sneaking: self.game.player.as_ref().is_some_and(|p| p.local_crouching),
+            item: stack.item.to_string(),
+            can_use_game_master_blocks: self.game.can_use_game_master_blocks(),
+        }
+    }
+
+    /// `getStateForPlacement` of the stack's block for `ctx`; `None` when the game refuses.
+    fn state_for_placement_of(&self, stack: &ItemStack, ctx: &PlaceContext) -> Option<BlockStateId> {
+        let default = self.block_item(stack)?;
+        let block = self.behaviours.block(default);
+        let mut level = ReadLevel::new(self.game);
+        self.behaviours.state_for_placement(&mut level, &mut Ticks::default(), block, ctx)
+    }
+
+    /// `BlockPlaceContext.canPlace`: `replaceClicked || state(resolved position).canBeReplaced(context)`. The clicked block is asked with
+    /// `replaceClicked` true (the context's own first step). When it cannot be replaced, vanilla asks the block beside it with `replaceClicked`
+    /// false, which Horizon's `directional_can_place` cannot do (it always sets the flag), so that step goes through `placement_state`: it resolves
+    /// the position and asks `canBeReplaced` the way `BlockItem.place` does, and also checks survival and obstruction at the resolved position,
+    /// which `possibleToPlace` has checked for the same position already (D50).
+    fn can_place(&self, ctx: &PlaceContext) -> bool {
+        let mut level = ReadLevel::new(self.game);
+        if self.behaviours.directional_can_place(&mut level, &mut Ticks::default(), ctx) {
+            return true;
+        }
+        self.behaviours.placement_state(&mut level, &mut Ticks::default(), ctx).is_some()
+    }
+
+    fn approx(&self, slot: InvSlot) -> usize {
+        let air = self.air();
+        let Some(stack) = self.stack_in(slot) else {
+            return air;
+        };
+        let ctx = self.place_context(&stack, self.feet, Direction::Up, self.position, self.game.yaw, self.game.pitch);
+        self.state_for_placement_of(&stack, &ctx).map_or(air, |s| s.0 as usize)
+    }
+}
+
+impl BuildFacts for GameBuildFacts<'_, '_> {
+    fn approx_placeable(&self) -> Vec<usize> {
+        (0..36).map(|i| self.approx(InvSlot::Hotbar(i))).collect()
+    }
+
+    fn offhand_placeable(&self) -> usize {
+        self.approx(InvSlot::Offhand)
+    }
+
+    fn item_block(&self, slot: InvSlot) -> Option<String> {
+        let stack = self.stack_in(slot)?;
+        let default = self.block_item(&stack)?;
+        self.game.pack.assets.registry.state(default).map(|d| block_key(&d.name))
+    }
+
+    fn state_for_placement(&self, hotbar_slot: usize, hit: &BlockHit, rot: Rotation) -> Option<usize> {
+        let stack = self.stack_in(InvSlot::Hotbar(hotbar_slot))?;
+        let ctx = self.place_context(&stack, hit.pos, hit.face, hit.point, rot.yaw, rot.pitch);
+        let state = self.state_for_placement_of(&stack, &ctx)?;
+        // upstream asks `getStateForPlacement` first and `canPlace` second, and both must hold
+        self.can_place(&ctx).then_some(state.0 as usize)
+    }
+
+    fn can_survive(&self, state: usize, pos: Pos) -> bool {
+        let mut level = ReadLevel::new(self.game);
+        self.behaviours.can_survive(&mut level, &mut Ticks::default(), BlockPos::new(pos.x, pos.y, pos.z), BlockStateId(state as u32))
+    }
+
+    fn placement_plausible(&self, state: usize, pos: Pos) -> bool {
+        ReadLevel::new(self.game).is_unobstructed(BlockPos::new(pos.x, pos.y, pos.z), BlockStateId(state as u32))
+    }
+
+    fn outline_bounds(&self, pos: Pos) -> Option<BuildAabb> {
+        let boxes = self.game.outline_boxes([pos.x, pos.y, pos.z]);
+        let (mut lo, mut hi) = ([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]);
+        for b in &boxes {
+            for i in 0..3 {
+                lo[i] = lo[i].min(b[i]);
+                hi[i] = hi[i].max(b[i + 3]);
+            }
+        }
+        if boxes.is_empty() {
+            return None;
+        }
+        // block-local, as `VoxelShape.bounds()` is
+        let at = [f64::from(pos.x), f64::from(pos.y), f64::from(pos.z)];
+        Some(BuildAabb { min_x: lo[0] - at[0], min_y: lo[1] - at[1], min_z: lo[2] - at[2], max_x: hi[0] - at[0], max_y: hi[1] - at[1], max_z: hi[2] - at[2] })
+    }
+
+    fn ray_trace(&self, start: Vec3, rot: Rotation, reach: f64) -> Option<BlockHit> {
+        // `Entity.calculateViewVector`
+        let (yaw, pitch) = (f64::from(rot.yaw).to_radians(), f64::from(rot.pitch).to_radians());
+        let dir = [-yaw.sin() * pitch.cos(), -pitch.sin(), yaw.cos() * pitch.cos()];
+        block_hit_of(&self.game.clip_ray([start.x, start.y, start.z], dir, reach)?)
     }
 }
 
@@ -2302,7 +2810,8 @@ fn evaluate(name: &str, s: &Scn) -> String {
 // Spec: {"out": dir, "scenarios": [{"name", "chat", "prep": [console lines], "tp": console line or null, "wait_loaded": [[x, z]],
 // "watch": [x0, y0, z0, x1, y1, z1] or null, "events": [{"t", "console" | "command" | "chat": "open" | "close" | "rebase": true, "probe": [x, z]}],
 // "end": ticks, "stop_when": "arrived" | "idle" | "never", "slot": hotbar slot at the start or absent, "after": [commands run when it is
-// over]}]}; an event {"t", "set": command} is a setup command that does not start the clock.
+// over], "timeline": true}]}; an event {"t", "set": command} is a setup command that does not start the clock; an event {"t", "sample": [[x, y, z]...]}
+// notes the block at each cell; `"timeline"` writes <name>.timeline.txt with the watch cells that changed in each tick (the build scenarios).
 
 fn l3_spec() -> Option<&'static serde_json::Value> {
     static SPEC: OnceLock<Option<serde_json::Value>> = OnceLock::new();
@@ -2366,6 +2875,9 @@ struct L3 {
     slot_start: usize,
     /// Ticks in which a container or a station (a crafting table) was open, for the scenarios that right click a block.
     container_ticks: u64,
+    /// With `"timeline": true`: the cells of the watch box that changed in each tick (`t x,y,z before after`), and the box as it was the tick before.
+    timeline: String,
+    prev_watch: Vec<u32>,
 }
 
 static L3_STATE: Mutex<Option<L3>> = Mutex::new(None);
@@ -2399,7 +2911,7 @@ fn l3_watch(game: &Game<'_>, w: &serde_json::Value) -> Vec<u32> {
 
 /// The hotbar as text for the records: `slot:item xCOUNT dDAMAGE` for the filled slots.
 fn l3_hotbar_text(game: &Game<'_>) -> String {
-    let hb = read_hotbar(game);
+    let hb = read_hotbar(game, false);
     hb.stacks
         .iter()
         .enumerate()
@@ -2411,6 +2923,20 @@ fn l3_hotbar_text(game: &Game<'_>) -> String {
 fn l3_cell_name(game: &Game<'_>, id: u32) -> String {
     let registry: &BlockRegistry = game.pack.assets.registry;
     registry.state(BlockStateId(id)).map_or("?".to_string(), |b| b.name.clone())
+}
+
+/// The block name and its properties, `minecraft:oak_stairs[facing=south,half=bottom]`, for the `sample` event.
+fn l3_cell_full(game: &Game<'_>, id: u32) -> String {
+    let registry: &BlockRegistry = game.pack.assets.registry;
+    registry.state(BlockStateId(id)).map_or("?".to_string(), |b| {
+        let mut props: Vec<String> = b.properties.iter().map(|(k, v)| format!("{k}={v}")).collect();
+        props.sort();
+        if props.is_empty() {
+            b.name.clone()
+        } else {
+            format!("{}[{}]", b.name, props.join(","))
+        }
+    })
 }
 
 fn l3_tick(game: &mut Game<'_>) {
@@ -2499,6 +3025,8 @@ fn l3_step(game: &mut Game<'_>, spec: &serde_json::Value, s: &mut L3) {
             s.stable = if calm && chunks_ready && !dead && game.screen == Screen::Playing { s.stable + 1 } else { 0 };
             if s.stable >= 30 {
                 s.baseline = sc["watch"].as_array().filter(|a| a.len() == 6).map(|_| l3_watch(game, &sc["watch"])).unwrap_or_default();
+                s.timeline.clear();
+                s.prev_watch = s.baseline.clone();
                 s.csv = String::from("t,x,y,z,vx,vy,vz,yaw,on_ground,sprinting,forced,forward,health,dead,chat,pathing,calculating,seg,pos,tick_us,water,mk,mcost,msx,msy,msz,mdx,mdy,mdz\n");
                 s.segments.clear();
                 s.searches.clear();
@@ -2570,9 +3098,38 @@ fn l3_run_tick(game: &mut Game<'_>, sc: &serde_json::Value, s: &mut L3) {
             let (x, z) = (p[0].as_i64().unwrap_or(0) as i32, p[1].as_i64().unwrap_or(0) as i32);
             s.notes += &format!("{t}\tprobe\t{x},{z} loaded={}\n", game.world.loaded(x, z));
         }
+        if let Some(cells) = e["sample"].as_array() {
+            // The blocks at some cells right now, for the scenarios that look at what is where at a given tick.
+            let text: Vec<String> = cells
+                .iter()
+                .filter_map(|c| {
+                    let (x, y, z) = (c[0].as_i64()? as i32, c[1].as_i64()? as i32, c[2].as_i64()? as i32);
+                    Some(format!("{x},{y},{z}={}", l3_cell_full(game, game.world.block(x, y, z).0)))
+                })
+                .collect();
+            s.notes += &format!("{t}\tsample\t{}\n", text.join(" "));
+        }
         if e["rebase"].as_bool() == Some(true) && sc["watch"].as_array().is_some_and(|a| a.len() == 6) {
             s.baseline = l3_watch(game, &sc["watch"]);
         }
+    }
+    if sc["timeline"].as_bool() == Some(true) && sc["watch"].as_array().is_some_and(|a| a.len() == 6) {
+        let now = l3_watch(game, &sc["watch"]);
+        if s.prev_watch.len() == now.len() {
+            let n = |i: usize| sc["watch"][i].as_i64().unwrap_or(0) as i32;
+            let mut i = 0;
+            for x in n(0)..=n(3) {
+                for y in n(1)..=n(4) {
+                    for z in n(2)..=n(5) {
+                        if s.prev_watch[i] != now[i] {
+                            s.timeline += &format!("{t} {x},{y},{z} {} {}\n", l3_cell_name(game, s.prev_watch[i]), l3_cell_name(game, now[i]));
+                        }
+                        i += 1;
+                    }
+                }
+            }
+        }
+        s.prev_watch = now;
     }
     for note in std::mem::take(&mut *NOTES.lock().unwrap_or_else(|e| e.into_inner())) {
         s.notes += &format!("{t}\tchat\t{note}\n");
@@ -2614,7 +3171,7 @@ fn l3_run_tick(game: &mut Game<'_>, sc: &serde_json::Value, s: &mut L3) {
             }
         }
         for e in m.pathing.runner_mut().take_log() {
-            s.searches += &format!("t={t} generation={} micros={} kind={:?} cancelled={} positions={}\n", e.generation, e.micros, e.kind, e.cancelled, e.path_positions);
+            s.searches += &format!("t={t} generation={} micros={} kind={:?} cancelled={} positions={} ends={:?}\n", e.generation, e.micros, e.kind, e.cancelled, e.path_positions, e.path_ends);
         }
     }
     for (us, chunks) in std::mem::take(&mut *SNAPSHOTS.lock().unwrap_or_else(|e| e.into_inner())) {
@@ -2727,6 +3284,9 @@ fn l3_finish(game: &mut Game<'_>, sc: &serde_json::Value, s: &mut L3) {
     l3_write(&format!("{name}.searches.txt"), &s.searches);
     l3_write(&format!("{name}.snapshots.txt"), &s.snaps);
     l3_write(&format!("{name}.notes.txt"), &s.notes);
+    if sc["timeline"].as_bool() == Some(true) {
+        l3_write(&format!("{name}.timeline.txt"), &s.timeline);
+    }
     // Hand everything back for the next scenario: the settings the scenario changed, the chat, the path.
     for c in sc["after"].as_array().map_or(&[][..], |v| &v[..]) {
         if let Some(c) = c.as_str() {

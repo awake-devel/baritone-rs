@@ -68,6 +68,43 @@ def check_world_name(world):
     return None
 
 
+# The game folder of the instance is the working directory of the game, and `b build` reads its `schematics` folder (docs/deviations.md D48). The build
+# scenarios write their files here before the game starts and remove them afterwards. Scenario r10 shows in the chat where the mod looks.
+SCHEMATICS = os.path.expanduser(f"~/.local/share/horizon/instances/{INSTANCE}/schematics")
+
+
+def write_schematics(files, names):
+    """Writes the schematic files of the selected scenarios. Refuses to replace a file that is not byte for byte what would be written.
+    Returns what to remove afterwards: (the files made here, whether the folder was made here)."""
+    made, made_dir = [], not os.path.isdir(SCHEMATICS)
+    os.makedirs(SCHEMATICS, exist_ok=True)
+    for n in sorted(names):
+        path = os.path.join(SCHEMATICS, n)
+        if os.path.exists(path):
+            with open(path, "rb") as existing:
+                same = existing.read() == files[n]
+            if not same:
+                sys.exit(f"{path} exists and differs from the test file; nothing was started")
+            continue
+        with open(path, "wb") as f:
+            f.write(files[n])
+        made.append(path)
+    return made, made_dir
+
+
+def remove_schematics(made, made_dir):
+    for path in made:
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+    if made_dir:
+        try:
+            os.rmdir(SCHEMATICS)
+        except OSError:
+            pass
+
+
 SETTINGS_FILE = os.path.expanduser(f"~/.local/share/horizon/instances/{INSTANCE}/horizon-mods/.horizon-mod-data/baritone_rs/settings.txt")
 
 
@@ -361,6 +398,101 @@ def judge_blocks(res, chk, meta, plans):
     res["slot_restored_after_the_path"] = meta.get("slot_start") == meta.get("slot_end")
 
 
+# ---------------------------------------------------------------- build: the box against the schematic
+
+def norm_block(n):
+    return "minecraft:air" if is_air(n) else n
+
+
+def read_timeline(path):
+    """<name>.timeline.txt: one line per changed watch cell and tick, `t x,y,z before after`."""
+    out = []
+    if os.path.exists(path):
+        with open(path) as f:
+            for line in f:
+                t, pos, before, after = line.split()
+                out.append((int(t), tuple(int(v) for v in pos.split(",")), before, after))
+    return out
+
+
+def judge_build(res, chk, meta, rows, notes, out, name, cmd):
+    """`b build`: every cell of the schematic's box as the schematic says at the end, the messages, the time, what changed outside the box, and the
+    optional checks of the scenario: the layers, the pause, the stop, the rotated stairs, the path in the message. The expectations are the box's own;
+    the settings that loosen what counts as the same block (buildIgnoreProperties and the like) are not used by any scenario, so the names are compared."""
+    ok = res["checks"]
+    bx, by, bz, w, h, l = chk["box"]
+    changes = read_changes(meta)
+    initial = {tuple(c[:3]): c[3] for c in chk["initial"]}
+    expect = {tuple(c[:3]): c[3] for c in chk["expect"]}
+    cells = [(x, y, z) for x in range(bx, bx + w) for y in range(by, by + h) for z in range(bz, bz + l)]
+    inside = set(cells)
+
+    def final(c):
+        return changes[c][1] if c in changes else initial.get(c, "minecraft:air")
+
+    placed = {c for c, (b, a) in changes.items() if is_air(b) and not is_air(a)}
+    broken = {c for c, (b, a) in changes.items() if not is_air(b) and is_air(a)}
+    outside = sorted(c for c in changes if c not in inside)
+    res["build"] = {"cells": len(cells), "expected_solid": len(expect), "placed": len(placed), "broken": len(broken), "outside_changed": outside[:8]}
+    chat = res["chat_lines"]
+    if not chk.get("partial"):
+        wrong = [c for c in cells if norm_block(final(c)) != norm_block(expect.get(c, "minecraft:air"))]
+        res["build"]["wrong_cells"] = wrong[:8]
+        ok["every cell of the box is as the schematic says"] = not wrong
+        done = [t for t, kind, text in notes if kind == "chat" and "Done building" in text]
+        if "done_within" in chk:
+            took = (done[0] - cmd) if done and cmd is not None else None
+            res["ticks_from_command_to_done"] = took
+            ok[f"'Done building' within {chk['done_within']} ticks of the command"] = took is not None and took <= chk["done_within"]
+    ok[f"at most {chk['outside_max']} cells outside the box changed"] = len(outside) <= chk["outside_max"]
+    for m in chk.get("messages") or []:
+        ok[f"said {m!r}"] = any(m in line for line in chat)
+    plan = chk.get("plan")
+    if plan:
+        for what, got in (("place", len(placed)), ("break", len(broken))):
+            lo, hi = plan[what]
+            ok[f"{what} {lo} to {hi} cells (did {got})"] = lo <= got <= hi
+    tl = read_timeline(os.path.join(out, name + ".timeline.txt"))
+    placed_at = {}
+    for t, c, before, after in tl:
+        if is_air(before) and not is_air(after):
+            placed_at.setdefault(c, t)
+    if "layers" in chk:
+        lay = chk["layers"]
+        layer_cells = [[c for c in expect if c[1] == by + n] for n in range(h)]
+        problems = []
+        for n in range(h - 1):
+            lower = [placed_at[c] for c in layer_cells[n] if c in placed_at]
+            upper = [placed_at[c] for c in layer_cells[n + 1] if c in placed_at]
+            if lower and upper and len(lower) == len(layer_cells[n]) and min(upper) < max(lower):
+                problems.append(f"layer {n + 1} began at tick {min(upper)} before layer {n} was complete at {max(lower)}")
+        res["build"]["layer_problems"] = problems
+        ok["no cell of a layer was placed before the layer below was complete"] = not problems and all(c in placed_at for c in expect)
+    if "paused_still" in chk:
+        t0, t1 = chk["paused_still"]
+        window = [r for r in rows if t0 <= int(r["t"]) <= t1]
+        moved = max((speed(window[i], window[i + 1]) for i in range(len(window) - 1)), default=1.0)
+        res["build"]["max_speed_while_paused"] = round(moved, 4)
+        ok[f"the player stood still between ticks {t0} and {t1}"] = bool(window) and moved < 0.02
+        ok[f"nothing was built between ticks {t0} and {t1}"] = not any(t0 <= t <= t1 for t, c, b, a in tl)
+    if "stop_tick" in chk:
+        ts = chk["stop_tick"]
+        ok["keys released and no path from the stop tick on"] = all(r["forced"] == "0" and r["pathing"] == "0" for r in rows if int(r["t"]) >= ts + 2)
+        late = [t for t, c, b, a in tl if t > ts + chk["quiet_after"]]
+        ok[f"no cell changed later than {chk['quiet_after']} ticks after the stop"] = not late
+        before = [t for t, c, b, a in tl if t <= ts]
+        ok["it was building before the stop"] = len(before) > 0
+        ok["it was not finished at the stop"] = len(placed) < len(expect)
+    if "sample_facing" in chk:
+        sf = chk["sample_facing"]
+        texts = [text for t, kind, text in notes if kind == "sample" and t == sf["tick"]]
+        res["build"]["sample"] = texts
+        ok[f"every sampled stair has {sf['has']}"] = bool(texts) and all(sf["has"] in part for part in texts[0].split(" ") if part)
+    if "cannot_find" in chk:
+        want = f"Cannot find {os.path.join(SCHEMATICS, chk['cannot_find'])}"
+        ok["'Cannot find' names the file in the schematics folder of the instance"] = any(line == want for line in chat)
+
+
 # ---------------------------------------------------------------- the pass criteria
 
 def judge(out, sc, meta):
@@ -631,6 +763,8 @@ def judge(out, sc, meta):
         if settle is not None:
             a, b = byt[settle], rows[-1]
             ok["no movement after that"] = math.hypot(fnum(a, "x") - fnum(b, "x"), fnum(a, "z") - fnum(b, "z")) < 0.01
+    elif kind == "build":
+        judge_build(res, chk, meta, rows, notes, out, name, cmd)
     res["timing"] = timing(out, name, rows, cmd)
     res["status"] = "pass" if all(ok.values()) else "fail"
     if kind == "arrive_relative" and res["status"] == "fail" and chk.get("reported_ok") and res["notes"]:
@@ -685,7 +819,13 @@ def main():
         if problem:
             sys.exit(problem)
         print(f"playing {len(scs)} scenarios in a new world", flush=True)
-        status = play(spec_path, out, world, args.timeout)
+        files = scenarios.build_files()
+        wanted = {n for s in scs for n in s.get("files", [])}
+        made, made_dir = write_schematics(files, wanted) if wanted else ([], False)
+        try:
+            status = play(spec_path, out, world, args.timeout)
+        finally:
+            remove_schematics(made, made_dir)
         print("game:", status, flush=True)
     metas = read_meta(out) if os.path.exists(os.path.join(out, "l3-result.txt")) else {}
     results = [judge(out, s, metas.get(s["name"])) for s in scs]
