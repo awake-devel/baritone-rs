@@ -5,7 +5,7 @@ A Rust port of [Baritone](https://github.com/cabaletta/baritone), the Minecraft 
 
 ## Status
 
-**First pre-release, v0.1.0.** The search, the movements and `goto` are ported and run in the game:
+**The first pre-release, v0.1.0, has `goto`.** Everything else below is on `main` and not in a release yet. Ported, and run in the game:
 
 - **Pathing:** walking, sprinting, jumping up steps, dropping down, ladders and vines, breaking blocks in the way, bridging,
   pillaring and digging down, with tool choice, throwaway blocks and water bucket falls. Parkour and swimming are off, as in
@@ -15,12 +15,17 @@ A Rust port of [Baritone](https://github.com/cabaletta/baritone), the Minecraft 
 - **Chunk cache:** the chunks the client loads are remembered (packed to 2 bits per block, saved to region files in upstream's format), so a path can be planned through
   terrain that is not loaded any more and `goto <chest, furnace, spawner, ...>` finds blocks seen earlier.
 - **Processes:** `goto <block>`, `mine`, `follow` and `explore` (`explorefilter` takes a JSON list of chunks), as upstream's.
-- **Not yet:** build, farm, elytra.
+- **Builder:** `build <file> [x y z]` builds a `.schematic`, `.schem` (Sponge v1 and v2) or `.litematic` (v7) file from the `schematics`
+  folder of the game folder, and `resume` carries on after a pause. Upstream's builder settings are in `set` (`buildInLayers`,
+  `buildSubstitutes`, `buildRepeat`, `buildSchematicRotation`, ...). Selections (`sel`) are not ported. Moving blocks from the main inventory to the
+  hotbar is (`allowInventory`, off by default as upstream, with `ticksBetweenInventoryMoves` and `inventoryMoveOnlyIfStationary`), but it has not been run in
+  the game yet: with it off, a build uses what is on the hotbar.
+- **Not yet:** farm, elytra.
 
 **How it is checked.** Every movement rule gives upstream's answer bit for bit on 22 million cases, whole searches match upstream's
-node by node on 29,446 searches, Horizon's block facts match Java's on all 35,723 block states, and 42 fixed scenarios pass in the
-game. It has also run on a real server (6b6t.org). The method and every result, with their limits, are in
-[Porting safety](docs/PORTING-SAFETY.md); every difference from upstream is listed in [docs/deviations.md](docs/deviations.md).
+node by node on 29,446 searches, Horizon's block facts match Java's on all 35,723 block states, and 86 fixed scenarios pass in the
+game in single player. It has also run on a real server (6b6t.org). The method and every result, with their limits, are in
+[Porting safety](docs/PORTING-SAFETY.md) and [docs/RESULTS.md](docs/RESULTS.md); every difference from upstream is listed in [docs/deviations.md](docs/deviations.md).
 
 **Speed.** On the same worlds, starts and goals, the port finds the same paths as upstream's Java search about **1.4 times faster**
 (median over 51 searches on 20 seeds; per seed 1.05 to 1.84 times), and within the same time limit it explores 1.2 to 1.6 times
@@ -30,7 +35,7 @@ more nodes. One machine and synthetic worlds: see [docs/BENCHMARK.md](docs/BENCH
 pinned hooks, so a newer nightly may need an update first. Build it into a launcher instance with
 `horizon-launcher native-build mod --instance <instance> --trust-native-code`, then type `/b help` in the game.
 
-This repository also holds the [plan](docs/PLAN.md) and the test tools described in [tools/README.md](tools/README.md).
+This repository also holds the [design and plan](docs/PLAN.md) and the test tools described in [tools/README.md](tools/README.md).
 
 ## Upstream
 
@@ -41,14 +46,14 @@ The port is based on [`cabaletta/baritone`](https://github.com/cabaletta/bariton
 | `1.21.4` | `1b8e87cac675d72d8094e2bea1ec7207cdbc971b` | Default upstream branch, source of the pathing rules, which have the latest fixes |
 | `26.3` | `25111daedf1d59e6a8dfb5a3e61885cdb8d953df` | Reference for game behavior and block names, same Minecraft version as Horizon |
 
-Commits were recorded on 2026-11-05. Each ported file will name the upstream commit it came from, as
+Commits were recorded on 2026-11-05. Each ported file names the upstream commit it came from, as
 described in [CREDITS.md](CREDITS.md), and that commit may differ from one file to another.
 
 ## Credits
 
 Baritone is the work of Leijurv, Brady and the many other people listed in [CREDITS.md](CREDITS.md). rfresh2
-wrote the upstream change that brought Baritone to Minecraft 26.3, the version Horizon targets. The elytra
-pathfinder comes from babbaj's nether-pathfinder, through the Java port by Mattias Rask.
+wrote the upstream change that brought Baritone to Minecraft 26.3, the version Horizon targets.
+
 
 Bugs in this port belong to this port. Please do not report them to the Baritone project.
 
@@ -61,12 +66,9 @@ included as [LICENSE-GPL-3.0](LICENSE-GPL-3.0).
 
 [CREDITS.md](CREDITS.md) has notes on upstream's licensing.
 
-**Elytra pathfinder.** Elytra flight will be ported from the Java port of
-[nether-pathfinder](https://github.com/babbaj/nether-pathfinder) in upstream's `1.21.4` branch. Those files
-carry Baritone's LGPL notice, and this project assumes the same license applies to them. The nether-pathfinder
-repository itself had no license file on 2026-11-05, so this is an assumption rather than an explicit grant.
-That assumption does not extend to its nether terrain generator, which upstream describes as coming from
-Minecraft: those files will not be ported. See [CREDITS.md](CREDITS.md#elytra-pathfinder).
+**Elytra.** Elytra flight is not ported yet. It will be written new for this port: it takes the general idea of how upstream's
+elytra flight behaves, and none of the code of [nether-pathfinder](https://github.com/babbaj/nether-pathfinder), the library
+upstream plans its routes with, or of its Java port. See [CREDITS.md](CREDITS.md#elytra).
 
 ## Disclaimer
 

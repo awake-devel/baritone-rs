@@ -71,23 +71,19 @@ Each ported file keeps upstream's notice and states where it came from and that 
 // along with Baritone.  If not, see <https://www.gnu.org/licenses/>.
 ```
 
-## Elytra pathfinder
+## Elytra
 
-Elytra flight in this port will come from the Java pathfinder in upstream's `1.21.4` branch
-(`src/main/java/baritone/process/elytra/pathfinder/`), added by
-[pull request 5117](https://github.com/cabaletta/baritone/pull/5117) and merged as commit
-`3d3da10b0cb0fb71a80ffb2fe673fac6927924d2`.
+Elytra flight is not in this port yet. Upstream flies with [nether-pathfinder](https://github.com/babbaj/nether-pathfinder), by
+babbaj with contributions from leijurv, ZeroMemes, underscore-zi, 0-x-2-2 and 0Mattias, and its `1.21.4` branch also holds a Java
+port of that library by Mattias Rask ([0Mattias](https://github.com/0Mattias)).
 
-- **Java port:** Mattias Rask ([0Mattias](https://github.com/0Mattias)), with later changes by aver. Reviewed
-  by babbaj and ZacSharp.
-- **Original native library:** [nether-pathfinder](https://github.com/babbaj/nether-pathfinder), by babbaj, with
-  contributions from leijurv, ZeroMemes, underscore-zi, 0-x-2-2 and 0Mattias.
+No license file was found in the nether-pathfinder repository on 2026-11-05. So this port uses neither the library nor its Java
+port: its elytra flight will be written new. What it takes from upstream is the general idea of how elytra flight behaves
+there, which is the work of the people above.
 
-**Licensing assumption.** The Java port's files carry Baritone's LGPL notice, and this project treats them as
-licensed on the same terms as the rest of Baritone. That is an assumption, not an explicit grant from the
-authors of nether-pathfinder: no license file was found in that repository on 2026-11-05. Its native code is not
-used here. If you hold rights in nether-pathfinder and object, please open an issue.
+## Schematic formats
 
-**Excluded files.** `ChunkGeneratorHell` and `NoiseGeneratorImproved` describe themselves as coming from
-Minecraft, and `NoiseGeneratorOctaves` belongs with them. The assumption above does not cover them, and they will
-not be ported.
+Ported from `src/main/java/baritone/utils/schematic/` at `1b8e87c`. The `LitematicaBitArray` is maruohon's, from the
+[Litematica](https://github.com/maruohon/litematica) mod, which Baritone uses under LGPLv3 with the author's permission. The rest of the
+Litematica reader is rycbar's, written after EmersonDove's work, as upstream credits it. The NBT reader and the table of legacy block ids
+are written from the public format descriptions, not from Minecraft's source.
