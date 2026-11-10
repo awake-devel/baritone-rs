@@ -242,6 +242,17 @@ impl Deref for Bs<'_> {
     }
 }
 
+/// What a process puts over the two costs a context asks of the world: the cost of placing a block at a position and the multiplier of
+/// breaking one. Upstream's `BuilderProcess.BuilderCalculationContext` is a subclass of `CalculationContext` that overrides
+/// `costOfPlacingAt` and `breakCostMultiplierAt`; here the context stays one type and carries an optional overlay (docs/deviations.md D45).
+/// `current` is the id of the block state at the position. A search thread reads the same object, so an overlay holds snapshots only.
+pub trait CostOverlay: Send + Sync {
+    /// `BuilderProcess.BuilderCalculationContext.costOfPlacingAt`: replaces `CalculationContext.costOfPlacingAt`.
+    fn cost_of_placing_at(&self, cfg: &Config, border: &Border, x: i32, y: i32, z: i32, current: usize) -> f64;
+    /// `BuilderProcess.BuilderCalculationContext.breakCostMultiplierAt`: replaces `CalculationContext.breakCostMultiplierAt`.
+    fn break_cost_multiplier_at(&self, cfg: &Config, x: i32, y: i32, z: i32, current: usize) -> f64;
+}
+
 /// `CalculationContext`: one search-facing context. It holds a settings snapshot and reads nothing global.
 pub struct Ctx<'a, W: WorldView> {
     pub world: &'a W,
@@ -255,6 +266,8 @@ pub struct Ctx<'a, W: WorldView> {
     pub min_y: i32,
     pub max_y: i32,
     height: i32,
+    /// The overlay of the process the context was made for, or none (the plain `CalculationContext`).
+    costs: Option<&'a dyn CostOverlay>,
 }
 
 impl<'a, W: WorldView> Ctx<'a, W> {
@@ -268,7 +281,13 @@ impl<'a, W: WorldView> Ctx<'a, W> {
         }
         let min_y = world.min_y();
         let height = world.height();
-        Ctx { world, states, pre, cfg, border, tool_strength, water_walk_speed: water_speed, min_y, max_y: min_y + height - 1, height }
+        Ctx { world, states, pre, cfg, border, tool_strength, water_walk_speed: water_speed, min_y, max_y: min_y + height - 1, height, costs: None }
+    }
+
+    /// The same context with a process's overlay over the placing and breaking costs (`BuilderCalculationContext`).
+    pub fn with_costs(mut self, costs: &'a dyn CostOverlay) -> Self {
+        self.costs = Some(costs);
+        self
     }
 
     /// `CalculationContext.get(int,int,int)`: the state at a position. Above and below the world it is air, as in `BlockStateInterface.get0`.
@@ -424,8 +443,12 @@ impl<'a, W: WorldView> Ctx<'a, W> {
         !self.border.can_place_at(x, z) || self.pre.flags[b.id].never_break || self.avoid_adjacent_breaking(x, y + 1, z, true) || self.avoid_adjacent_breaking(x + 1, y, z, false) || self.avoid_adjacent_breaking(x - 1, y, z, false) || self.avoid_adjacent_breaking(x, y, z + 1, false) || self.avoid_adjacent_breaking(x, y, z - 1, false)
     }
 
-    /// `CalculationContext.breakCostMultiplierAt`: `isPossiblyProtected` is always false upstream.
-    fn break_cost_multiplier(&self, s: &State) -> f64 {
+    /// `CalculationContext.breakCostMultiplierAt`: `isPossiblyProtected` is always false upstream. With an overlay, the overlay's.
+    fn break_cost_multiplier(&self, x: i32, y: i32, z: i32, b: Bs<'_>) -> f64 {
+        if let Some(o) = self.costs {
+            return o.break_cost_multiplier_at(self.cfg, x, y, z, b.id);
+        }
+        let s = b.s;
         if !self.cfg.allow_break && !self.cfg.allow_break_anyway.contains(&s.name) {
             return COST_INF;
         }
@@ -439,7 +462,7 @@ impl<'a, W: WorldView> Ctx<'a, W> {
             if !b.fluid_empty {
                 return COST_INF;
             }
-            let mult = self.break_cost_multiplier(b.s);
+            let mult = self.break_cost_multiplier(x, y, z, b);
             if mult >= COST_INF {
                 return COST_INF;
             }
@@ -526,8 +549,12 @@ impl<'a, W: WorldView> Ctx<'a, W> {
         s.replaceable
     }
 
-    /// `CalculationContext.costOfPlacingAt`: `isPossiblyProtected` is always false upstream.
-    pub fn cost_of_placing_at(&self, x: i32, z: i32, current: &State) -> f64 {
+    /// `CalculationContext.costOfPlacingAt`: `isPossiblyProtected` is always false upstream. With an overlay, the overlay's.
+    pub fn cost_of_placing_at(&self, x: i32, y: i32, z: i32, current: Bs<'_>) -> f64 {
+        if let Some(o) = self.costs {
+            return o.cost_of_placing_at(self.cfg, &self.border, x, y, z, current.id);
+        }
+        let current = current.s;
         if !self.cfg.has_throwaway {
             return COST_INF;
         }

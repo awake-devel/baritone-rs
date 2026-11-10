@@ -1,6 +1,10 @@
 class	method	status	commit	hash	covered_by	note
 AStarPathFinder	<init>	redesign	1b8e87c	6c63beb1dc416301		`AStarPathFinder::new`. The finder holds the context, the favoring and a node arena.
 AStarPathFinder	calculate0	port	1b8e87c	ff1cb876659fb955	search-compare	The limits are the caller's: a node cap, a clock closure and a cancel flag. slowPath, the printing and the debug log are dropped. A bad cost, destination or heuristic is a `SearchError`.
+AbstractMask	<init>	redesign	1b8e87c	a494b2c5245a3a80		Folded into the `Mask` trait and its users, Schematics, D46.
+AbstractMask	heightY	redesign	1b8e87c	e2e814e9f77a7abe		Folded into the `Mask` trait and its users, Schematics, D46.
+AbstractMask	lengthZ	redesign	1b8e87c	08dd17c425cb0a04		Folded into the `Mask` trait and its users, Schematics, D46.
+AbstractMask	widthX	redesign	1b8e87c	5c7b139ea56c6f94		Folded into the `Mask` trait and its users, Schematics, D46.
 AbstractNodeCostSearch	<init>	redesign	1b8e87c	186065221c2d7af3		`AStarPathFinder::new`. The cell map is a std HashMap of 16 x 8 x 16 cells; the sizes and load factor settings are not used.
 AbstractNodeCostSearch	bestPathSoFar	port	1b8e87c	f273828c8cc02918	search-compare	
 AbstractNodeCostSearch	bestSoFar	port	1b8e87c	9a46f85941037245	search-compare	Printing and logging dropped. Path costs are read from the nodes at the time.
@@ -14,6 +18,11 @@ AbstractNodeCostSearch	getStart	port	1b8e87c	106a4659193ca569	search-compare
 AbstractNodeCostSearch	isFinished	port	1b8e87c	c6335fd30a6ac66c	search-compare	
 AbstractNodeCostSearch	mapSize	port	1b8e87c	3d8c1eefa89c140c	search-compare	
 AbstractNodeCostSearch	pathToMostRecentNodeConsidered	port	1b8e87c	0520764f85fc79bb	search-compare	
+AbstractSchematic	<init>()	redesign	1b8e87c	5da526c1636de843		Folded into the `Schematic` trait and its users, Schematics, D46.
+AbstractSchematic	<init>(int,int,int)	redesign	1b8e87c	917c5f288def6a46		Folded into the `Schematic` trait and its users, Schematics, D46.
+AbstractSchematic	heightY	redesign	1b8e87c	0f0bfd5af577c2bb		Folded into the `Schematic` trait and its users, Schematics, D46.
+AbstractSchematic	lengthZ	redesign	1b8e87c	e7e786ff5919182c		Folded into the `Schematic` trait and its users, Schematics, D46.
+AbstractSchematic	widthX	redesign	1b8e87c	d26de1e5aef01516		Folded into the `Schematic` trait and its users, Schematics, D46.
 ActionCosts	distanceToTicks	port	1b8e87c	66539f392ef9e3df	cost-compare	
 ActionCosts	generateFallNBlocksCost	port	1b8e87c	0a9e50921b3c966b	cost-compare	Built once and cached in a OnceLock.
 ActionCosts	oldFormula	drop	1b8e87c	0dbc7f355b38467b		Unused in upstream main code; only a formula kept for reference.
@@ -34,6 +43,12 @@ BinaryHeapOpenSet	removeLowest	port	1b8e87c	4cc67b3e28f567da	search-compare	An e
 BinaryHeapOpenSet	siftUp	port	1b8e87c	e55f80167b7a8549	search-compare	
 BinaryHeapOpenSet	size	port	1b8e87c	22996621ae0759a4	search-compare	
 BinaryHeapOpenSet	update	port	1b8e87c	98fbae3ac199902a	search-compare	
+BinaryOperatorMask	<init>	redesign	1b8e87c	b57db49f36b10049		The static helper is folded into the struct's own `part_of_mask`, Schematics, D46.
+BinaryOperatorMask	partOfMask(Mask,int,int,int,BlockState)	redesign	1b8e87c	d23d11395f3de193		The static helper is folded into the struct's own `part_of_mask`, Schematics, D46.
+BinaryOperatorMask	partOfMask(int,int,int,BlockState)	port	1b8e87c	e5272408f7b79b71		Schematics, D46.
+BinaryOperatorMask.Static	<init>	redesign	1b8e87c	3f40fa926c7cc65f		The static helper is folded into the struct's own `part_of_mask_static`, Schematics, D46.
+BinaryOperatorMask.Static	partOfMask(StaticMask,int,int,int)	redesign	1b8e87c	65e7825788c1a00d		The static helper is folded into the struct's own `part_of_mask_static`, Schematics, D46.
+BinaryOperatorMask.Static	partOfMask(int,int,int)	port	1b8e87c	20947b71e1602b36		Schematics, D46.
 BlockOptionalMeta	<init>(Block)	redesign	1b8e87c	4dabdf8f70b54ac3		`BlockOptionalMeta::from_block`. The glue gives the blocks in a `BlockIndex`.
 BlockOptionalMeta	<init>(String)	redesign	1b8e87c	a9144cfbb6496976		`BlockOptionalMeta::parse`. Same pattern and same texts for an invalid selector, name or pair; an unknown property is a message instead of a `NullPointerException` (D37).
 BlockOptionalMeta	castToIProperty	drop	1b8e87c	ea4f92941a53fc83		Java generics.
@@ -82,6 +97,76 @@ BlockStateInterface	getUncached	redesign	1b8e87c	2077484bf5878c40		`cache::view:
 BlockStateInterface	isLoaded	redesign	1b8e87c	cea78bc4c6b82cb7		`cache::view::WithCache::is_loaded`: loaded, or held by the cache.
 BlockStateInterface	releaseCache	missing	1b8e87c	57e630960605fef8		
 BlockStateInterface	worldContainsLoadedChunk	redesign	1b8e87c	9a51597ac6b0d5b9	cost-compare	`WorldView::contains_loaded_chunk`; S4 connects it to the live world.
+BooleanBinaryOperator	applyAsBoolean	port	1b8e87c	6249c74dc7a5e1e8		Schematics, D46.
+BooleanBinaryOperators	<init>	redesign	1b8e87c	667e2c7b41ed023f		`BooleanBinaryOperators::apply`, an enum, Schematics, D46.
+BooleanBinaryOperators	applyAsBoolean	port	1b8e87c	23f384cb73347736		Schematics, D46.
+BuildCommand	<init>	redesign	1b8e87c	f6272b02565f5b54		`COMMANDS` and the glue's help lines; the schematics folder is `Game::game_dir()/schematics`, Glue, D48.
+BuildCommand	execute	port	1b8e87c	80f1295cee6726da		Glue, D48.
+BuildCommand	getLongDesc	redesign	1b8e87c	12f620e94eaf851e		`COMMANDS` and the glue's help lines; the schematics folder is `Game::game_dir()/schematics`, Glue, D48.
+BuildCommand	getShortDesc	redesign	1b8e87c	8f2e6c9e601cb242		`COMMANDS` and the glue's help lines; the schematics folder is `Game::game_dir()/schematics`, Glue, D48.
+BuildCommand	tabComplete	port	1b8e87c	05d39d01109e64ce		Glue, D48.
+BuilderProcess	<init>	redesign	1b8e87c	9617b89b056fb893		`BuilderProcess::new`; the map art step is `build_parsed`, the selection branch is later, Builder, D44.
+BuilderProcess	aabbSideMultipliers	port	1b8e87c	f2ce9d93222c7e93		Builder, D44.
+BuilderProcess	applyMapArtAndSelection	redesign	1b8e87c	a5e8d4db431b3c6d		The map art step is `BuilderProcess::build_parsed`; the selection branch is later, Builder, D44.
+BuilderProcess	approxPlaceable	port	1b8e87c	254c7ea694b38d2f		Builder, D44.
+BuilderProcess	assemble(BuilderCalculationContext,List)	port	1b8e87c	66e165a6cf3f0f73		Builder, D44.
+BuilderProcess	assemble(BuilderCalculationContext,List,boolean)	port	1b8e87c	37271193ca10fa23		Builder, D44.
+BuilderProcess	breakGoal	port	1b8e87c	25b8c4094a60cb68		Builder, D44.
+BuilderProcess	build(String,File,Vec3i)	redesign	1b8e87c	942bff763f6a1c30		The glue reads and parses the file, then `build_parsed` (map art, then `build`). The selection steps (`buildOnlySelection`, `SelectionSchematic`) are left out, D44, D49. The map art line goes to the console, D50.
+BuilderProcess	build(String,ISchematic,Vec3i)	redesign	1b8e87c	19e3491cf4b5e845		Builder, D44. The `buildOnlySelection` branch (selections, layer start, `stopAtHeight`) is left out: D49 and the SelectionSchematic rows.
+BuilderProcess	buildOpenLitematic	drop	1b8e87c	06a2a69862546f07		The Litematica and Schematica mods do not exist on Horizon (R3 scope).
+BuilderProcess	buildOpenSchematic	drop	1b8e87c	6558ce01d927daf6		The Litematica and Schematica mods do not exist on Horizon (R3 scope).
+BuilderProcess	clearArea	port	1b8e87c	aa7cf65b3719f1c3		Builder, D44.
+BuilderProcess	containsBlockState	port	1b8e87c	b7de3072ca2d3a50		Builder, D44.
+BuilderProcess	displayName0	port	1b8e87c	8de2a25ac5d25b94		Builder, D44.
+BuilderProcess	fullRecalc	port	1b8e87c	ccd744815e6bee88		Builder, D44.
+BuilderProcess	getApproxPlaceable	port	1b8e87c	bd19437bb08c05a0		Builder, D44.
+BuilderProcess	getMaxLayer	port	1b8e87c	8266d570c7bb9dca		Builder, D44.
+BuilderProcess	getMinLayer	port	1b8e87c	732133b3352d18d7		Builder, D44.
+BuilderProcess	hasAnyItemThatWouldPlace	port	1b8e87c	8b44c08f00c0dd85		Builder, D44.
+BuilderProcess	isActive	port	1b8e87c	1d508af44568d058		Builder, D44.
+BuilderProcess	isPaused	port	1b8e87c	5bedbc48c4f7bb2c		Builder, D44.
+BuilderProcess	onLostControl	port	1b8e87c	6164a65855cbc4cc		Builder, D44.
+BuilderProcess	onTick(boolean,boolean)	port	1b8e87c	dd0cfc7cbbb575b2		Builder, D44.
+BuilderProcess	onTick(boolean,boolean,int)	port	1b8e87c	874044469463a255		Builder, D44.
+BuilderProcess	pause	port	1b8e87c	85da57133b4422b4		Builder, D44.
+BuilderProcess	placeAt	port	1b8e87c	14ccd750844c896f		Builder, D44.
+BuilderProcess	placementGoal	port	1b8e87c	9a441bf8a6db061b		Builder, D44.
+BuilderProcess	placementPlausible	port	1b8e87c	2403dca9fc49f703		Builder, D44.
+BuilderProcess	possibleToPlace	port	1b8e87c	d48333852ed36513		Builder, D44.
+BuilderProcess	recalc	port	1b8e87c	8a190730dcf78120		Builder, D44.
+BuilderProcess	recalcNearby	port	1b8e87c	e70e67e635548338		Builder, D44.
+BuilderProcess	resume	port	1b8e87c	50c36925819c59d0		Builder, D44.
+BuilderProcess	sameBlockstate	port	1b8e87c	7f8ab164a089ca74		Builder, D44.
+BuilderProcess	searchForPlacables	port	1b8e87c	15fbeb604f4295f4		Builder, D44.
+BuilderProcess	toBreakNearPlayer	port	1b8e87c	8b89fe4397f97f99		Builder, D44.
+BuilderProcess	trim	port	1b8e87c	2140d5446d78d26d		Builder, D44.
+BuilderProcess	valid	port	1b8e87c	6d2f52247aac1fab		Builder, D44.
+BuilderProcess.BuilderCalculationContext	<init>	redesign	1b8e87c	0a1e8c086d26e99c		`BuilderOverlay`, Search context, D45.
+BuilderProcess.BuilderCalculationContext	breakCostMultiplierAt	port	1b8e87c	c7d0007729d37d7d		Search context, D45.
+BuilderProcess.BuilderCalculationContext	costOfPlacingAt	port	1b8e87c	bdf825cfec67525d		Search context, D45.
+BuilderProcess.BuilderCalculationContext	getSchematic	port	1b8e87c	6e346dbcf8879fd6		Search context, D45.
+BuilderProcess.GoalAdjacent	<init>	redesign	1b8e87c	d28b055fb4978aa9		A variant of `Goal` in `goals.rs`; its text is `command::goal_to_string`, Builder, D44.
+BuilderProcess.GoalAdjacent	equals	redesign	1b8e87c	e653ce6636a6333f		A variant of `Goal` in `goals.rs`; its text is `command::goal_to_string`, Builder, D44.
+BuilderProcess.GoalAdjacent	hashCode	redesign	1b8e87c	723150be834fa728		A variant of `Goal` in `goals.rs`; its text is `command::goal_to_string`, Builder, D44.
+BuilderProcess.GoalAdjacent	heuristic	redesign	1b8e87c	d964173f7eebf49e		A variant of `Goal` in `goals.rs`; its text is `command::goal_to_string`, Builder, D44.
+BuilderProcess.GoalAdjacent	isInGoal	redesign	1b8e87c	ef5e612fe00247dc		A variant of `Goal` in `goals.rs`; its text is `command::goal_to_string`, Builder, D44.
+BuilderProcess.GoalAdjacent	toString	redesign	1b8e87c	e6fef32dc5b2fa12		A variant of `Goal` in `goals.rs`; its text is `command::goal_to_string`, Builder, D44.
+BuilderProcess.GoalBreak	<init>	redesign	1b8e87c	466b8993e1a5ca7c		A variant of `Goal` in `goals.rs`; its text is `command::goal_to_string`, Builder, D44.
+BuilderProcess.GoalBreak	hashCode	redesign	1b8e87c	c4f4a23af2ab469e		A variant of `Goal` in `goals.rs`; its text is `command::goal_to_string`, Builder, D44.
+BuilderProcess.GoalBreak	isInGoal	redesign	1b8e87c	9a4f83ca1c98811c		A variant of `Goal` in `goals.rs`; its text is `command::goal_to_string`, Builder, D44.
+BuilderProcess.GoalBreak	toString	redesign	1b8e87c	cf0aeeee4e7f38ae		A variant of `Goal` in `goals.rs`; its text is `command::goal_to_string`, Builder, D44.
+BuilderProcess.GoalPlace	<init>	redesign	1b8e87c	170fad1a2a04e94e		A variant of `Goal` in `goals.rs`; its text is `command::goal_to_string`, Builder, D44.
+BuilderProcess.GoalPlace	hashCode	redesign	1b8e87c	a9c047726a8cd05d		A variant of `Goal` in `goals.rs`; its text is `command::goal_to_string`, Builder, D44.
+BuilderProcess.GoalPlace	heuristic	redesign	1b8e87c	d964173f7eebf49e		A variant of `Goal` in `goals.rs`; its text is `command::goal_to_string`, Builder, D44.
+BuilderProcess.GoalPlace	toString	redesign	1b8e87c	8d81ee576d2c0d51		A variant of `Goal` in `goals.rs`; its text is `command::goal_to_string`, Builder, D44.
+BuilderProcess.JankyGoalComposite	<init>	redesign	1b8e87c	3d48df4607543e4b		A variant of `Goal` in `goals.rs`; its text is `command::goal_to_string`, Builder, D44.
+BuilderProcess.JankyGoalComposite	equals	redesign	1b8e87c	19c6089f994166a1		A variant of `Goal` in `goals.rs`; its text is `command::goal_to_string`, Builder, D44.
+BuilderProcess.JankyGoalComposite	hashCode	redesign	1b8e87c	02a971148792b969		A variant of `Goal` in `goals.rs`; its text is `command::goal_to_string`, Builder, D44.
+BuilderProcess.JankyGoalComposite	heuristic	redesign	1b8e87c	3bb6584717db16ab		A variant of `Goal` in `goals.rs`; its text is `command::goal_to_string`, Builder, D44.
+BuilderProcess.JankyGoalComposite	isInGoal	redesign	1b8e87c	51f509d7cdacae6b		A variant of `Goal` in `goals.rs`; its text is `command::goal_to_string`, Builder, D44.
+BuilderProcess.JankyGoalComposite	toString	redesign	1b8e87c	c13856a57a2e5861		A variant of `Goal` in `goals.rs`; its text is `command::goal_to_string`, Builder, D44.
+BuilderProcess.Placement	<init>	redesign	1b8e87c	d83454861bf6e9d7		The `Placement` struct, Builder, D44.
 CacheFiles	<init>	drop	1b8e87c	abf1c65f1e3327c6		Static class.
 CacheFiles	moveIntoPlace	port	1b8e87c	bf17c50a6cb47f23		`CachedWorld::save_region`: the temporary file is renamed over the old one; `std::fs::rename` replaces atomically on the file systems the game runs on.
 CachedChunk	<init>	redesign	1b8e87c	eb24195f9a2d5dfa		`cache::chunk::CachedChunk::new`. Takes the dimension; the special blocks are keyed by the Y they are looked up with (D1). A block name the game does not know is an error, as `stringToBlockRequired` throws.
@@ -149,6 +234,14 @@ ChunkPacker	<init>	drop	1b8e87c	a3f1fd36dead1050		Static class.
 ChunkPacker	getPathingBlockType	port	1b8e87c	4a65e6e31454cfc3		`cache::chunk::pathing_block_type`. The flow test at the chunk edge is not inverted (D3).
 ChunkPacker	pack	port	1b8e87c	5851b3cea208d4dc		`cache::chunk::pack`. The chunk comes through `PackSource`; a section is read whole instead of cell by cell.
 ChunkPacker	pathingTypeToBlock	port	1b8e87c	b961cfc04aad98b2		`cache::chunk::path_type_to_block`.
+CompositeSchematic	<init>	redesign	1b8e87c	2f9835927a46ba59		`CompositeSchematic::new`, Schematics, D46.
+CompositeSchematic	desiredState	port	1b8e87c	4b86cb0c7b797401		Schematics, D46.
+CompositeSchematic	getSchematic	port	1b8e87c	dfc2a7a3510c5395		Schematics, D46.
+CompositeSchematic	inSchematic	port	1b8e87c	355e864f2684e9c2		Schematics, D46.
+CompositeSchematic	put	port	1b8e87c	767973a5f796799a		Schematics, D46.
+CompositeSchematic	recalcArr	port	1b8e87c	78c62f6156bee637		Schematics, D46.
+CompositeSchematic	reset	port	1b8e87c	1698050b9db8f1b6		Schematics, D46.
+CompositeSchematicEntry	<init>	redesign	1b8e87c	1757cc412af618d9		A private struct of `CompositeSchematic`, Schematics, D46.
 CustomGoalProcess	<init>	redesign	1b8e87c	abce76fb4c4963cf		`CustomGoalProcess::new`.
 CustomGoalProcess	displayName0	drop	1b8e87c	e53eb30222b7b304		Display name for the chat.
 CustomGoalProcess	getGoal	port	1b8e87c	b54c19de1948e51d		
@@ -164,6 +257,18 @@ CutoffPath	getGoal	port	1b8e87c	50a9d398a5a822ff	search-compare	One `Path` struc
 CutoffPath	getNumNodesConsidered	port	1b8e87c	4657048dd65c49a6	search-compare	One `Path` struct stands for Path, CutoffPath and SplicedPath.
 CutoffPath	movements	port	1b8e87c	9ff71a2ec2408a25	search-compare	One `Path` struct stands for Path, CutoffPath and SplicedPath.
 CutoffPath	positions	port	1b8e87c	b7e64f7afa055602	search-compare	One `Path` struct stands for Path, CutoffPath and SplicedPath.
+CylinderMask	<init>	redesign	1b8e87c	16e6981d535ba961		`CylinderMask::new`, Schematics, D46.
+CylinderMask	getA	port	1b8e87c	33170a00ff4f2703		Schematics, D46.
+CylinderMask	getB	port	1b8e87c	7b2f000e45c67226		Schematics, D46.
+CylinderMask	outside	port	1b8e87c	338fa3aa64fea3bc		Schematics, D46.
+CylinderMask	partOfMask	port	1b8e87c	0fac2097d776b704		Schematics, D46.
+DefaultSchematicFormats	<init>	redesign	1b8e87c	f1d34c09d13cad1d		The closed enum `SchematicFormat` replaces the registry and the three classes, Formats, D47.
+DefaultSchematicFormats	getFileExtensions	port	1b8e87c	5583e50cf6370bd7		Formats, D47.
+DefaultSchematicFormats	isFileType	port	1b8e87c	9cf9290ab2ade794		Formats, D47.
+DefaultSchematicFormats.LITEMATICA	parse	port	1b8e87c	a465543082e012f6		Formats, D47.
+DefaultSchematicFormats.MCEDIT	parse	port	1b8e87c	feabbc04112475a2		Formats, D47.
+DefaultSchematicFormats.SPONGE	parse	port	1b8e87c	b5fce475eaeb5651		Formats, D47.
+ExecutionControlCommands	<init>	later	1b8e87c	8cea8876ca97da47		Only the builder half of `resume` is ported (`command::resume_command`, D48); it prints "Resumed" for a paused builder where upstream prints "Not paused" without `pause` (D48, D50). `pause` and `paused` need a process with priority and `isTemporary` (D36).
 ExploreProcess	<init>	redesign	1b8e87c	51c9f51cc44c1095		`ExploreProcess::new`.
 ExploreProcess	applyJsonFilter	port	1b8e87c	ada0b134c95bc29d		`ExploreProcess::apply_json_filter`. The file is read by the glue (D42) and the filter is made by `JsonChunkFilter::parse`; the `Loaded N positions` line is the process's.
 ExploreProcess	calcFilter	port	1b8e87c	200fe40bf3ea908c		The either-filter is not built: `is_already_explored` and `count_remain` look at the filter and then at the cache.
@@ -200,6 +305,10 @@ Favoring	<init>(IPath,CalculationContext)	redesign	1b8e87c	3fd5b204257288a8		`Fa
 Favoring	<init>(IPlayerContext,IPath,CalculationContext)	redesign	1b8e87c	fb0a2c449d12b6a0		`Favoring::new`. The avoidances come from `Avoidance::create`, which the caller feeds.
 Favoring	calculate	port	1b8e87c	c595a8db6f667123	search-compare	
 Favoring	isEmpty	port	1b8e87c	cdc858519f608efe	search-compare	
+FillSchematic	<init>(int,int,int,BlockOptionalMeta)	redesign	1b8e87c	ae9f71643111cb9c		`FillSchematic::new`; the state overload takes no selector, Schematics, D46.
+FillSchematic	<init>(int,int,int,BlockState)	redesign	1b8e87c	3181f20b6437233a		`FillSchematic::new`; the state overload takes no selector, Schematics, D46.
+FillSchematic	desiredState	port	1b8e87c	12131a2f9a93b849		Schematics, D46.
+FillSchematic	getBom	port	1b8e87c	def978fd83da4dee		Schematics, D46.
 FollowProcess	<init>	redesign	1b8e87c	a40e4d6735efcaa2		`FollowProcess::new`.
 FollowProcess	currentFilter	port	1b8e87c	5c113f6d2fa838c1		The filter is a `FollowFilter`, the commands' predicates as data.
 FollowProcess	displayName0	port	1b8e87c	0398b34e877c6f1f		`display_name`. The entities print through `entity_to_string`, which cannot know the game's class names (D40).
@@ -323,6 +432,18 @@ GotoCommand	execute	redesign	1b8e87c	ff4a9da3ef30f6c1		`command.rs`. The coordin
 GotoCommand	getLongDesc	drop	1b8e87c	533dd20783ca4377		The help text is the glue's own, short.
 GotoCommand	getShortDesc	drop	1b8e87c	5e8148d32265be1b		See getLongDesc.
 GotoCommand	tabComplete	drop	1b8e87c	45def654c089e386		No tab completion.
+IBuilderProcess	build(String,BlockPos)	drop	1b8e87c	5dd7eab2ae1451ab		A deprecated default that builds a schematic of the block under the position; there is no caller.
+IBuilderProcess	build(String,File,Vec3i)	port	1b8e87c	933fe82023f5a3fb		Builder, D44.
+IBuilderProcess	build(String,ISchematic,Vec3i)	port	1b8e87c	73f1bc106de13e5b		Builder, D44.
+IBuilderProcess	buildOpenLitematic	drop	1b8e87c	21875e0cdd3dd701		The Litematica and Schematica mods do not exist on Horizon (R3 scope).
+IBuilderProcess	buildOpenSchematic	drop	1b8e87c	28ccdd1b3d2e4b87		The Litematica and Schematica mods do not exist on Horizon (R3 scope).
+IBuilderProcess	clearArea	port	1b8e87c	72b90ab83f56c1a4		Builder, D44.
+IBuilderProcess	getApproxPlaceable	port	1b8e87c	cd2bbbd2d0d46639		Builder, D44.
+IBuilderProcess	getMaxLayer	port	1b8e87c	a22402d21032735d		Builder, D44.
+IBuilderProcess	getMinLayer	port	1b8e87c	64bb5cd534b0033a		Builder, D44.
+IBuilderProcess	isPaused	port	1b8e87c	09643200549c3346		Builder, D44.
+IBuilderProcess	pause	port	1b8e87c	ec43dcce3706eee3		Builder, D44.
+IBuilderProcess	resume	port	1b8e87c	0ada3ddeb0b2d1a4		Builder, D44.
 IOpenSet	insert	redesign	1b8e87c	b4deb9bf2f10037e		No interface: the pathfinder uses `BinaryHeapOpenSet` only.
 IOpenSet	isEmpty	redesign	1b8e87c	69c4fc8c60b25dbd		No interface: the pathfinder uses `BinaryHeapOpenSet` only.
 IOpenSet	removeLowest	redesign	1b8e87c	2a263e3e13d4483f		No interface: the pathfinder uses `BinaryHeapOpenSet` only.
@@ -339,6 +460,21 @@ IPath	postProcess	redesign	1b8e87c	3fcb8cdc08553d69		`Path::post_process`.
 IPath	sanityCheck	port	1b8e87c	6c9b5496674aff55	search-compare	
 IPath	staticCutoff	redesign	1b8e87c	dc27d0e5f23b1553		`Path::static_cutoff`.
 IPath	ticksRemainingFrom	port	1b8e87c	79d91911d5c8be31		`PathExecutor::ticks_remaining_from`.
+ISchematic	desiredState	port	1b8e87c	e890f5c9803cccc0		Schematics, D46.
+ISchematic	heightY	port	1b8e87c	aadf2169b5e91bf9		Schematics, D46.
+ISchematic	inSchematic	port	1b8e87c	7194a9b41ef9cd9b		Schematics, D46.
+ISchematic	lengthZ	port	1b8e87c	1595f56e3d0c4c8a		Schematics, D46.
+ISchematic	reset	port	1b8e87c	0f8a3f6e61fc080a		Schematics, D46.
+ISchematic	size	port	1b8e87c	6ea90288bb874a3d		Schematics, D46.
+ISchematic	widthX	port	1b8e87c	c76ab7c39e0f6ae9		Schematics, D46.
+ISchematicFormat	getFileExtensions	port	1b8e87c	f0ba699ce61a5da4		Formats, D47.
+ISchematicFormat	isFileType	port	1b8e87c	ee6560f181986226		Formats, D47.
+ISchematicFormat	parse	port	1b8e87c	ab04b66419bec7d8		Formats, D47.
+ISchematicSystem	getByFile	redesign	1b8e87c	b686a144cd9f8fac		The closed enum `SchematicFormat` replaces the registry, Formats, D47.
+ISchematicSystem	getFileExtensions	redesign	1b8e87c	f0ba699ce61a5da4		The closed enum `SchematicFormat` replaces the registry, Formats, D47.
+ISchematicSystem	getRegistry	redesign	1b8e87c	2e2fe34174ad2584		The closed enum `SchematicFormat` replaces the registry, Formats, D47.
+IStaticSchematic	getColumn	port	1b8e87c	880facc1c0c32fca		Schematics, D46.
+IStaticSchematic	getDirect	port	1b8e87c	2f7e70c8403af28a		Schematics, D46.
 InputOverrideHandler	<init>	drop	1b8e87c	83ac5d53c5456d6b		The block break and place helpers are later.
 InputOverrideHandler	clearAllKeys	port	1b8e87c	d0e2c41528c77b15		
 InputOverrideHandler	getBlockBreakHelper	drop	1b8e87c	abc272a91324687c		The block break and place helpers are later.
@@ -346,10 +482,60 @@ InputOverrideHandler	inControl	redesign	1b8e87c	a4534235ac06f46c		`Intent::activ
 InputOverrideHandler	isInputForcedDown	redesign	1b8e87c	8251719ec0b517bf		`Keys`, plain flags.
 InputOverrideHandler	onTick	redesign	1b8e87c	b0e4908457c6b7df		`Pathing::build_intent`: the left button wins over the right one, and a click waits for the tick after a slot change (D26).
 InputOverrideHandler	setInputForceState	redesign	1b8e87c	126fc0a3d8ffe822		`Keys`, plain flags.
+InventoryBehavior	<init>	redesign	1b8e87c	08a808b137433b55		`InventoryMover::default`: the state of the behavior is a field of `Controls`, D53.
+InventoryBehavior	attemptToPutOnHotbar	port	1b8e87c	532e99381de49e80		`InventoryMover::attempt_to_put_on_hotbar`, D53.
+InventoryBehavior	bestToolAgainst	port	1b8e87c	7c3e290f923ddb52		`inventory::best_tool_against`, called for stone and pickaxes by `InventoryMover::on_tick`; the glue prices the 36 slots (`Inventory::main_speed_vs_state`), D53.
+InventoryBehavior	firstValidThrowaway	port	1b8e87c	d902f8c89e183fc2		`inventory::first_valid_throwaway`, over the 36 stacks, D53. (`select_throwaway` is the list-ordered search of `selectThrowawayForLocation`.)
+InventoryBehavior	getTempHotbarSlot	port	1b8e87c	e0a78cc5445f349e		`InventoryMover::get_temp_hotbar_slot`; the random pick is the mover's own generator, D53.
+InventoryBehavior	hasGenericThrowaway	redesign	1b8e87c	deb9ce5ada952ed0		`inventory::has_generic_throwaway`, with `allowInventory` (D53).
+InventoryBehavior	onTick	port	1b8e87c	3a125b92ee338f96		`InventoryMover::on_tick`, called by `Pathing::tick` after the path's tick (behavior order), D53.
+InventoryBehavior	requestSwapWithHotBar	port	1b8e87c	0ab113f53cb99dc2		`InventoryMover::request_swap_with_hotbar`. The window click is the glue's (`SwapRequest`), D53.
+InventoryBehavior	selectThrowawayForLocation	port	1b8e87c	017210a221d92df9		The builder's branch, D45, and the main inventory with `allowInventory` (D53).
+InventoryBehavior	throwaway(boolean,Predicate)	redesign	1b8e87c	e23b2368e96df3bb		`inventory::throwaway` and `throwaway_slot`, with `allowInventory` as an argument (D53).
+InventoryBehavior	throwaway(boolean,Predicate,boolean)	redesign	1b8e87c	b4c05dbe0dfbdce2		`inventory::throwaway` and `throwaway_slot`: they return where the stack is (`Throwaway`), and `update` makes the swap into slot 7 when it is in the main inventory (D53).
+InventoryPauserProcess	<init>	redesign	1b8e87c	39b4d9d8ceeaad13		No object: the state is in `InventoryMover`, D53.
+InventoryPauserProcess	displayName0	drop	1b8e87c	af9de2a77a363e0a		The process has no name in the port's lists.
+InventoryPauserProcess	isActive	redesign	1b8e87c	f59b4dd4e72450d2		`ProcId::InventoryPauser` in `pathing.rs` is always active while the game ticks.
+InventoryPauserProcess	isTemporary	redesign	1b8e87c	397cfb357f2d787f		`execute_processes` does not make the processes behind it lose control, and `pre_tick` does not cancel the segment when control comes back from it.
+InventoryPauserProcess	motion	redesign	1b8e87c	a4bf10f4fef85840		Inlined in the tick of `ProcId::InventoryPauser` (`pathing.rs`).
+InventoryPauserProcess	onLostControl	drop	1b8e87c	5795190df7a1a9ac		Empty upstream.
+InventoryPauserProcess	onTick	port	1b8e87c	8ac4208ae4fc21bb		`InventoryMover::pauser_on_tick`, asked first each tick by `execute_processes`, D53.
+InventoryPauserProcess	priority	redesign	1b8e87c	bdfbebbd49be0baa		It is asked before every other process (5.1 against 0).
+InventoryPauserProcess	stationaryForInventoryMove	port	1b8e87c	b643c64e51a426d9		`InventoryMover::stationary_for_inventory_move`, D53.
+InventoryPauserProcess	stationaryNow	redesign	1b8e87c	13ba584fa3df8b23		Inlined in the tick of `ProcId::InventoryPauser` (`pathing.rs`).
 LinkedListOpenSet	insert	drop	1b8e87c	e260b2a42a79b253		Not used by the pathfinder; upstream keeps it for its open set test.
 LinkedListOpenSet	isEmpty	drop	1b8e87c	8c346ecac3df27a6		Not used by the pathfinder; upstream keeps it for its open set test.
 LinkedListOpenSet	removeLowest	drop	1b8e87c	a6b78cce5a55d37b		Not used by the pathfinder; upstream keeps it for its open set test.
 LinkedListOpenSet	update	drop	1b8e87c	9a4a68372cb97d66		Not used by the pathfinder; upstream keeps it for its open set test.
+LitematicaCommand	<init>	drop	1b8e87c	01eb179693104241		The Litematica and Schematica mods do not exist on Horizon (R3 scope).
+LitematicaCommand	execute	drop	1b8e87c	2047c7760779691b		The Litematica and Schematica mods do not exist on Horizon (R3 scope).
+LitematicaCommand	getLongDesc	drop	1b8e87c	f6672663d6a97db2		The Litematica and Schematica mods do not exist on Horizon (R3 scope).
+LitematicaCommand	getShortDesc	drop	1b8e87c	316ae36608880912		The Litematica and Schematica mods do not exist on Horizon (R3 scope).
+LitematicaCommand	tabComplete	drop	1b8e87c	076dd37ff5c01abe		The Litematica and Schematica mods do not exist on Horizon (R3 scope).
+LitematicaHelper	getPlacement	drop	1b8e87c	8b9822d59de52e57		The Litematica and Schematica mods do not exist on Horizon (R3 scope).
+LitematicaHelper	getSchematic	drop	1b8e87c	ce069dc67ed7dce2		The Litematica and Schematica mods do not exist on Horizon (R3 scope).
+LitematicaHelper	hasLoadedSchematic	drop	1b8e87c	1a720d6b3a816a2c		The Litematica and Schematica mods do not exist on Horizon (R3 scope).
+LitematicaHelper	isLitematicaPresent	drop	1b8e87c	a2d5024f29355e4b		The Litematica and Schematica mods do not exist on Horizon (R3 scope).
+LitematicaHelper	transform	drop	1b8e87c	e8e06c7535036740		The Litematica and Schematica mods do not exist on Horizon (R3 scope).
+LitematicaHelper.LitematicaPlacementSchematic	<init>	drop	1b8e87c	d67900117ae1cc25		The Litematica and Schematica mods do not exist on Horizon (R3 scope).
+LitematicaHelper.LitematicaPlacementSchematic	getDirect	drop	1b8e87c	6a0802bf3b94b72b		The Litematica and Schematica mods do not exist on Horizon (R3 scope).
+LitematicaHelper.LitematicaPlacementSchematic	toString	drop	1b8e87c	d4786f0bf9e5ed73		The Litematica and Schematica mods do not exist on Horizon (R3 scope).
+LitematicaSchematic	<init>	redesign	1b8e87c	a80d53ec4dc1e2f3		`litematica::parse`, Formats, D47.
+LitematicaSchematic	fillInSchematic	port	1b8e87c	7885f7b782a46dbf		Formats, D47.
+LitematicaSchematic	getBitsPerBlock	port	1b8e87c	e7cce7f3cf56acbb		Formats, D47.
+LitematicaSchematic	getBlockList	port	1b8e87c	6d50048b20177efe		Formats, D47.
+LitematicaSchematic	getBlockState	port	1b8e87c	7213002d31822df6		Formats, D47.
+LitematicaSchematic	getDirect	port	1b8e87c	34078c35bc9bb316		Formats, D47.
+LitematicaSchematic	getMinOfSchematic	port	1b8e87c	21bece042129cde3		Formats, D47.
+LitematicaSchematic	getMinOfSubregion	port	1b8e87c	bc1dda01ed0d5b48		Formats, D47.
+LitematicaSchematic	getRegions	port	1b8e87c	77520780bf913749		Formats, D47.
+LitematicaSchematic	getVolume	port	1b8e87c	12436d81d46db7bb		Formats, D47.
+LitematicaSchematic	setPropertyValue	port	1b8e87c	720736a1da862de3		Formats, D47.
+LitematicaSchematic	writeSubregionIntoSchematic	port	1b8e87c	ffe0a48a23cb0f4c		Formats, D47.
+LitematicaSchematic.LitematicaBitArray	<init>	redesign	1b8e87c	ab6e8d3011eadcd6		`LitematicaBitArray::new`, Formats, D47.
+LitematicaSchematic.LitematicaBitArray	getAt	port	1b8e87c	41c68a50d00e4e44		Formats, D47.
+LitematicaSchematic.LitematicaBitArray	roundUp	port	1b8e87c	a798f68407ea43dd		Formats, D47.
+LitematicaSchematic.LitematicaBitArray	size	port	1b8e87c	3030f39cbd6e7e0a		Formats, D47.
 LookBehavior	<init>	drop	1b8e87c	dd0f6a2f5b59ea19		Free look is `freelook::LookState`.
 LookBehavior	getAimProcessor	drop	1b8e87c	4dd326b65fa404d2		`look::AimProcessor`, used by `Pathing`.
 LookBehavior	getEffectiveRotation	port	1b8e87c	4f0681935f22aa95		
@@ -376,6 +562,24 @@ LookBehavior.AimProcessor	<init>	redesign	1b8e87c	2d79797ea89f32b2		`AimProcesso
 LookBehavior.AimProcessor	getPrevRotation	redesign	1b8e87c	8ce25b03ace8e15c		`AimProcessor`: the previous rotation is the player's.
 LookBehavior.Target	<init>	drop	1b8e87c	5b012e9c6ff7c960		`freelook::Plan`.
 LookBehavior.Target.Mode	resolve	redesign	1b8e87c	a2cfb7cfedc5b285		`freelook::resolve_mode`, without the elytra and swimming branches (D35).
+MCEditSchematic	<init>	redesign	1b8e87c	40ab7a0e17175728		`mcedit::parse`, Formats, D47.
+MapArtSchematic	<init>	redesign	1b8e87c	75a9500723d29d65		`MaskSchematic::map_art`, Schematics, D46.
+MapArtSchematic	generateHeightMap	port	1b8e87c	62a13f2308255b20		Schematics, D46.
+MapArtSchematic	lastIndexMatching	port	1b8e87c	ae5359aeb25ab6c0		Schematics, D46.
+MapArtSchematic	partOfMask	port	1b8e87c	95fa189e472d4342		Schematics, D46.
+Mask	heightY	port	1b8e87c	aadf2169b5e91bf9		Schematics, D46.
+Mask	intersection	port	1b8e87c	43b383771a6aea62		Schematics, D46.
+Mask	lengthZ	port	1b8e87c	1595f56e3d0c4c8a		Schematics, D46.
+Mask	not	port	1b8e87c	f0152224b884ca2f		Schematics, D46.
+Mask	partOfMask	port	1b8e87c	564aeed4ab0a0277		Schematics, D46.
+Mask	union	port	1b8e87c	fa94d371560deb8c		Schematics, D46.
+Mask	widthX	port	1b8e87c	c76ab7c39e0f6ae9		Schematics, D46.
+Mask	xor	port	1b8e87c	e30230efe6e0b1d5		Schematics, D46.
+MaskSchematic	<init>	redesign	1b8e87c	3d398a4327e3e6bc		`MaskSchematic::with_kind`, Schematics, D46.
+MaskSchematic	create	port	1b8e87c	bef1723a34f48308		Schematics, D46.
+MaskSchematic	desiredState	port	1b8e87c	78d30612aa55226e		Schematics, D46.
+MaskSchematic	inSchematic	port	1b8e87c	76dd6af64a130fa4		Schematics, D46.
+MaskSchematic	partOfMask	port	1b8e87c	ba76c4a7b54bcb08		Schematics, D46.
 MineProcess	<init>	redesign	1b8e87c	bfae21d062cbb6cf		`MineProcess::new`.
 MineProcess	addNearby	port	1b8e87c	95a70841d1b7c495		Legit mine.
 MineProcess	coalesce	port	1b8e87c	06f301cb066ad1f6		
@@ -401,6 +605,17 @@ MineProcess.GoalThreeBlocks	hashCode	drop	1b8e87c	60fc2508440abd71
 MineProcess.GoalThreeBlocks	heuristic	port	1b8e87c	0c0551a1ec975b75		The arm of `Goal::heuristic`.
 MineProcess.GoalThreeBlocks	isInGoal	port	1b8e87c	a611ad8b8438e84b		The arm of `Goal::is_in_goal`.
 MineProcess.GoalThreeBlocks	toString	drop	1b8e87c	3669a6976d6b71e5		
+MirroredSchematic	<init>	redesign	1b8e87c	33c79f85dd1a66af		`MirroredSchematic::new`, Schematics, D46.
+MirroredSchematic	desiredState	port	1b8e87c	6a1630d42348a724		Schematics, D46.
+MirroredSchematic	heightY	port	1b8e87c	6d322b3c940eb6e5		Schematics, D46.
+MirroredSchematic	inSchematic	port	1b8e87c	025adafd61609254		Schematics, D46.
+MirroredSchematic	lengthZ	port	1b8e87c	a30080c3ca9cf722		Schematics, D46.
+MirroredSchematic	mirror(BlockState,Mirror)	port	1b8e87c	bd6982d62aea7145		Schematics, D46.
+MirroredSchematic	mirror(List,Mirror)	redesign	1b8e87c	a70382d16802c7e3		`desired_state` turns the placeable states back with `BlockStates::rotate` and `mirror`, Schematics, D46.
+MirroredSchematic	mirrorX	port	1b8e87c	40bfbb10ded2f1be		Schematics, D46.
+MirroredSchematic	mirrorZ	port	1b8e87c	4dc1e3b5dd6331be		Schematics, D46.
+MirroredSchematic	reset	port	1b8e87c	9b6c1fdfe962c9f5		Schematics, D46.
+MirroredSchematic	widthX	port	1b8e87c	3bcf430376c5339b		Schematics, D46.
 Movement	<init>(IBaritone,BetterBlockPos,BetterBlockPos,BetterBlockPos[])	redesign	1b8e87c	2f48e88c7287f8a1		`Movement::new` keeps kind, src and dest. toBreak and toPlace are executor work.
 Movement	<init>(IBaritone,BetterBlockPos,BetterBlockPos,BetterBlockPos[],BetterBlockPos)	redesign	1b8e87c	74088287641e4e86		`Movement::new` keeps kind, src and dest. toBreak and toPlace are executor work.
 Movement	calculateCost	redesign	1b8e87c	c6cdc8d04918ae75		`Movement::calculate_cost` matches on the kind.
@@ -625,6 +840,10 @@ Moves.TRAVERSE_SOUTH	apply0	port	1b8e87c	49617f7a25536f1f	search-compare
 Moves.TRAVERSE_SOUTH	cost	port	1b8e87c	e70bd54f58f4fb69	cost-compare	
 Moves.TRAVERSE_WEST	apply0	port	1b8e87c	c248762a8195eaf4	search-compare	
 Moves.TRAVERSE_WEST	cost	port	1b8e87c	ba3d53757f3dca93	cost-compare	
+NotMask	<init>	redesign	1b8e87c	073ee3c6bd245fa3		`not`, Schematics, D46.
+NotMask	partOfMask	port	1b8e87c	887db17da89aeb0f		Schematics, D46.
+NotMask.Static	<init>	redesign	1b8e87c	4257c6feca44a6d9		`not_static`, Schematics, D46.
+NotMask.Static	partOfMask	port	1b8e87c	8430df41460f7b8e		Schematics, D46.
 Path	<init>	redesign	1b8e87c	f9432c6813b438f9		`Path::from_nodes`. Costs are copied from the nodes when the path is made. A cycle in the previous links is an error, where upstream would loop forever.
 Path	assembleMovements	port	1b8e87c	158889f2a78c3dd5	search-compare	
 Path	getDest	port	1b8e87c	db14168876712f37	search-compare	
@@ -703,6 +922,7 @@ PathingBehavior	secretInternalSetGoal	redesign	1b8e87c	f21f443a2e6be667		A field
 PathingBehavior	secretInternalSetGoalAndPath	port	1b8e87c	cfa1fe74e97238e8		
 PathingBehavior	softCancelIfSafe	port	1b8e87c	61d2e7415fd06568		
 PathingBehavior	tickPath	port	1b8e87c	d02e75600b51bdb3		`process/pathing.rs`. The partial path of the running search is not readable: see deviations.md.
+PathingCommandContext	<init>	redesign	1b8e87c	3d9040a08e5569f9		`ProcessContext` in `pathing.rs`, Search context, D45.
 PathingControlManager	<init>	drop	1b8e87c	73e599ccae712dad		`Pathing::new` makes the three processes.
 PathingControlManager	cancelEverything	port	1b8e87c	652e6d2bf2039537		
 PathingControlManager	executeProcesses	redesign	1b8e87c	c7754215340e7e74		`Pathing::execute_processes`: the three processes, newest active first (all priorities are 0), the first answer that is not a deferral wins and the ones behind it lose control.
@@ -715,6 +935,8 @@ PathingControlManager	registerProcess	drop	1b8e87c	5d413c6233069351		The process
 PathingControlManager	revalidateGoal	port	1b8e87c	3e4f29716bb0ed8b		
 PlayerMovementInput	<init>	drop	1b8e87c	b4a6589c43f29ceb		The keyboard replacement is the glue's: it reads `Intent`.
 PlayerMovementInput	tick	redesign	1b8e87c	bbdc08be1ba3a92d		`Intent::forward_impulse` and `strafe_impulse`; the glue sets the keys.
+PreComputedMask	<init>	redesign	1b8e87c	ce227d5060745ea6		`PreComputedMask::new`, Schematics, D46.
+PreComputedMask	partOfMask	port	1b8e87c	ea52c1ec768c8913		Schematics, D46.
 PrecomputedData	<init>	redesign	1b8e87c	f136104bdab4dce4		Ctx::new builds the flag table from one Config snapshot.
 PrecomputedData	canPlaceAgainst	port	1b8e87c	124200e6c62cc0a2	cost-compare	
 PrecomputedData	canWalkOn	port	1b8e87c	a0d571f09490fe12	cost-compare	
@@ -726,8 +948,16 @@ PrecomputedData	forCurrentSettings	redesign	1b8e87c	94ce2920cd06156c		No shared 
 PrecomputedData	fullyPassable	port	1b8e87c	3c1295499672cdcc	cost-compare	
 PrecomputedData	matchesCurrentSettings	redesign	1b8e87c	3fb86567443521aa		No shared table, so no settings match test.
 PrecomputedData	neverBreak	port	1b8e87c	8114dc78249b7daf	cost-compare	
+RelativeBlockPos	apply	port	1b8e87c	f8f4f514678fd0db		Glue, D48.
+RelativeBlockPos	tabComplete	redesign	1b8e87c	aed858c19e08f6d7		`command::complete` offers a `~` for each coordinate, Glue, D48.
 RelativeCoordinate	apply	port	1b8e87c	fe903bbee3d58441		`command.rs`. Arguments are plain strings, not command arguments. A bad argument is `None`, where upstream throws and the callers catch it.
 RelativeCoordinate	tabComplete	drop	1b8e87c	5b3fb8a64658a51e		The chat box has no tab completion for this command.
+RelativeFile	apply	redesign	1b8e87c	135f2f4dc00497d5		`resolve_schematic` and `canonical_or_lexical` in the glue, Glue, D48.
+RelativeFile	gameDir()	drop	1b8e87c	b2d9418e54f2852b		Deprecated; the glue asks the game for its folder.
+RelativeFile	gameDir(Minecraft)	redesign	1b8e87c	e2df3435b644d859		`Game::game_dir()` in the glue, Glue, D48.
+RelativeFile	getCanonicalFileUnchecked	redesign	1b8e87c	c23c72bfa800db7c		`canonical_or_lexical` in the glue, Glue, D48.
+RelativeFile	tabComplete(IArgConsumer,File)	port	1b8e87c	a96444c6f3c72e66		Glue, D48.
+RelativeFile	tabComplete(IDatatypeContext)	drop	1b8e87c	92a52a7d02c7bcce		Upstream answers nothing; the file names are the other overload.
 RelativeGoal	apply	port	1b8e87c	72d04a938fe3bbbb		`command.rs`. Only reached with a first argument that is a coordinate, so the empty default is never used from `goto`.
 RelativeGoal	tabComplete	drop	1b8e87c	3127401eea8929b3		No tab completion.
 RelativeGoalBlock	apply	port	1b8e87c	f5e9aa0071b7903b		`command.rs`. 
@@ -736,6 +966,21 @@ RelativeGoalXZ	apply	port	1b8e87c	274b84486c19eeb2		`command.rs`.
 RelativeGoalXZ	tabComplete	drop	1b8e87c	906656bcf71476e0		No tab completion.
 RelativeGoalYLevel	apply	port	1b8e87c	79ab9f26f5ca4593		`command.rs`. 
 RelativeGoalYLevel	tabComplete	drop	1b8e87c	8ca45a46e521daa1		No tab completion.
+ReplaceSchematic	<init>	redesign	1b8e87c	8a995cb1aa293b39		`MaskSchematic::replace`, Schematics, D46.
+ReplaceSchematic	partOfMask	port	1b8e87c	72f1560dc127541c		Schematics, D46.
+ReplaceSchematic	reset	port	1b8e87c	441461b2c6adb7c3		Schematics, D46.
+RotatedSchematic	<init>	redesign	1b8e87c	02d00ebfac0e1895		`RotatedSchematic::new`, Schematics, D46.
+RotatedSchematic	desiredState	port	1b8e87c	94b9d3c363684538		Schematics, D46.
+RotatedSchematic	flipsCoordinates	port	1b8e87c	09435afd77ae54ac		Schematics, D46.
+RotatedSchematic	heightY	port	1b8e87c	6d322b3c940eb6e5		Schematics, D46.
+RotatedSchematic	inSchematic	port	1b8e87c	1363e6ef507eb93d		Schematics, D46.
+RotatedSchematic	lengthZ	port	1b8e87c	f9d15632d600d765		Schematics, D46.
+RotatedSchematic	reset	port	1b8e87c	9b6c1fdfe962c9f5		Schematics, D46.
+RotatedSchematic	rotate(BlockState,Rotation)	port	1b8e87c	0934e0c4eff89c33		Schematics, D46.
+RotatedSchematic	rotate(List,Rotation)	redesign	1b8e87c	e74f27c7519deda0		`desired_state` turns the placeable states back with `BlockStates::rotate` and `mirror`, Schematics, D46.
+RotatedSchematic	rotateX	port	1b8e87c	463b8f357e8a3e9e		Schematics, D46.
+RotatedSchematic	rotateZ	port	1b8e87c	892c2da76304631a		Schematics, D46.
+RotatedSchematic	widthX	port	1b8e87c	b3c348ffb2924144		Schematics, D46.
 Rotation	<init>	redesign	1b8e87c	b9aa909c955d7cf3		`Rotation::new`: a NaN or an infinity becomes 0 where upstream throws.
 Rotation	add	port	1b8e87c	2e80d4b6258c34db		
 Rotation	clamp	port	1b8e87c	32df2e42cd328ea9		
@@ -768,6 +1013,30 @@ RotationUtils	reachableCenter(IPlayerContext,BlockPos,double,boolean)	port	1b8e8
 RotationUtils	reachableOffset(Entity,BlockPos,Vec3,double,boolean)	drop	1b8e87c	5d85324da81c2d57		Deprecated duplicate of the `IPlayerContext` form.
 RotationUtils	reachableOffset(IPlayerContext,BlockPos,Vec3,double,boolean)	port	1b8e87c	ee2dc4974a34300d		`exec/helper.rs`. The ray is the engine's (D25).
 RotationUtils	wrapAnglesToRelative	port	1b8e87c	aaa99af04071ea00		`Mth.atan2` is `f64::atan2`: see deviations.md.
+SchematicAdapter	<init>	drop	1b8e87c	e363c41565d19021		The Litematica and Schematica mods do not exist on Horizon (R3 scope).
+SchematicAdapter	desiredState	drop	1b8e87c	bc46f3c08f22756d		The Litematica and Schematica mods do not exist on Horizon (R3 scope).
+SchematicAdapter	getDirect	drop	1b8e87c	4c30fe6f1feee1ce		The Litematica and Schematica mods do not exist on Horizon (R3 scope).
+SchematicAdapter	heightY	drop	1b8e87c	6209723a3c14a1d2		The Litematica and Schematica mods do not exist on Horizon (R3 scope).
+SchematicAdapter	lengthZ	drop	1b8e87c	892ac7f73a44355d		The Litematica and Schematica mods do not exist on Horizon (R3 scope).
+SchematicAdapter	widthX	drop	1b8e87c	3193aed6f0421015		The Litematica and Schematica mods do not exist on Horizon (R3 scope).
+SchematicSystem	<init>	redesign	1b8e87c	d84710e090545f9d		The closed enum `SchematicFormat` replaces the registry, Formats, D47.
+SchematicSystem	getByFile	port	1b8e87c	d65e4c5704dabe93		Formats, D47.
+SchematicSystem	getFileExtensions	port	1b8e87c	9c22b602c2f2e5e7		Formats, D47.
+SchematicSystem	getRegistry	redesign	1b8e87c	a24b395d1a28dad7		The closed enum `SchematicFormat` replaces the registry, Formats, D47.
+SchematicaCommand	<init>	drop	1b8e87c	aa9b6d6477938537		The Litematica and Schematica mods do not exist on Horizon (R3 scope).
+SchematicaCommand	execute	drop	1b8e87c	61604b90f13dc64a		The Litematica and Schematica mods do not exist on Horizon (R3 scope).
+SchematicaCommand	getLongDesc	drop	1b8e87c	9cbe2972369dfd93		The Litematica and Schematica mods do not exist on Horizon (R3 scope).
+SchematicaCommand	getShortDesc	drop	1b8e87c	316ae36608880912		The Litematica and Schematica mods do not exist on Horizon (R3 scope).
+SchematicaCommand	tabComplete	drop	1b8e87c	076dd37ff5c01abe		The Litematica and Schematica mods do not exist on Horizon (R3 scope).
+SchematicaHelper	getOpenSchematic	drop	1b8e87c	c792fd142bce0411		The Litematica and Schematica mods do not exist on Horizon (R3 scope).
+SchematicaHelper	isSchematicaPresent	drop	1b8e87c	957a550e18817ea4		The Litematica and Schematica mods do not exist on Horizon (R3 scope).
+SelectionSchematic	<init>	later	1b8e87c	7c9fd47e68798703		There is no selection manager yet; `sel` and `buildOnlySelection` come later (R3 scope).
+SelectionSchematic	partOfMask	later	1b8e87c	2b41eb81aa9f7ad1		There is no selection manager yet; `sel` and `buildOnlySelection` come later (R3 scope).
+ShellSchematic	<init>	redesign	1b8e87c	a4ffe595549e5e6c		`MaskSchematic::shell`, Schematics, D46.
+ShellSchematic	partOfMask	port	1b8e87c	c0ccb74b9c12219e		Schematics, D46.
+SphereMask	<init>	redesign	1b8e87c	c9ba89f080b0199e		`SphereMask::new`, Schematics, D46.
+SphereMask	outside	port	1b8e87c	76457a5f4763a9fb		Schematics, D46.
+SphereMask	partOfMask	port	1b8e87c	4c01d913a34c68d8		Schematics, D46.
 SplicedPath	<init>	redesign	1b8e87c	55f3ac4536f20a1f		Built inside `Path::try_splice`, and checked there.
 SplicedPath	getGoal	port	1b8e87c	50a9d398a5a822ff	search-compare	
 SplicedPath	getNumNodesConsidered	port	1b8e87c	4657048dd65c49a6	search-compare	
@@ -775,6 +1044,11 @@ SplicedPath	length	port	1b8e87c	259760ce8f3aee18	search-compare
 SplicedPath	movements	port	1b8e87c	9ff71a2ec2408a25	search-compare	
 SplicedPath	positions	port	1b8e87c	b7e64f7afa055602	search-compare	
 SplicedPath	trySplice	port	1b8e87c	415a7b16c26d970d	search-compare	Either path may be None, as upstream's null.
+SpongeSchematic	<init>	redesign	1b8e87c	1ad00f914a00c72b		`sponge::parse`, Formats, D47.
+SpongeSchematic.SerializedBlockState	<init>	redesign	1b8e87c	ce43293b8f8fa434		Folded into `SerializedBlockState::from_string` and `deserialize`, Formats, D47.
+SpongeSchematic.SerializedBlockState	deserialize	port	1b8e87c	ce0c13f931a1daf2		Formats, D47.
+SpongeSchematic.SerializedBlockState	getFromString	port	1b8e87c	81516dd275c1b7b9		Formats, D47.
+SpongeSchematic.SerializedBlockState	setPropertyValue	redesign	1b8e87c	720736a1da862de3		Folded into `SerializedBlockState::from_string` and `deserialize`, Formats, D47.
 SprintJump	<init>	later	1b8e87c	55ff403ea9e9abe2		`sprintJumping` is off by default. Not ported.
 SprintJump	across	later	1b8e87c	dfe17ea0fa46c43c		`sprintJumping` is off by default. Not ported.
 SprintJump	along	later	1b8e87c	29bf30e8723f9893		`sprintJumping` is off by default. Not ported.
@@ -794,6 +1068,23 @@ SprintJump	steer	later	1b8e87c	eb5045280cfd2dfb		`sprintJumping` is off by defau
 SprintJump	stepUpAhead	later	1b8e87c	cbb2e7473e476f41		`sprintJumping` is off by default. Not ported.
 SprintJump	throttle	later	1b8e87c	4314dcbde7632256		`sprintJumping` is off by default. Not ported.
 SprintJump	works	later	1b8e87c	7db1ad0aae16ce0b		`sprintJumping` is off by default. Not ported.
+StaticMask	compute	port	1b8e87c	f8ee0a919dc8c590		Schematics, D46.
+StaticMask	intersection	port	1b8e87c	8674d99d82d35880		Schematics, D46.
+StaticMask	not	port	1b8e87c	9abde59fa4dd321c		Schematics, D46.
+StaticMask	partOfMask(int,int,int)	redesign	1b8e87c	af751061fc9919bf		The trait method `part_of_mask_static`, Schematics, D46.
+StaticMask	partOfMask(int,int,int,BlockState)	redesign	1b8e87c	336f7b3e5df83c4d		The trait method `part_of_mask_static`, Schematics, D46.
+StaticMask	union	port	1b8e87c	1e980d721b9621fe		Schematics, D46.
+StaticMask	xor	port	1b8e87c	8139094bf37f00c1		Schematics, D46.
+StaticSchematic	<init>()	redesign	1b8e87c	deb7b46c89f323e3		`StaticSchematic::new`, Schematics, D46.
+StaticSchematic	<init>(BlockState[][][])	redesign	1b8e87c	6936aa5b1067f791		`StaticSchematic::new`, Schematics, D46.
+StaticSchematic	desiredState	port	1b8e87c	b7be7b58350211b8		Schematics, D46.
+StaticSchematic	getColumn	port	1b8e87c	0625734891b48f07		Schematics, D46.
+StaticSchematic	getDirect	port	1b8e87c	56383d6a78fa816a		Schematics, D46.
+SubstituteSchematic	<init>	redesign	1b8e87c	190dabd325492a6f		`SubstituteSchematic::new`, Schematics, D46.
+SubstituteSchematic	copySingleProp	port	1b8e87c	12180e910648ef67		Schematics, D46.
+SubstituteSchematic	desiredState	port	1b8e87c	5ba936f2c3a0bb34		Schematics, D46.
+SubstituteSchematic	inSchematic	port	1b8e87c	2ebd4a14fecfb472		Schematics, D46.
+SubstituteSchematic	withBlock	port	1b8e87c	c43f1c257bc69610		Schematics, D46.
 ToolSet	<init>	redesign	1b8e87c	1e4736c522ac87ed		`get_str_vs_block` in `inventory.rs` picks what the constructor's lambda picks. The hotbar is the glue's `Inventory`, not a player.
 ToolSet	avoidanceMultiplier	port	1b8e87c	45f94a52c4da7c3e		`inventory.rs`. Block names are registry paths.
 ToolSet	calculateSpeedVsBlock	port	1b8e87c	5921a4268a0e4b5a		`inventory.rs`: the formula, with the game's numbers given (item destroy speed, efficiency, hardness, whether the tool is the right one). The glue answers `Inventory::speed_vs_state` with it. Not run against Java: the table of cases in the unit tests is worked out by hand.
@@ -804,12 +1095,21 @@ ToolSet	getMaterialCost	redesign	1b8e87c	fea5f1eb4b931a6e		`SlotInfo::material_c
 ToolSet	getStrVsBlock	port	1b8e87c	df21270199437a50		`inventory.rs`. The glue puts it in `Tables::tool_strength`. There is no cache by block: the glue keeps one.
 ToolSet	hasSilkTouch	redesign	1b8e87c	3385d7eca846d40a		`SlotInfo::silk_touch`, which the glue fills from the enchantments.
 ToolSet	potionAmplifier	port	1b8e87c	ecb35bc4bfa60ce2		`inventory.rs`: the two effect levels are arguments, the glue reads them from the player.
+VarInt	<init>	redesign	1b8e87c	01bd4f2e2d11cf9d		`read_var_int` in `sponge.rs`, Formats, D47, D52.
+VarInt	getSize	redesign	1b8e87c	87e075ae723f3c4a		Not kept: the port advances by the bytes read (U30, D52), Formats, D47.
+VarInt	getValue	port	1b8e87c	44985874ffa1ddf1		Formats, D47.
+VarInt	read(byte[])	port	1b8e87c	90661d8988eb7ec0		Formats, D47.
+VarInt	read(byte[],int)	port	1b8e87c	b12de2a92537d4fd		Formats, D47.
+VarInt	serialize	drop	1b8e87c	ade3b2ea7097e637		Only the reader is needed. The tests write the bytes themselves.
+VarInt	serialize0	drop	1b8e87c	f173f792a4d0aec9		Not needed: it only fed `getSize`, which the port replaces with the bytes read (U30, D52), Formats, D47.
 VecUtils	<init>	drop	1b8e87c	b753e0fcad03f7a0		A private constructor.
 VecUtils	calculateBlockCenter	redesign	1b8e87c	2d91124d67d60989		`block_pos_center`: the middle of the whole block, since there are no collision shapes (D25).
 VecUtils	distanceToCenter	port	1b8e87c	7a84293414eddb5d		
 VecUtils	entityDistanceToCenter	redesign	1b8e87c	a19306296a36b9eb		`distance_to_center` with the player's position.
 VecUtils	entityFlatDistanceToCenter	redesign	1b8e87c	877e6850cca4e05d		`distance_to_center` with the player's position.
 VecUtils	getBlockPosCenter	port	1b8e87c	bbf006dfca711cca		
+WallsSchematic	<init>	redesign	1b8e87c	5d9467ea37245f76		`MaskSchematic::walls`, Schematics, D46.
+WallsSchematic	partOfMask	port	1b8e87c	4b06d5855f76af3e		Schematics, D46.
 WorldData	<init>	redesign	1b8e87c	b8e9fb414476f7fd		`cache::worker::WorldData::start`: the cached world and its two threads. No waypoints (`WaypointCollection` is later).
 WorldData	getCachedWorld	drop	1b8e87c	ea5b1afd8a69d33b		`WorldData.world` is public.
 WorldData	getWaypoints	later	1b8e87c	b3be1d04cfa7f2d1		Waypoints are not ported.

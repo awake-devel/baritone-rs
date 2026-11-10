@@ -6,6 +6,7 @@
 // Java `int` arithmetic wraps, so every int step here uses `wrapping_*`; `Math.min`/`Math.max` on doubles go through `java_min`/`java_max`.
 use crate::config::Config;
 use crate::costs::*;
+use crate::pos::Pos;
 
 /// The two settings the goals read: `costHeuristic` (GoalXZ, GoalAxis) and `axisHeight` (GoalAxis).
 #[derive(Clone, Copy, Debug)]
@@ -83,10 +84,62 @@ pub enum Goal {
     /// The anonymous `GoalRunAway` subclasses of `MineProcess.updateGoal` and `GetToBlockProcess.onTick`, which override `isInGoal` to
     /// `false` and `heuristic()` to negative infinity: a goal that is never reached, only walked away from. Holds the `GoalRunAway`.
     NeverInGoal(Box<Goal>),
+    /// Upstream's `BuilderProcess.JankyGoalComposite`: in the goal when either is, but the heuristic is the primary's alone.
+    Janky {
+        primary: Box<Goal>,
+        fallback: Box<Goal>,
+    },
+    /// Upstream's `BuilderProcess.GoalBreak`: a `GoalGetToBlock` that is never satisfied from above the block.
+    Break {
+        x: i32,
+        y: i32,
+        z: i32,
+    },
+    /// Upstream's `BuilderProcess.GoalAdjacent`: next to `x y z` but not at `no`; `allow_same_level` lets the player stand a block lower.
+    Adjacent {
+        x: i32,
+        y: i32,
+        z: i32,
+        no: Pos,
+        allow_same_level: bool,
+    },
+    /// Upstream's `BuilderProcess.GoalPlace`: a `GoalBlock` on the cell above the block to place (it holds `placeAt.above()`), preferring low heights.
+    Place {
+        x: i32,
+        y: i32,
+        z: i32,
+    },
+    /// The anonymous `GoalGetToBlock` of `BuilderProcess.breakGoal`, on the cell above the block to break: never satisfied above that cell or at it.
+    BreakFromAbove {
+        x: i32,
+        y: i32,
+        z: i32,
+    },
 }
 
 /// `GoalAxis.SQRT_2_OVER_2`.
 const SQRT_2_OVER_2: f64 = SQRT_2 / 2.0;
+
+/// `GoalGetToBlock.isInGoal`: next to the block, or on it, or in the column below it (the player is two blocks tall).
+fn get_to_block_in_goal(x: i32, y: i32, z: i32, gx: i32, gy: i32, gz: i32) -> bool {
+    let x_diff = x.wrapping_sub(gx);
+    let y_diff = y.wrapping_sub(gy);
+    let z_diff = z.wrapping_sub(gz);
+    x_diff.wrapping_abs().wrapping_add((if y_diff < 0 { y_diff + 1 } else { y_diff }).wrapping_abs()).wrapping_add(z_diff.wrapping_abs()) <= 1
+}
+
+/// `GoalGetToBlock.heuristic`.
+fn get_to_block_heuristic(x: i32, y: i32, z: i32, gx: i32, gy: i32, gz: i32, s: &GoalSettings) -> f64 {
+    let x_diff = x.wrapping_sub(gx);
+    let y_diff = y.wrapping_sub(gy);
+    let z_diff = z.wrapping_sub(gz);
+    goal_block_calculate(x_diff as f64, if y_diff < 0 { y_diff + 1 } else { y_diff }, z_diff as f64, s)
+}
+
+/// `BuilderProcess.GoalPlace.<init>`: the goal holds `placeAt.above()`.
+pub fn goal_place(place_at: Pos) -> Goal {
+    Goal::Place { x: place_at.x, y: place_at.y.wrapping_add(1), z: place_at.z }
+}
 
 /// `GoalNear.<init>`: `rangeSq = range * range` in int arithmetic.
 pub fn goal_near(x: i32, y: i32, z: i32, range: i32) -> Goal {
@@ -173,6 +226,7 @@ impl Goal {
     /// `GoalInverted.isInGoal`: its arm below.
     /// `GoalNear.isInGoal`: its arm below.
     /// `MineProcess.GoalThreeBlocks.isInGoal`: its arm below.
+    /// `BuilderProcess.JankyGoalComposite.isInGoal`, `BuilderProcess.GoalBreak.isInGoal`, `BuilderProcess.GoalAdjacent.isInGoal`: their arms below.
     /// `GoalRunAway.isInGoal`: its arm below.
     /// `GoalStrictDirection.isInGoal`: its arm below.
     /// `GoalTwoBlocks.isInGoal`: its arm below.
@@ -189,12 +243,7 @@ impl Goal {
             // `GoalTwoBlocks.isInGoal`
             Goal::TwoBlocks { x: gx, y: gy, z: gz } => x == *gx && (y == *gy || y == gy.wrapping_sub(1)) && z == *gz,
             // `GoalGetToBlock.isInGoal`
-            Goal::GetToBlock { x: gx, y: gy, z: gz } => {
-                let x_diff = x.wrapping_sub(*gx);
-                let y_diff = y.wrapping_sub(*gy);
-                let z_diff = z.wrapping_sub(*gz);
-                x_diff.wrapping_abs().wrapping_add((if y_diff < 0 { y_diff + 1 } else { y_diff }).wrapping_abs()).wrapping_add(z_diff.wrapping_abs()) <= 1
-            }
+            Goal::GetToBlock { x: gx, y: gy, z: gz } => get_to_block_in_goal(x, y, z, *gx, *gy, *gz),
             // `GoalNear.isInGoal`
             Goal::Near { x: gx, y: gy, z: gz, range_sq } => {
                 let x_diff = x.wrapping_sub(*gx);
@@ -238,6 +287,41 @@ impl Goal {
             Goal::ThreeBlocks { x: gx, y: gy, z: gz } => x == *gx && (y == *gy || y == gy.wrapping_sub(1) || y == gy.wrapping_sub(2)) && z == *gz,
             // the anonymous `GoalRunAway` of the processes: `isInGoal` is overridden to false
             Goal::NeverInGoal(_) => false,
+            // `BuilderProcess.JankyGoalComposite.isInGoal`
+            Goal::Janky { primary, fallback } => primary.is_in_goal(x, y, z, s) || fallback.is_in_goal(x, y, z, s),
+            // `BuilderProcess.GoalBreak.isInGoal`: can't stand right on top of a block, that might not work (what if it's unsupported, can't break then)
+            Goal::Break { x: gx, y: gy, z: gz } => {
+                if y > *gy {
+                    return false;
+                }
+                // but any other adjacent works for breaking, including inside or below
+                get_to_block_in_goal(x, y, z, *gx, *gy, *gz)
+            }
+            // `BuilderProcess.GoalAdjacent.isInGoal`
+            Goal::Adjacent { x: gx, y: gy, z: gz, no, allow_same_level } => {
+                if x == *gx && y == *gy && z == *gz {
+                    return false;
+                }
+                if x == no.x && y == no.y && z == no.z {
+                    return false;
+                }
+                if !*allow_same_level && y == gy.wrapping_sub(1) {
+                    return false;
+                }
+                if y < gy.wrapping_sub(1) {
+                    return false;
+                }
+                get_to_block_in_goal(x, y, z, *gx, *gy, *gz)
+            }
+            // `BuilderProcess.GoalPlace` is a `GoalBlock`
+            Goal::Place { x: gx, y: gy, z: gz } => x == *gx && y == *gy && z == *gz,
+            // the anonymous `GoalGetToBlock` of `BuilderProcess.breakGoal`
+            Goal::BreakFromAbove { x: gx, y: gy, z: gz } => {
+                if y > *gy || (x == *gx && y == *gy && z == *gz) {
+                    return false;
+                }
+                get_to_block_in_goal(x, y, z, *gx, *gy, *gz)
+            }
         }
     }
 
@@ -249,6 +333,7 @@ impl Goal {
     /// `GoalInverted.heuristic(int,int,int)`: its arm below.
     /// `GoalNear.heuristic(int,int,int)`: its arm below.
     /// `MineProcess.GoalThreeBlocks.heuristic`: its arm below.
+    /// `BuilderProcess.JankyGoalComposite.heuristic`, `BuilderProcess.GoalAdjacent.heuristic`, `BuilderProcess.GoalPlace.heuristic`: their arms below.
     /// `GoalRunAway.heuristic(int,int,int)`: its arm below.
     /// `GoalStrictDirection.heuristic(int,int,int)`: its arm below.
     /// `GoalTwoBlocks.heuristic`: its arm below.
@@ -364,6 +449,19 @@ impl Goal {
             }
             // the anonymous `GoalRunAway` overrides only `heuristic()`: the one with a position is the `GoalRunAway`'s
             Goal::NeverInGoal(inner) => inner.heuristic(x, y, z, s),
+            // `BuilderProcess.JankyGoalComposite.heuristic`: the primary's
+            Goal::Janky { primary, .. } => primary.heuristic(x, y, z, s),
+            // `BuilderProcess.GoalBreak` does not override `heuristic`: `GoalGetToBlock`'s
+            Goal::Break { x: gx, y: gy, z: gz } | Goal::BreakFromAbove { x: gx, y: gy, z: gz } => get_to_block_heuristic(x, y, z, *gx, *gy, *gz, s),
+            // `BuilderProcess.GoalAdjacent.heuristic`: prioritize lower y coordinates; `this.y * 100` is `int` arithmetic
+            Goal::Adjacent { x: gx, y: gy, z: gz, .. } => f64::from(gy.wrapping_mul(100)) + get_to_block_heuristic(x, y, z, *gx, *gy, *gz, s),
+            // `BuilderProcess.GoalPlace.heuristic`: prioritize lower y coordinates, then `GoalBlock`'s
+            Goal::Place { x: gx, y: gy, z: gz } => {
+                let x_diff = x.wrapping_sub(*gx);
+                let y_diff = y.wrapping_sub(*gy);
+                let z_diff = z.wrapping_sub(*gz);
+                f64::from(gy.wrapping_mul(100)) + goal_block_calculate(x_diff as f64, y_diff, z_diff as f64, s)
+            }
         }
     }
 

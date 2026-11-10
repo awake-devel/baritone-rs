@@ -9,11 +9,11 @@
 //
 // A movement does not touch the game. It reads the player (`PlayerView`), the hotbar (`Inventory`) and the world (`Ctx`), and writes a
 // `MoveState`.
-use super::helper::{attempt_to_place_a_block, is_looking_at, move_towards_with_slight_rotation, reachable, switch_to_best_tool_for, PlaceResult};
+use super::helper::{attempt_to_place_a_block, is_looking_at, move_towards_with_slight_rotation, reachable, select_found_throwaway, select_throwaway_at, switch_to_best_tool_for, PlaceResult};
 use super::state::*;
 use crate::blocks::{Block, Direction};
 use crate::costs::COST_INF;
-use crate::inventory::{find_hotbar_slot, select_throwaway, Inventory, NoInventory};
+use crate::inventory::{find_hotbar_slot, Inventory, NoInventory, ThrowawayHint, THROWAWAY_HOTBAR};
 use crate::look::{block_pos_center, calc_rotation_from_vec3d, AimProcessor, Rotation};
 use crate::movement::diagonal::is_blocking_door;
 use crate::movement::helper::{is_bottom_slab, is_climbable, is_liquid, is_water, Bs, Ctx};
@@ -84,12 +84,14 @@ pub struct Env<'a, W: WorldView> {
     pub path_start: Pos,
     pub inv: &'a dyn Inventory,
     pub game: GameFacts,
+    /// What the builder says about the block it wants where a block is placed (`BuilderProcess.placeAt`), while it is active; none otherwise.
+    pub hint: Option<&'a dyn ThrowawayHint>,
 }
 
 impl<'a, W: WorldView> Env<'a, W> {
     /// An environment with an empty hotbar and the default facts of the game.
     pub fn new(ctx: &'a Ctx<'a, W>, p: &'a PlayerView, set: &'a ExecSettings, path_start: Pos) -> Env<'a, W> {
-        Env { ctx, p, set, path_start, inv: &NoInventory, game: GameFacts::default() }
+        Env { ctx, p, set, path_start, inv: &NoInventory, game: GameFacts::default(), hint: None }
     }
 
     pub fn get(&self, p: Pos) -> Bs<'a> {
@@ -535,6 +537,7 @@ pub fn update<W: WorldView>(mv: &Movement, rt: &mut MoveRuntime, env: &Env<'_, W
     rt.state.keys = Keys::default();
     rt.state.use_pos = None;
     rt.state.select = None;
+    rt.state.swap_in = None;
     update_state(mv, rt, env);
     let feet = env.p.feet();
     if env.is_liquid(feet) || env.p.in_water {
@@ -569,6 +572,10 @@ pub fn update<W: WorldView>(mv: &Movement, rt: &mut MoveRuntime, env: &Env<'_, W
     controls.use_pos = rt.state.use_pos;
     if rt.state.select.is_some() {
         controls.select = rt.state.select;
+    }
+    if let Some(i) = rt.state.swap_in.take() {
+        // `requestSwapWithHotBar(i, 7)`, asked inside `throwaway`, before the slot is selected
+        controls.inventory.request_swap_with_hotbar(i, THROWAWAY_HOTBAR, &env.set.tool);
     }
     rt.state.keys = Keys::default();
     // If the current status indicates a completed movement
@@ -1164,8 +1171,9 @@ fn pillar<W: WorldView>(mv: &Movement, rt: &mut MoveRuntime, env: &Env<'_, W>) {
         st.status = MoveStatus::Unreachable;
         return;
     }
-    match select_throwaway(env.inv, &env.set.tool.acceptable_throwaway_items) {
-        Some(slot) => st.select = Some(slot),
+    // `selectThrowawayForLocation(true, src.x, src.y, src.z)`
+    match select_throwaway_at(env, src) {
+        Some(found) => select_found_throwaway(st, found),
         None => {
             st.status = MoveStatus::Unreachable;
             return;

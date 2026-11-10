@@ -8,16 +8,17 @@
 // Names are matched without regard to case, as `byLowerName` does. Values are parsed and printed as `SettingsUtil` does, so a line of
 // upstream's `settings.txt` reads the same here.
 //
-// Left out on purpose (docs/deviations.md D29): the settings of the processes and the builder that do not exist here, and the ones that
-// are the game's (the chat prefix, notifications, `censorCoordinates` is kept for the goal text). `freeLook` and its four
-// companions (`look_settings`) are read by the glue through `freelook.rs`; `renderPath` and `allowInventory` are stored and printed but read by nobody
-// in the engine: the first belongs to the glue, and moving stacks between the inventory and the hotbar is not ported.
+// Left out on purpose (docs/deviations.md D29): the settings of the processes that do not exist here (the builder's are in, D49; `buildOnlySelection`
+// is not: there are no selections), and the ones that are the game's (the chat prefix, notifications, `censorCoordinates` is kept for the goal text). `freeLook` and its four
+// companions (`look_settings`) are read by the glue through `freelook.rs`; `renderPath` is stored and printed but read by nobody
+// in the engine (it belongs to the glue). `allowInventory` and its two companions are read through `tool_settings` (D53).
 use crate::config::Config;
 use crate::inventory::{Inventory, ToolSettings};
-use crate::settings::ExecSettings;
+use crate::schematic::{BlockMirror, BlockRotation};
+use crate::settings::{BuildSettings, ExecSettings};
 
 /// The value of a setting. The variants are the Java types of upstream's settings: `Boolean`, `Integer`, `Long`, `Double`, `Float`,
-/// `String`, `List<Block>` and `List<Item>`.
+/// `String`, `List<Block>`, `List<Item>`, `List<String>`, `Map<Block, List<Block>>`, `Vec3i`, `Rotation` and `Mirror`.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Value {
     Bool(bool),
@@ -30,6 +31,16 @@ pub enum Value {
     Blocks(Vec<String>),
     /// Registry names of items, with their namespace (`BuiltInRegistries.ITEM.getKey(item).toString()`).
     Items(Vec<String>),
+    /// `List<String>`.
+    Strings(Vec<String>),
+    /// `Map<Block, List<Block>>`, in the order it was written (upstream's `HashMap` prints in its own order: docs/deviations.md D49). Names as in `Blocks`.
+    BlockMap(Vec<(String, Vec<String>)>),
+    /// `Vec3i`: x, y, z.
+    Vec3i(i32, i32, i32),
+    /// `net.minecraft.world.level.block.Rotation`.
+    Rotation(BlockRotation),
+    /// `net.minecraft.world.level.block.Mirror`.
+    Mirror(BlockMirror),
 }
 
 impl Value {
@@ -44,6 +55,12 @@ impl Value {
             Value::Text(_) => "String",
             Value::Blocks(_) => "List<Block>",
             Value::Items(_) => "List<Item>",
+            Value::Strings(_) => "List<String>",
+            // `Type.getTypeName` is `java.util.Map<...Block, java.util.List<...Block>>`; the regex of `settingTypeToString` strips the packages
+            Value::BlockMap(_) => "Map<Block, List<Block>>",
+            Value::Vec3i(..) => "Vec3i",
+            Value::Rotation(_) => "Rotation",
+            Value::Mirror(_) => "Mirror",
         }
     }
 }
@@ -204,7 +221,11 @@ pub fn value_to_string(v: &Value) -> String {
         Value::Double(d) => java_double_to_string(*d),
         Value::Float(f) => java_float_to_string(*f),
         Value::Text(t) => t.clone(),
-        Value::Blocks(l) | Value::Items(l) => l.join(","),
+        Value::Blocks(l) | Value::Items(l) | Value::Strings(l) => l.join(","),
+        Value::BlockMap(m) => m.iter().map(|(k, v)| format!("{k}->{}", v.join(","))).collect::<Vec<_>>().join(","),
+        Value::Vec3i(x, y, z) => format!("{x},{y},{z}"),
+        Value::Rotation(r) => r.name().to_string(),
+        Value::Mirror(m) => m.name().to_string(),
     }
 }
 
@@ -240,7 +261,71 @@ fn parse_value(like: &Value, raw: &str, reg: &dyn Registry) -> Option<Value> {
             }
             Value::Items(out)
         }
+        Value::Strings(_) => Value::Strings(split_java(raw)),
+        Value::BlockMap(_) => {
+            // `raw.split(",(?=[^,]*->)")`, then each piece at "->" (`String.split`, so trailing empty strings go): a piece with no value is an
+            // `ArrayIndexOutOfBoundsException`, a name that is no block is a parse error, and a repeated key is `Collectors.toMap`'s `IllegalStateException`
+            let mut out: Vec<(String, Vec<String>)> = vec![];
+            for piece in split_map_pieces(raw) {
+                let parts = split_java_by(&piece, "->");
+                let (key, values) = (parts.first()?, parts.get(1)?);
+                let key = block_name(key);
+                if !reg.has_block(&key) || out.iter().any(|(k, _)| *k == key) {
+                    return None;
+                }
+                let mut list = vec![];
+                for v in split_java(values) {
+                    let n = block_name(&v);
+                    if !reg.has_block(&n) {
+                        return None;
+                    }
+                    list.push(n);
+                }
+                out.push((key, list));
+            }
+            Value::BlockMap(out)
+        }
+        Value::Vec3i(..) => {
+            // `Integer.parseInt(str.split(",")[i])` for i in 0..3, with no trimming; more parts than three are ignored
+            let parts = split_java(raw);
+            let n = |i: usize| parts.get(i).and_then(|p| parse_java_integer(p)).and_then(|v| i32::try_from(v).ok());
+            Value::Vec3i(n(0)?, n(1)?, n(2)?)
+        }
+        // `Rotation.valueOf` and `Mirror.valueOf`: the exact upper-case name
+        Value::Rotation(_) => Value::Rotation(BlockRotation::from_name(raw)?),
+        Value::Mirror(_) => Value::Mirror(BlockMirror::from_name(raw)?),
     })
+}
+
+/// `String.split(sep)` for a literal separator: trailing empty strings are dropped, and an empty text gives one empty string.
+fn split_java_by(raw: &str, sep: &str) -> Vec<String> {
+    let mut parts: Vec<String> = raw.split(sep).map(str::to_string).collect();
+    while parts.len() > 1 && parts.last().is_some_and(|p| p.is_empty()) {
+        parts.pop();
+    }
+    parts
+}
+
+/// Like `raw.split(",(?=[^,]*->)")`: a comma splits only when the text after it, up to the next comma, holds `->`.
+fn split_map_pieces(raw: &str) -> Vec<String> {
+    let mut parts: Vec<String> = vec![];
+    let mut cur = String::new();
+    let chars: Vec<char> = raw.chars().collect();
+    for (i, c) in chars.iter().enumerate() {
+        if *c == ',' {
+            let rest: String = chars[i + 1..].iter().take_while(|c| **c != ',').collect();
+            if rest.contains("->") {
+                parts.push(std::mem::take(&mut cur));
+                continue;
+            }
+        }
+        cur.push(*c);
+    }
+    parts.push(cur);
+    while parts.len() > 1 && parts.last().is_some_and(|p| p.is_empty()) {
+        parts.pop();
+    }
+    parts
 }
 
 /// Java's `String.split(",")`: trailing empty strings are dropped, and an empty text gives one empty string.
@@ -378,7 +463,42 @@ fn table() -> Vec<Setting> {
         s("avoidBreakingMultiplier", Double(0.1)),
         s("acceptableThrowawayItems", items(&["minecraft:dirt", "minecraft:cobblestone", "minecraft:netherrack", "minecraft:stone"])),
         s("allowInventory", Bool(false)),
-        // the glue's
+        s("ticksBetweenInventoryMoves", Int(1)),
+        s("inventoryMoveOnlyIfStationary", Bool(false)),
+        // the builder: `BuildSettings`
+        s("buildInLayers", Bool(false)),
+        s("layerOrder", Bool(false)),
+        s("layerHeight", Int(1)),
+        s("startAtLayer", Int(0)),
+        s("skipFailedLayers", Bool(false)),
+        s("buildRepeat", Vec3i(0, 0, 0)),
+        s("buildRepeatCount", Int(-1)),
+        s("buildRepeatSneaky", Bool(true)),
+        s("breakFromAbove", Bool(false)),
+        s("goalBreakFromAbove", Bool(false)),
+        s("mapArtMode", Bool(false)),
+        s("okIfWater", Bool(false)),
+        s("incorrectSize", Int(100)),
+        s("breakCorrectBlockPenaltyMultiplier", Double(10.0)),
+        s("placeIncorrectBlockPenaltyMultiplier", Double(2.0)),
+        s("schematicOrientationX", Bool(false)),
+        s("schematicOrientationY", Bool(false)),
+        s("schematicOrientationZ", Bool(false)),
+        s("buildSchematicRotation", Rotation(BlockRotation::None)),
+        s("buildSchematicMirror", Mirror(BlockMirror::None)),
+        s("builderTickScanRadius", Int(5)),
+        s("distanceTrim", Bool(true)),
+        s("buildIgnoreBlocks", blocks(&[])),
+        s("buildSkipBlocks", blocks(&[])),
+        s("okIfAir", blocks(&[])),
+        s("buildValidSubstitutes", BlockMap(vec![])),
+        s("buildSubstitutes", BlockMap(vec![])),
+        s("buildIgnoreExisting", Bool(false)),
+        s("buildIgnoreDirection", Bool(false)),
+        s("buildIgnoreProperties", Strings(vec![])),
+        // the glue's: the chat line and the file extension of `build` (`notificationOnBuildFinished` is a desktop notification upstream, D37.6)
+        s("notificationOnBuildFinished", Bool(true)),
+        s("schematicFallbackExtension", Text("schematic".to_string())),
         s("renderPath", Bool(true)),
         s("freeLook", Bool(true)),
         s("blockFreeLook", Bool(false)),
@@ -497,7 +617,7 @@ impl Settings {
 
     pub fn get_list(&self, name: &str) -> &[String] {
         match self.get(name) {
-            Value::Blocks(l) | Value::Items(l) => l,
+            Value::Blocks(l) | Value::Items(l) | Value::Strings(l) => l,
             v => panic!("{name} is a {}", v.type_name()),
         }
     }
@@ -650,6 +770,9 @@ impl Settings {
             blocks_to_avoid_breaking: self.get_list("blocksToAvoidBreaking").to_vec(),
             avoid_breaking_multiplier: self.get_double("avoidBreakingMultiplier"),
             acceptable_throwaway_items: self.get_list("acceptableThrowawayItems").iter().map(|n| item_path(n)).collect(),
+            allow_inventory: self.get_bool("allowInventory"),
+            ticks_between_inventory_moves: self.get_int("ticksBetweenInventoryMoves"),
+            inventory_move_only_if_stationary: self.get_bool("inventoryMoveOnlyIfStationary"),
         }
     }
 
@@ -683,6 +806,68 @@ impl Settings {
         e.mine = self.mine_settings();
         e.follow = self.follow_settings();
         e.explore = self.explore_settings();
+    }
+
+    pub fn get_text(&self, name: &str) -> &str {
+        match self.get(name) {
+            Value::Text(t) => t,
+            v => panic!("{name} is a {}", v.type_name()),
+        }
+    }
+
+    fn get_block_map(&self, name: &str) -> Vec<(String, Vec<String>)> {
+        match self.get(name) {
+            Value::BlockMap(m) => m.clone(),
+            v => panic!("{name} is a {}", v.type_name()),
+        }
+    }
+
+    /// The builder's settings, as one snapshot for a tick (`BuildSettings`).
+    pub fn build_settings(&self) -> BuildSettings {
+        let (rx, ry, rz) = match self.get("buildRepeat") {
+            Value::Vec3i(x, y, z) => (*x, *y, *z),
+            v => panic!("buildRepeat is a {}", v.type_name()),
+        };
+        let rotation = match self.get("buildSchematicRotation") {
+            Value::Rotation(r) => *r,
+            v => panic!("buildSchematicRotation is a {}", v.type_name()),
+        };
+        let mirror = match self.get("buildSchematicMirror") {
+            Value::Mirror(m) => *m,
+            v => panic!("buildSchematicMirror is a {}", v.type_name()),
+        };
+        BuildSettings {
+            build_in_layers: self.get_bool("buildInLayers"),
+            layer_order: self.get_bool("layerOrder"),
+            layer_height: self.get_int("layerHeight"),
+            start_at_layer: self.get_int("startAtLayer"),
+            skip_failed_layers: self.get_bool("skipFailedLayers"),
+            build_repeat: (rx, ry, rz),
+            build_repeat_count: self.get_int("buildRepeatCount"),
+            build_repeat_sneaky: self.get_bool("buildRepeatSneaky"),
+            break_from_above: self.get_bool("breakFromAbove"),
+            goal_break_from_above: self.get_bool("goalBreakFromAbove"),
+            map_art_mode: self.get_bool("mapArtMode"),
+            ok_if_water: self.get_bool("okIfWater"),
+            incorrect_size: self.get_int("incorrectSize"),
+            break_correct_block_penalty_multiplier: self.get_double("breakCorrectBlockPenaltyMultiplier"),
+            place_incorrect_block_penalty_multiplier: self.get_double("placeIncorrectBlockPenaltyMultiplier"),
+            schematic_orientation_x: self.get_bool("schematicOrientationX"),
+            schematic_orientation_y: self.get_bool("schematicOrientationY"),
+            schematic_orientation_z: self.get_bool("schematicOrientationZ"),
+            build_schematic_rotation: rotation,
+            build_schematic_mirror: mirror,
+            builder_tick_scan_radius: self.get_int("builderTickScanRadius"),
+            distance_trim: self.get_bool("distanceTrim"),
+            build_ignore_blocks: self.get_list("buildIgnoreBlocks").to_vec(),
+            build_skip_blocks: self.get_list("buildSkipBlocks").to_vec(),
+            ok_if_air: self.get_list("okIfAir").to_vec(),
+            build_valid_substitutes: self.get_block_map("buildValidSubstitutes"),
+            build_substitutes: self.get_block_map("buildSubstitutes"),
+            build_ignore_existing: self.get_bool("buildIgnoreExisting"),
+            build_ignore_direction: self.get_bool("buildIgnoreDirection"),
+            build_ignore_properties: self.get_list("buildIgnoreProperties").to_vec(),
+        }
     }
 
     /// The settings of the explore process.
@@ -731,7 +916,7 @@ impl Settings {
     /// the `Config` of the tables, before the tables are used.
     pub fn apply_inventory(&self, c: &mut Config, inv: &dyn Inventory, nether: bool) {
         let ts = self.tool_settings();
-        c.has_throwaway = self.get_bool("allowPlace") && crate::inventory::has_generic_throwaway(inv, &ts.acceptable_throwaway_items);
+        c.has_throwaway = self.get_bool("allowPlace") && crate::inventory::has_generic_throwaway(inv, &ts.acceptable_throwaway_items, ts.allow_inventory);
         c.has_water_bucket = self.get_bool("allowWaterBucketFall") && crate::inventory::find_hotbar_slot(inv, "water_bucket").is_some() && !nether;
     }
 
@@ -1040,6 +1225,32 @@ mod tests {
         assert!(s.parse_and_apply("blocksToAvoid", "", &reg).is_err());
     }
 
+    /// `allowInventory`, `ticksBetweenInventoryMoves` and `inventoryMoveOnlyIfStationary`: upstream's names and defaults, and `ToolSettings` reads them.
+    #[test]
+    fn the_inventory_move_settings_have_upstreams_defaults_and_reach_the_tool_settings() {
+        let mut s = Settings::new();
+        let ts = s.tool_settings();
+        assert!(!ts.allow_inventory);
+        assert_eq!(ts.ticks_between_inventory_moves, 1);
+        assert!(!ts.inventory_move_only_if_stationary);
+        assert_eq!(run(&mut s, "allowinventory").lines, ["Value of setting allowInventory:", "false"]);
+        assert_eq!(run(&mut s, "allowInventory true").lines, ["Successfully set allowInventory to true", "Old value: false"]);
+        assert_eq!(run(&mut s, "ticksBetweenInventoryMoves 4").lines, ["Successfully set ticksBetweenInventoryMoves to 4", "Old value: 1"]);
+        assert_eq!(run(&mut s, "inventoryMoveOnlyIfStationary true").lines, ["Successfully set inventoryMoveOnlyIfStationary to true", "Old value: false"]);
+        let ts = s.tool_settings();
+        assert!(ts.allow_inventory && ts.inventory_move_only_if_stationary);
+        assert_eq!(ts.ticks_between_inventory_moves, 4);
+        // `CalculationContext.<init>`: `hasThrowaway` sees the main inventory only with the setting
+        let mut inv = crate::inventory::testing::TestInventory::empty();
+        inv.put_main(15, crate::inventory::SlotInfo::of("dirt", 3), &[]);
+        let mut c = crate::testing::test_config();
+        s.apply_inventory(&mut c, &inv, false);
+        assert!(c.has_throwaway, "allowPlace is on by default, and allowInventory now");
+        run(&mut s, "allowInventory false");
+        s.apply_inventory(&mut c, &inv, false);
+        assert!(!c.has_throwaway);
+    }
+
     #[test]
     fn set_shows_sets_toggles_and_resets_like_upstream() {
         let mut s = Settings::new();
@@ -1161,5 +1372,164 @@ mod tests {
         assert_eq!(s.complete(&["reset"], ""), ["all", "costHeuristic"]);
         assert!(s.complete(&["nonsense"], "").is_empty());
         assert!(s.complete(&["allowBreak", "x"], "").is_empty());
+    }
+
+    // ------------------------------------------------------------ the builder's settings (D49)
+
+    struct Known(&'static [&'static str]);
+    impl Registry for Known {
+        fn has_block(&self, path: &str) -> bool {
+            self.0.contains(&path)
+        }
+        fn has_item(&self, _name: &str) -> bool {
+            true
+        }
+    }
+    const BLOCKS: Known = Known(&["stone", "cobblestone", "dirt", "oak_planks", "glass", "mod:thing"]);
+
+    #[test]
+    fn the_builder_settings_have_upstreams_names_types_and_defaults() {
+        let s = Settings::new();
+        for (name, ty, v) in [
+            ("buildInLayers", "Boolean", "false"),
+            ("layerOrder", "Boolean", "false"),
+            ("layerHeight", "Integer", "1"),
+            ("startAtLayer", "Integer", "0"),
+            ("skipFailedLayers", "Boolean", "false"),
+            ("buildRepeat", "Vec3i", "0,0,0"),
+            ("buildRepeatCount", "Integer", "-1"),
+            ("buildRepeatSneaky", "Boolean", "true"),
+            ("breakFromAbove", "Boolean", "false"),
+            ("goalBreakFromAbove", "Boolean", "false"),
+            ("mapArtMode", "Boolean", "false"),
+            ("okIfWater", "Boolean", "false"),
+            ("incorrectSize", "Integer", "100"),
+            ("breakCorrectBlockPenaltyMultiplier", "Double", "10.0"),
+            ("placeIncorrectBlockPenaltyMultiplier", "Double", "2.0"),
+            ("schematicOrientationX", "Boolean", "false"),
+            ("schematicOrientationY", "Boolean", "false"),
+            ("schematicOrientationZ", "Boolean", "false"),
+            ("buildSchematicRotation", "Rotation", "NONE"),
+            ("buildSchematicMirror", "Mirror", "NONE"),
+            ("builderTickScanRadius", "Integer", "5"),
+            ("distanceTrim", "Boolean", "true"),
+            ("buildIgnoreBlocks", "List<Block>", ""),
+            ("buildSkipBlocks", "List<Block>", ""),
+            ("okIfAir", "List<Block>", ""),
+            ("buildValidSubstitutes", "Map<Block, List<Block>>", ""),
+            ("buildSubstitutes", "Map<Block, List<Block>>", ""),
+            ("buildIgnoreExisting", "Boolean", "false"),
+            ("buildIgnoreDirection", "Boolean", "false"),
+            ("buildIgnoreProperties", "List<String>", ""),
+            ("notificationOnBuildFinished", "Boolean", "true"),
+            ("schematicFallbackExtension", "String", "schematic"),
+        ] {
+            let st = s.find(name).unwrap_or_else(|| panic!("{name}"));
+            assert_eq!(st.value.type_name(), ty, "{name}");
+            assert_eq!(value_to_string(&st.value), v, "{name}");
+        }
+        assert_eq!(s.build_settings(), BuildSettings::default());
+        assert!(s.modified().is_empty());
+    }
+
+    #[test]
+    fn the_builder_settings_round_trip_through_text_and_the_settings_file() {
+        let mut s = Settings::new();
+        for (name, text) in [
+            ("buildRepeat", "6,0,-2"),
+            ("buildSchematicRotation", "CLOCKWISE_90"),
+            ("buildSchematicMirror", "FRONT_BACK"),
+            ("buildSubstitutes", "stone->cobblestone,dirt,oak_planks->glass"),
+            ("buildValidSubstitutes", "stone->dirt"),
+            ("buildIgnoreProperties", "waterlogged,facing"),
+            ("buildSkipBlocks", "stone,mod:thing"),
+            ("schematicFallbackExtension", "schem"),
+            ("buildInLayers", "true"),
+            ("layerHeight", "2"),
+            ("breakCorrectBlockPenaltyMultiplier", "7.5"),
+        ] {
+            s.parse_and_apply(name, text, &BLOCKS).unwrap_or_else(|e| panic!("{name}: {e}"));
+            assert_eq!(value_to_string(s.get(name)), text, "{name}");
+        }
+        let bs = s.build_settings();
+        assert_eq!(bs.build_repeat, (6, 0, -2));
+        assert_eq!(bs.build_schematic_rotation, BlockRotation::Clockwise90);
+        assert_eq!(bs.build_schematic_mirror, BlockMirror::FrontBack);
+        assert_eq!(bs.build_substitutes, vec![("stone".to_string(), vec!["cobblestone".to_string(), "dirt".to_string()]), ("oak_planks".to_string(), vec!["glass".to_string()])]);
+        assert_eq!(bs.build_ignore_properties, vec!["waterlogged".to_string(), "facing".to_string()]);
+        assert_eq!(bs.build_skip_blocks, vec!["stone".to_string(), "mod:thing".to_string()]);
+        assert!(bs.build_in_layers);
+        assert_eq!(bs.layer_height, 2);
+        // the file the glue saves reads back to the same values
+        let text = s.to_file_text();
+        let mut t = Settings::new();
+        assert!(t.apply_file_text(&text, &BLOCKS).is_empty());
+        assert_eq!(t, s);
+        assert_eq!(t.build_settings(), bs);
+    }
+
+    #[test]
+    fn a_namespaced_minecraft_block_in_a_map_is_stored_by_its_path() {
+        let mut s = Settings::new();
+        s.parse_and_apply("buildSubstitutes", "minecraft:stone->minecraft:dirt,cobblestone", &BLOCKS).unwrap();
+        assert_eq!(value_to_string(s.get("buildSubstitutes")), "stone->dirt,cobblestone");
+    }
+
+    #[test]
+    fn bad_builder_values_are_refused() {
+        let mut s = Settings::new();
+        for (name, text) in [
+            ("buildSubstitutes", "stone->nosuchblock"),
+            ("buildSubstitutes", "nosuchblock->stone"),
+            ("buildSubstitutes", "stone->dirt,stone->glass"), // a repeated key: Collectors.toMap throws
+            ("buildSubstitutes", "stone"),                    // no "->": ArrayIndexOutOfBounds
+            ("buildSubstitutes", "stone->"),                  // no value after the arrow
+            ("buildSkipBlocks", "stone,nosuchblock"),
+            ("buildRepeat", "1,2"),
+            ("buildRepeat", "1,2,x"),
+            ("buildRepeat", "1, 2, 3"), // parseInt does not trim
+            ("buildRepeat", "1,2,99999999999"),
+            ("buildSchematicRotation", "clockwise_90"),
+            ("buildSchematicRotation", "CLOCKWISE_45"),
+            ("buildSchematicMirror", "left_right"),
+            ("buildSchematicMirror", "UP_DOWN"),
+            ("layerHeight", "two"),
+        ] {
+            assert!(s.parse_and_apply(name, text, &BLOCKS).is_err(), "{name} {text}");
+        }
+        assert!(s.modified().is_empty());
+        // through the command: a clear error, the value unchanged
+        let out = s.run_set(&["buildSchematicRotation", "clockwise_90"], &BLOCKS);
+        assert!(out.error.is_some_and(|e| e.starts_with("Expected a valid value")));
+        // extra parts of a Vec3i are ignored, as `split(",")[i]` does
+        s.parse_and_apply("buildRepeat", "1,2,3,4", &BLOCKS).unwrap();
+        assert_eq!(value_to_string(s.get("buildRepeat")), "1,2,3");
+    }
+
+    #[test]
+    fn map_pieces_split_where_java_splits() {
+        assert_eq!(split_map_pieces("a->b,c->d"), vec!["a->b", "c->d"]);
+        assert_eq!(split_map_pieces("a->b,c,d->e"), vec!["a->b,c", "d->e"]);
+        assert_eq!(split_map_pieces("a->b,"), vec!["a->b,"]);
+        assert_eq!(split_map_pieces(""), vec![""]);
+        assert_eq!(split_map_pieces("a,b->c"), vec!["a", "b->c"]);
+    }
+
+    #[test]
+    fn set_prints_the_new_types_and_toggles_nothing_else() {
+        let mut s = Settings::new();
+        let out = run(&mut s, "buildRepeat");
+        assert_eq!(out.lines, vec!["Value of setting buildRepeat:".to_string(), "0,0,0".to_string()]);
+        let out = s.run_set(&["buildRepeat", "6,0,0"], &BLOCKS);
+        assert!(out.error.is_none());
+        assert!(out.lines.contains(&"Successfully set buildRepeat to 6,0,0".to_string()));
+        assert!(out.lines.contains(&"Old value: 0,0,0".to_string()));
+        let out = s.run_set(&["toggle", "buildRepeat"], &BLOCKS);
+        assert_eq!(out.error.as_deref(), Some("Expected a toggleable setting, but got some other setting instead"));
+        let out = run(&mut s, "list buildschematic");
+        assert!(out.lines.iter().any(|l| l == "buildSchematicMirror (Mirror)"));
+        assert!(out.lines.iter().any(|l| l == "buildSchematicRotation (Rotation)"));
+        let out = run(&mut s, "list buildsub");
+        assert!(out.lines.iter().any(|l| l == "buildSubstitutes (Map<Block, List<Block>>)"));
     }
 }

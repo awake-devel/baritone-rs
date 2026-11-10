@@ -1,11 +1,13 @@
 // Ported from cabaletta/baritone at 1b8e87c: src/main/java/baritone/behavior/PathingBehavior.java (onTick, tickPath, pathStart,
 // secretInternalSetGoalAndPath, the cancel methods, findPathInNewThread, and what the thread does with its result) and
 // src/main/java/baritone/utils/PathingControlManager.java (preTick, postTick, executeProcesses, forceRevalidate, revalidateGoal, for
-// the three processes that exist), src/main/java/baritone/utils/InputOverrideHandler.java (inControl). LGPL-3.0-or-later, see lib.rs.
+// the processes that exist), src/main/java/baritone/utils/InputOverrideHandler.java (inControl), src/main/java/baritone/utils/PathingCommandContext.java
+// and `PathingBehavior.context` (as `ProcessContext`). LGPL-3.0-or-later, see lib.rs.
 //
 // A pure state machine, driven once per game tick by `Pathing::tick`. Searches run behind the `SearchRunner` trait: this file starts them
 // and takes their results, and never waits for one. Each search has a generation number. A result whose generation is not the one in
 // progress is dropped, and a search that was cancelled never installs a path.
+use super::build::{BuildEnv, BuilderProcess};
 use super::custom_goal::{CustomGoalProcess, PathingCommand, PathingCommandType};
 use super::explore::{ExploreProcess, JsonChunkFilter};
 use super::follow::{FollowEnv, FollowFilter, FollowProcess};
@@ -19,13 +21,14 @@ use crate::exec::movements::{Env, GameFacts};
 use crate::exec::state::{CancelReason, Controls, Intent, PlayerView};
 use crate::exec::{PathExecutor, Progress};
 use crate::goals::{Goal, GoalSettings};
-use crate::inventory::Inventory;
+use crate::inventory::{Inventory, ThrowawayHint};
 use crate::look::AimProcessor;
-use crate::movement::helper::{Border, Ctx, Precomputed};
+use crate::movement::helper::{Border, CostOverlay, Ctx, Precomputed};
 use crate::plan;
 use crate::pos::Pos;
+use crate::schematic::{BlockStates, Schematic, StaticSchematicView};
 use crate::search::{PathCalculationResult, ResultType, SearchLimits};
-use crate::settings::ExecSettings;
+use crate::settings::{BuildSettings, ExecSettings};
 use crate::world::WorldView;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
@@ -69,6 +72,22 @@ pub struct SearchJob {
     pub failure_timeout_ms: i64,
     /// A node cap in addition to the time limits; none by default.
     pub max_nodes: Option<u32>,
+    /// The context of the process that asked (`PathingBehavior.context`, upstream's `CalculationContext` argument), or none for the plain one.
+    pub context: Option<Arc<ProcessContext>>,
+}
+
+/// Like `PathingCommandContext.desiredCalcContext`: the context a process wants its searches and its executor's cost checks made with. A settings snapshot
+/// of its own (`jumpPenalty` and the backtrack coefficient are changed) and the overlay over the two costs (`BuilderCalculationContext`).
+pub struct ProcessContext {
+    pub cfg: Config,
+    pub costs: Arc<dyn CostOverlay>,
+}
+
+impl ProcessContext {
+    /// A context over a world with this process context's settings and overlay.
+    pub fn ctx<'a, W: WorldView>(&'a self, tables: &'a Tables, world: &'a W, border: Border) -> Ctx<'a, W> {
+        Ctx::new(world, &tables.states, &tables.pre, &self.cfg, border, &tables.tool_strength).with_costs(&*self.costs)
+    }
 }
 
 /// What a search answers.
@@ -80,7 +99,10 @@ pub struct SearchOutcome {
 
 /// `findPathInNewThread`'s body: runs one search over a snapshot. Used by the worker, and by test runners that search at once.
 pub fn run_search<S: WorldView>(job: &SearchJob, snapshot: &S, cancel: &AtomicBool, clock: &mut dyn FnMut() -> i64) -> SearchOutcome {
-    let ctx = job.tables.ctx(snapshot, job.border);
+    let ctx = match &job.context {
+        Some(pc) => pc.ctx(&job.tables, snapshot, job.border),
+        None => job.tables.ctx(snapshot, job.border),
+    };
     let mut finder = plan::create_pathfinder(job.start, &job.goal, job.previous.as_ref(), &ctx, job.feet, &[]);
     let limits = SearchLimits { max_nodes: job.max_nodes, cancel: Some(cancel) };
     let result = finder.calculate(job.primary_timeout_ms, job.failure_timeout_ms, &limits, clock);
@@ -126,6 +148,8 @@ pub struct TickEnv<'a, W: WorldView> {
     pub inv: &'a dyn Inventory,
     /// Reach, dimension and the aim processor.
     pub game: GameFacts,
+    /// What the builder asks of the game and of the block table, and its settings.
+    pub build: BuildEnv<'a>,
 }
 
 /// What `Pathing::tick` answers.
@@ -133,6 +157,8 @@ pub struct TickEnv<'a, W: WorldView> {
 pub struct TickOutput {
     pub intent: Intent,
     pub events: Vec<PathEvent>,
+    /// The window clicks `InventoryBehavior` made this tick (`allowInventory`), oldest first: the glue carries them out before it selects the slot of the intent.
+    pub swaps: Vec<crate::inventory::SwapRequest>,
 }
 
 /// A search that is running: upstream's `inProgress`, as far as the game thread sees it.
@@ -186,6 +212,9 @@ pub fn path_start<W: WorldView>(ctx: &Ctx<'_, W>, p: &PlayerView) -> Pos {
 struct Tk<'a, 'c, W: WorldView, S> {
     env: &'a TickEnv<'a, W>,
     ctx: &'c Ctx<'c, W>,
+    /// The context the path executor checks costs with: the process context of the last command that set a goal, or the plain one
+    /// (`PathingBehavior.secretInternalGetCalculationContext`).
+    ectx: &'c Ctx<'c, W>,
     snapshot: &'a mut dyn FnMut() -> S,
 }
 
@@ -198,11 +227,15 @@ enum ProcId {
     GetToBlock,
     Follow,
     Explore,
+    Build,
+    /// `InventoryPauserProcess`: priority 5.1, temporary, and active whenever there is a player. It is asked first each tick and answers `DEFER`, except for
+    /// the ticks after an inventory move asked the path to pause (`inventoryMoveOnlyIfStationary`). Not in `PROCESSES`.
+    InventoryPauser,
 }
 
-const PROCESSES: [ProcId; 5] = [ProcId::CustomGoal, ProcId::Mine, ProcId::GetToBlock, ProcId::Follow, ProcId::Explore];
+const PROCESSES: [ProcId; 6] = [ProcId::CustomGoal, ProcId::Mine, ProcId::GetToBlock, ProcId::Follow, ProcId::Explore, ProcId::Build];
 
-/// `PathingBehavior` with `PathingControlManager` and the processes it drives: `CustomGoalProcess`, `MineProcess`, `GetToBlockProcess`, `FollowProcess`, `ExploreProcess`.
+/// `PathingBehavior` with `PathingControlManager` and the processes it drives: `CustomGoalProcess`, `MineProcess`, `GetToBlockProcess`, `FollowProcess`, `ExploreProcess`, `BuilderProcess`.
 pub struct Pathing<R: SearchRunner<S>, S> {
     runner: R,
     process: CustomGoalProcess,
@@ -210,6 +243,9 @@ pub struct Pathing<R: SearchRunner<S>, S> {
     get_to_block: GetToBlockProcess,
     follow: FollowProcess,
     explore: ExploreProcess,
+    builder: BuilderProcess,
+    /// Like `PathingBehavior.context`: what the last command that set a goal asked searches to be made with; none is the plain context.
+    context: Option<Arc<ProcessContext>>,
     /// The player's position and the follow settings of the tick in progress (or the last): `FollowProcess.isActive` reads them outside a tick.
     player_position: [f64; 3],
     follow_settings: crate::settings::FollowSettings,
@@ -244,6 +280,8 @@ pub struct Pathing<R: SearchRunner<S>, S> {
     inputs: ProcessInputs,
     /// What the processes said, for the chat.
     messages: Vec<String>,
+    /// `containerMenu != inventoryMenu`, as of this tick: `InventoryBehavior.onTick` does nothing then. Set by the glue each tick (`set_container_open`).
+    container_open: bool,
 
     /// A node cap for every search; none by default.
     pub max_nodes: Option<u32>,
@@ -263,6 +301,8 @@ impl<R: SearchRunner<S>, S> Pathing<R, S> {
             get_to_block: GetToBlockProcess::new(),
             follow: FollowProcess::new(),
             explore: ExploreProcess::new(),
+            builder: BuilderProcess::new(),
+            context: None,
             player_position: [0.0; 3],
             follow_settings: crate::settings::FollowSettings::default(),
             aim: AimProcessor::new(0.5),
@@ -290,6 +330,7 @@ impl<R: SearchRunner<S>, S> Pathing<R, S> {
             command: None,
             inputs: ProcessInputs::default(),
             messages: vec![],
+            container_open: false,
             max_nodes: None,
             last_cancel: None,
             search_failed: false,
@@ -385,9 +426,53 @@ impl<R: SearchRunner<S>, S> Pathing<R, S> {
         self.get_to_block.get_to_block(block, feet);
     }
 
+    /// `IBuilderProcess.build(String,ISchematic,Vec3i)`: from now the builder wants control, building this schematic with its origin at `origin`.
+    pub fn build(&mut self, name: String, schematic: Arc<dyn Schematic>, origin: Pos, bs: &BuildSettings, states: &Arc<BlockStates>) {
+        self.last_cancel = None;
+        self.builder.build(name, schematic, origin, bs, states);
+    }
+
+    /// `IBuilderProcess.build(String,File,Vec3i)` after the file is parsed: the map art step, then `build`. `Err` is the exception the map art schematic throws.
+    pub fn build_parsed(&mut self, name: String, parsed: Arc<dyn StaticSchematicView>, origin: Pos, bs: &BuildSettings, states: &Arc<BlockStates>) -> Result<(), String> {
+        self.last_cancel = None;
+        self.builder.build_parsed(name, parsed, origin, bs, states)
+    }
+
+    /// `IBuilderProcess.clearArea`.
+    pub fn clear_area(&mut self, corner1: Pos, corner2: Pos, bs: &BuildSettings, states: &Arc<BlockStates>) {
+        self.last_cancel = None;
+        self.builder.clear_area(corner1, corner2, bs, states);
+    }
+
+    /// The builder half of `resume`: true when the builder was paused (and is resumed now).
+    pub fn resume_build(&mut self) -> bool {
+        if self.builder.is_paused() {
+            self.builder.resume();
+            true
+        } else {
+            false
+        }
+    }
+
+    /// The builder, for the HUD and the tests.
+    pub fn builder_process(&self) -> &BuilderProcess {
+        &self.builder
+    }
+
+    /// Whether "Done building" happened since the last call (for `notificationOnBuildFinished`).
+    pub fn take_build_finished(&mut self) -> bool {
+        self.builder.take_finished()
+    }
+
     /// What the processes read of the game besides the world and the player. The glue gives it before each tick.
     pub fn set_inputs(&mut self, inputs: ProcessInputs) {
         self.inputs = inputs;
+    }
+
+    /// Whether a container is open (`containerMenu != inventoryMenu`), for `InventoryBehavior.onTick`. The glue gives it before each tick, whether or not a process
+    /// is active, since the behavior ticks on its own.
+    pub fn set_container_open(&mut self, open: bool) {
+        self.container_open = open;
     }
 
     /// The chat lines the processes have said since the last call (`logDirect`). Takes them.
@@ -396,7 +481,13 @@ impl<R: SearchRunner<S>, S> Pathing<R, S> {
         out.extend(self.mine.take_messages());
         out.extend(self.get_to_block.take_messages());
         out.extend(self.explore.take_messages());
+        out.extend(self.builder.take_messages());
         out
+    }
+
+    /// The lines upstream prints to the console and not to chat (see `BuilderProcess::take_console_lines`). Takes them.
+    pub fn take_console_lines(&mut self) -> Vec<String> {
+        self.builder.take_console_lines()
     }
 
     /// The scans the mine and get-to-block processes want run. Run each with [`ScanJob::run`] over a snapshot of the world, on any thread, and hand the answers
@@ -459,6 +550,13 @@ impl<R: SearchRunner<S>, S> Pathing<R, S> {
         self.cancel_everything();
         self.segment_cancel();
         self.in_progress = None;
+        // nothing is left that reads it, and it keeps the whole parsed schematic alive (D50)
+        self.context = None;
+    }
+
+    /// Whether the last builder command's calculation context (and so its schematic) is still held. For the tests.
+    pub fn holds_builder_context(&self) -> bool {
+        self.context.is_some()
     }
 
     // ------------------------------------------------------------ what the glue reads
@@ -489,9 +587,9 @@ impl<R: SearchRunner<S>, S> Pathing<R, S> {
         self.in_progress.is_some()
     }
 
-    /// Whether a process wants control: the goal process holds a goal (`goto`, `goal`), or `mine` or `goto <block>` runs.
+    /// Whether a process wants control: the goal process holds a goal (`goto`, `goal`), or `mine`, `goto <block>`, `follow`, `explore` or `build` runs.
     pub fn is_active(&self) -> bool {
-        self.process.is_active() || self.mine.is_active() || self.get_to_block.is_active() || self.follow.is_active(&self.follow_env()) || self.explore.is_active()
+        self.process.is_active() || self.mine.is_active() || self.get_to_block.is_active() || self.follow.is_active(&self.follow_env()) || self.explore.is_active() || self.builder.is_active()
     }
 
     /// `PathingBehavior.getCurrent`:
@@ -573,7 +671,12 @@ impl<R: SearchRunner<S>, S> Pathing<R, S> {
     /// player has moved, with the player as it is now. Returns the intent for the next movement of the player.
     pub fn tick<W: WorldView>(&mut self, env: &TickEnv<'_, W>, snapshot: &mut dyn FnMut() -> S) -> TickOutput {
         let ctx = env.tables.ctx(env.world, env.border);
-        let mut tk = Tk { env, ctx: &ctx, snapshot };
+        let process_context = self.context.clone();
+        let ectx = match &process_context {
+            Some(pc) => pc.ctx(env.tables, env.world, env.border),
+            None => env.tables.ctx(env.world, env.border),
+        };
+        let mut tk = Tk { env, ctx: &ctx, ectx: &ectx, snapshot };
         self.player_position = [env.player.x, env.player.y, env.player.z];
         self.follow_settings = env.exec.follow.clone();
         // results that came in since the last tick: upstream's thread installs them under `pathPlanLock`, between ticks
@@ -587,8 +690,18 @@ impl<R: SearchRunner<S>, S> Pathing<R, S> {
         self.ticks_elapsed_so_far = self.ticks_elapsed_so_far.wrapping_add(1);
         self.dispatch_events();
         self.post_tick(&mut tk);
+        // `InventoryBehavior.onTick`: a behavior registered after `PathingBehavior`, so it ticks after the path did
+        self.controls.inventory.seed(self.inputs.now_ms as u64);
+        let stone = env.build.states.default_state("stone");
+        let is_pathing = self.is_pathing();
+        self.controls.inventory.on_tick(env.inv, &env.exec.tool, self.container_open, is_pathing, stone);
+        // With no path to follow, no search out and the builder not in control, the context is only a hold on the schematic of a build that is
+        // over or stopped. Upstream keeps it until the next goal replaces it; the next goal sets it again before any search reads it (D50).
+        if self.context.is_some() && self.current.is_none() && self.in_progress.is_none() && self.in_control_this_tick != Some(ProcId::Build) {
+            self.context = None;
+        }
         let intent = self.build_intent(env.player, env.exec.mouse_sensitivity, env.inv.selected());
-        TickOutput { intent, events: std::mem::take(&mut self.out_events) }
+        TickOutput { intent, events: std::mem::take(&mut self.out_events), swaps: self.controls.inventory.take_requests() }
     }
 
     /// `PathingBehavior.queuePathEvent`:
@@ -668,6 +781,8 @@ impl<R: SearchRunner<S>, S> Pathing<R, S> {
             ProcId::GetToBlock => self.get_to_block.on_lost_control(&mut self.controls),
             ProcId::Follow => self.follow.on_lost_control(),
             ProcId::Explore => self.explore.on_lost_control(),
+            ProcId::Build => self.builder.on_lost_control(),
+            ProcId::InventoryPauser => {}
         }
     }
 
@@ -679,32 +794,42 @@ impl<R: SearchRunner<S>, S> Pathing<R, S> {
             ProcId::GetToBlock => self.get_to_block.is_active(),
             ProcId::Follow => self.follow.is_active(&self.follow_env()),
             ProcId::Explore => self.explore.is_active(),
+            ProcId::Build => self.builder.is_active(),
+            ProcId::InventoryPauser => true,
         }
     }
 
     /// `IBaritoneProcess.onTick` of one process. `None` is upstream's `null`.
     fn tick_process<W: WorldView>(&mut self, id: ProcId, calc_failed: bool, tk: &Tk<'_, '_, W, S>) -> Option<PathingCommand> {
         let safe = self.is_safe_to_cancel();
-        let env = Env { ctx: tk.ctx, p: tk.env.player, set: tk.env.exec, path_start: self.expected_segment_start, inv: tk.env.inv, game: tk.env.game };
+        let env = Env { ctx: tk.ctx, p: tk.env.player, set: tk.env.exec, path_start: self.expected_segment_start, inv: tk.env.inv, game: tk.env.game, hint: None };
         match id {
             ProcId::CustomGoal => Some(self.process.on_tick(calc_failed, tk.env.player.feet(), self.expected_segment_start, &tk.ctx.cfg.goal_settings())),
             ProcId::Mine => self.mine.on_tick(calc_failed, safe, &env, &self.inputs, &mut self.controls),
             ProcId::GetToBlock => Some(self.get_to_block.on_tick(calc_failed, safe, &env, &self.inputs, &mut self.controls)),
             ProcId::Follow => Some(self.follow.on_tick(&self.follow_env())),
             ProcId::Explore => self.explore.on_tick(calc_failed, tk.ctx.world, &tk.env.exec.explore),
+            ProcId::Build => self.builder.on_tick(calc_failed, safe, &env, &tk.env.build, &mut self.controls),
+            ProcId::InventoryPauser => {
+                // `InventoryPauserProcess.onTick`; `stationaryNow` is `getDeltaMovement().multiply(1, 0, 1).length() < 0.00001`
+                let (vx, vz) = (tk.env.player.vx, tk.env.player.vz);
+                let stationary_now = (vx * vx + vz * vz).sqrt() < 0.00001;
+                let pause = self.controls.inventory.pauser_on_tick(safe, stationary_now);
+                Some(PathingCommand { goal: None, kind: if pause { PathingCommandType::RequestPause } else { PathingCommandType::Defer } })
+            }
         }
     }
 
     /// The first scan of `mine` and of `getToBlock`, which upstream runs inside the call that starts them, on the game thread. Here it is queued as a job like
     /// the others (the game thread never scans) and the process pauses until the answer comes (docs/deviations.md D39).
     fn run_initial_scans<W: WorldView>(&mut self, tk: &Tk<'_, '_, W, S>) {
-        let env = Env { ctx: tk.ctx, p: tk.env.player, set: tk.env.exec, path_start: self.expected_segment_start, inv: tk.env.inv, game: tk.env.game };
+        let env = Env { ctx: tk.ctx, p: tk.env.player, set: tk.env.exec, path_start: self.expected_segment_start, inv: tk.env.inv, game: tk.env.game, hint: None };
         self.mine.queue_initial_scan(&env, &self.inputs);
         self.get_to_block.queue_initial_scan(&env);
     }
 
     /// `PathingControlManager.executeProcesses`: the active processes, the newest first (then by priority, which is 0 for all), are asked in turn; the first to
-    /// answer anything but `Defer` is in control, and every process behind it loses control (none is temporary).
+    /// answer anything but `Defer` is in control, and every process behind it loses control (unless it is the inventory pauser, which is temporary).
     fn execute_processes<W: WorldView>(&mut self, tk: &Tk<'_, '_, W, S>) -> Option<PathingCommand> {
         for id in PROCESSES {
             if self.proc_active(id) {
@@ -716,8 +841,9 @@ impl<R: SearchRunner<S>, S> Pathing<R, S> {
                 self.active.retain(|a| *a != id);
             }
         }
-        // ties are broken by which was added to the beginning of the list first: the priorities are all equal, so the order stays
-        let order = self.active.clone();
+        // ties are broken by which was added to the beginning of the list first: the priorities are all equal, so the order stays. The pauser's is higher.
+        let mut order = vec![ProcId::InventoryPauser];
+        order.extend(self.active.iter().copied());
         for (n, id) in order.iter().copied().enumerate() {
             let calc_failed = self.in_control_last_tick == Some(id) && self.calc_failed_last_tick;
             match self.tick_process(id, calc_failed, tk) {
@@ -730,8 +856,11 @@ impl<R: SearchRunner<S>, S> Pathing<R, S> {
                 }
                 Some(exec) if exec.kind != PathingCommandType::Defer => {
                     self.in_control_this_tick = Some(id);
-                    for rest in order[n + 1..].iter().copied() {
-                        self.lose_control(rest);
+                    if id != ProcId::InventoryPauser {
+                        // `if (!proc.isTemporary())`
+                        for rest in order[n + 1..].iter().copied() {
+                            self.lose_control(rest);
+                        }
                     }
                     return Some(exec);
                 }
@@ -752,7 +881,7 @@ impl<R: SearchRunner<S>, S> Pathing<R, S> {
             self.goal = None;
             return;
         };
-        if self.in_control_this_tick != self.in_control_last_tick && cmd.kind != PathingCommandType::RequestPause && self.in_control_last_tick.is_some() {
+        if self.in_control_this_tick != self.in_control_last_tick && cmd.kind != PathingCommandType::RequestPause && self.in_control_last_tick.is_some_and(|last| last != ProcId::InventoryPauser) {
             // if control has changed from a real process to another real process, and the new process wants to do something
             self.cancel_segment_if_safe();
             // get rid of the in progress stuff from the last process
@@ -841,6 +970,9 @@ impl<R: SearchRunner<S>, S> Pathing<R, S> {
     /// `PathingBehavior.secretInternalSetGoalAndPath`.
     fn set_goal_and_path<W: WorldView>(&mut self, cmd: &PathingCommand, tk: &mut Tk<'_, '_, W, S>) -> bool {
         self.goal = cmd.goal.clone();
+        // `if (command instanceof PathingCommandContext) context = desiredCalcContext; else context = new CalculationContext(...)`: only the builder
+        // answers with a context; the plain one is none
+        self.context = if self.in_control_this_tick == Some(ProcId::Build) { self.builder.context() } else { None };
         let Some(goal) = self.goal.clone() else {
             return false;
         };
@@ -872,7 +1004,7 @@ impl<R: SearchRunner<S>, S> Pathing<R, S> {
         let (primary, failure) = plan::timeouts(self.current.is_some(), &tk.ctx.cfg.search);
         let generation = self.next_generation;
         self.next_generation += 1;
-        let job = SearchJob { generation, start, goal, previous: self.current.as_ref().map(|c| c.path().clone()), feet: tk.env.player.feet(), tables: Arc::clone(tk.env.tables), border: tk.env.border, primary_timeout_ms: primary, failure_timeout_ms: failure, max_nodes: self.max_nodes };
+        let job = SearchJob { generation, start, goal, previous: self.current.as_ref().map(|c| c.path().clone()), feet: tk.env.player.feet(), tables: Arc::clone(tk.env.tables), border: tk.env.border, primary_timeout_ms: primary, failure_timeout_ms: failure, max_nodes: self.max_nodes, context: self.context.clone() };
         self.in_progress = Some(InProgress { generation, start });
         let snapshot = (tk.snapshot)();
         self.runner.start(job, snapshot);
@@ -998,7 +1130,9 @@ impl<R: SearchRunner<S>, S> Pathing<R, S> {
         }
         let path_start = self.expected_segment_start;
         let progress = Progress { searching: self.in_progress.is_some(), best_positions: None };
-        let senv = Env { ctx: tk.ctx, p: player, set: tk.env.exec, path_start, inv: tk.env.inv, game: tk.env.game };
+        // `InventoryBehavior.selectThrowawayForLocation` asks the builder what it wants where a block is placed; the hint is a snapshot of its tick
+        let hint = self.builder.throwaway_hint(&tk.env.build);
+        let senv = Env { ctx: tk.ectx, p: player, set: tk.env.exec, path_start, inv: tk.env.inv, game: tk.env.game, hint: hint.as_ref().map(|h| h as &dyn ThrowawayHint) };
         let Some(current) = self.current.as_mut() else {
             return;
         };

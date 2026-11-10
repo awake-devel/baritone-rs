@@ -317,6 +317,8 @@ mod tests {
         w.set_settings(s);
         let data = WorldData::start(Arc::clone(&w)).unwrap();
         assert!(data.has_room());
+        // Stop the packer first: a packer that starts late would take the jobs below before the check (it looks at `stop` before it takes one).
+        data.shutdown();
         {
             let mut q = data.shared.queue.lock().unwrap();
             for i in 0..5 {

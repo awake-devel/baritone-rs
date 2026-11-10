@@ -1,7 +1,7 @@
 # baritone-rs: a Rust port of the Baritone pathfinder as a native Horizon mod.
 # LGPL-3.0-or-later, like the rest of this repository. Ported from cabaletta/baritone, see ../CREDITS.md.
 #
-# Walks, sprints, breaks and places along a path: `/b goto`, `goal`, `path`, `eta`, `set`, `stop`, and the path drawn in the world.
+# Walks, sprints, breaks and places along a path: `/b goto`, `mine`, `build`, `resume`, `goal`, `path`, `eta`, `set`, `stop`, and the path drawn in the world.
 #
 # The mod reads private `Game` fields (the player, the hotbar, the world, the view angles, the screen, the border and the resources),
 # so it pins the Horizon revision it was written against. Most hooks are the stable `native_*` ones. Two private functions are hooked

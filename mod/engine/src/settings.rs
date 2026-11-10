@@ -6,6 +6,7 @@
 // Defaults are upstream's at commit 1b8e87c, except where the field says otherwise.
 use crate::config::Config;
 use crate::inventory::ToolSettings;
+use crate::schematic::{BlockMirror, BlockRotation};
 
 /// The executor's settings. Defaults are upstream's (`Settings.java` at 1b8e87c).
 #[derive(Clone, Debug, PartialEq)]
@@ -164,6 +165,108 @@ impl Default for MineSettings {
             blacklist_closest_on_failure: true,
             right_click_container_on_arrival: true,
             enter_portal: true,
+        }
+    }
+}
+
+/// The settings `BuilderProcess` and its calculation context read. Defaults are upstream's (`Settings.java` at 1b8e87c). Block lists hold
+/// names in `BlockUtils` form (the path for `minecraft:`). `buildOnlySelection` and `notificationOnBuildFinished` are not here (`allowInventory` is in `ToolSettings`):
+/// see docs/deviations.md.
+#[derive(Clone, Debug, PartialEq)]
+pub struct BuildSettings {
+    /// `buildInLayers`, default false.
+    pub build_in_layers: bool,
+    /// `layerOrder`, default false: false builds from the bottom up, true from the top down.
+    pub layer_order: bool,
+    /// `layerHeight`, default 1.
+    pub layer_height: i32,
+    /// `startAtLayer`, default 0.
+    pub start_at_layer: i32,
+    /// `skipFailedLayers`, default false.
+    pub skip_failed_layers: bool,
+    /// `buildRepeat`, default (0, 0, 0): where the next copy of the build goes.
+    pub build_repeat: (i32, i32, i32),
+    /// `buildRepeatCount`, default -1: how many copies; -1 is no limit.
+    pub build_repeat_count: i32,
+    /// `buildRepeatSneaky`, default true.
+    pub build_repeat_sneaky: bool,
+    /// `breakFromAbove`, default false.
+    pub break_from_above: bool,
+    /// `goalBreakFromAbove`, default false.
+    pub goal_break_from_above: bool,
+    /// `mapArtMode`, default false.
+    pub map_art_mode: bool,
+    /// `okIfWater`, default false.
+    pub ok_if_water: bool,
+    /// `incorrectSize`, default 100.
+    pub incorrect_size: i32,
+    /// `breakCorrectBlockPenaltyMultiplier`, default 10.
+    pub break_correct_block_penalty_multiplier: f64,
+    /// `placeIncorrectBlockPenaltyMultiplier`, default 2.
+    pub place_incorrect_block_penalty_multiplier: f64,
+    /// `schematicOrientationX`, `Y` and `Z`, default false: the origin is moved by the schematic's size, so it is the far corner.
+    pub schematic_orientation_x: bool,
+    pub schematic_orientation_y: bool,
+    pub schematic_orientation_z: bool,
+    /// `buildSchematicRotation`, default NONE.
+    pub build_schematic_rotation: BlockRotation,
+    /// `buildSchematicMirror`, default NONE.
+    pub build_schematic_mirror: BlockMirror,
+    /// `builderTickScanRadius`, default 5.
+    pub builder_tick_scan_radius: i32,
+    /// `distanceTrim`, default true.
+    pub distance_trim: bool,
+    /// `buildIgnoreBlocks`, default empty: blocks that do not count as wrong where the schematic wants air.
+    pub build_ignore_blocks: Vec<String>,
+    /// `buildSkipBlocks`, default empty: blocks the schematic wants that are left out of the build.
+    pub build_skip_blocks: Vec<String>,
+    /// `okIfAir`, default empty: blocks that may be missing from where the schematic wants them.
+    pub ok_if_air: Vec<String>,
+    /// `buildValidSubstitutes`, default empty: a block and the blocks that count as it.
+    pub build_valid_substitutes: Vec<(String, Vec<String>)>,
+    /// `buildSubstitutes`, default empty: a block and the blocks to place in its stead.
+    pub build_substitutes: Vec<(String, Vec<String>)>,
+    /// `buildIgnoreExisting`, default false.
+    pub build_ignore_existing: bool,
+    /// `buildIgnoreDirection`, default false.
+    pub build_ignore_direction: bool,
+    /// `buildIgnoreProperties`, default empty: property names that do not count.
+    pub build_ignore_properties: Vec<String>,
+}
+
+impl Default for BuildSettings {
+    fn default() -> Self {
+        BuildSettings {
+            build_in_layers: false,
+            layer_order: false,
+            layer_height: 1,
+            start_at_layer: 0,
+            skip_failed_layers: false,
+            build_repeat: (0, 0, 0),
+            build_repeat_count: -1,
+            build_repeat_sneaky: true,
+            break_from_above: false,
+            goal_break_from_above: false,
+            map_art_mode: false,
+            ok_if_water: false,
+            incorrect_size: 100,
+            break_correct_block_penalty_multiplier: 10.0,
+            place_incorrect_block_penalty_multiplier: 2.0,
+            schematic_orientation_x: false,
+            schematic_orientation_y: false,
+            schematic_orientation_z: false,
+            build_schematic_rotation: BlockRotation::None,
+            build_schematic_mirror: BlockMirror::None,
+            builder_tick_scan_radius: 5,
+            distance_trim: true,
+            build_ignore_blocks: vec![],
+            build_skip_blocks: vec![],
+            ok_if_air: vec![],
+            build_valid_substitutes: vec![],
+            build_substitutes: vec![],
+            build_ignore_existing: false,
+            build_ignore_direction: false,
+            build_ignore_properties: vec![],
         }
     }
 }

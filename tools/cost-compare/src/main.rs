@@ -664,7 +664,7 @@ fn run<R: BufRead>(input: R, quiet: bool) -> Run {
                 let got = guarded(|| {
                     let b = ctx.get(x, yy, z);
                     let flags = [ctx.can_walk_through_at(x, yy, z), ctx.can_walk_on_at(x, yy, z), ctx.fully_passable_at(x, yy, z), ctx.can_place_against(x, yy, z), ctx.must_be_solid_to_walk_on(x, yy, z, &b), ctx.is_replaceable(x, z, &b), ctx.can_use_frost_walker(&b), ctx.avoid_breaking(x, yy, z, b), avoid_walking_into(&b, &cfgs[ci]), ctx.is_flowing(x, yy, z, &b)];
-                    (flags, ctx.mining_duration_at(x, yy, z, false), ctx.mining_duration_at(x, yy, z, true), ctx.cost_of_placing_at(x, z, &b))
+                    (flags, ctx.mining_duration_at(x, yy, z, false), ctx.mining_duration_at(x, yy, z, true), ctx.cost_of_placing_at(x, yy, z, b))
                 });
                 match got {
                     Ok((flags, r0, r1, rp)) => {

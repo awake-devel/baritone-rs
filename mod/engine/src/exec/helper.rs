@@ -7,7 +7,7 @@
 use super::movements::Env;
 use super::state::{MoveState, MoveStatus, Target};
 use crate::blocks::Direction;
-use crate::inventory::select_throwaway;
+use crate::inventory::{select_throwaway_for_location, Throwaway};
 use crate::look::{block_pos_center, calc_rotation_from_vec3d, Rotation, Vec3};
 use crate::pos::Pos;
 use crate::raytrace::{infer_sneaking_eye_position, ray_trace_towards};
@@ -19,6 +19,20 @@ pub enum PlaceResult {
     ReadyToPlace,
     Attempting,
     NoOption,
+}
+
+/// `InventoryBehavior.selectThrowawayForLocation`: the slot to place a block at this position from, as the builder wants it when it is active.
+pub fn select_throwaway_at<W: WorldView>(env: &Env<'_, W>, pos: Pos) -> Option<Throwaway> {
+    select_throwaway_for_location(env.inv, &env.set.tool.acceptable_throwaway_items, env.hint, pos.x, pos.y, pos.z, env.get(pos).id, env.set.tool.allow_inventory)
+}
+
+/// `InventoryBehavior.throwaway` with `select` true: the hotbar slot is selected; a stack from the main inventory is asked to go to hotbar slot 7 first
+/// (`requestSwapWithHotBar(i, 7)`), which `update` hands to the inventory mover, and slot 7 is selected whether or not the move is made yet.
+pub fn select_found_throwaway(st: &mut MoveState, found: Throwaway) {
+    if let Throwaway::Inventory(i) = found {
+        st.swap_in = Some(i);
+    }
+    st.select = Some(found.hand_slot());
 }
 
 /// Upstream's `IPlayerContext.isLookingAt`: the crosshair is on this block, as the game says.
@@ -111,7 +125,6 @@ pub fn switch_to_best_tool_for<W: WorldView>(env: &Env<'_, W>, st: &mut MoveStat
 /// a block whose face is the cell to fill (the caller then presses the right button once it is sneaking, if it has to), `Attempting` when
 /// an aim was found, `NoOption` when none was. When there is no block to place, the movement is `Unreachable`.
 pub fn attempt_to_place_a_block<W: WorldView>(env: &Env<'_, W>, st: &mut MoveState, place_at: Pos, prefer_down: bool, would_sneak: bool) -> PlaceResult {
-    let acceptable = &env.set.tool.acceptable_throwaway_items;
     if !env.set.allow_place {
         // Not upstream (docs/deviations.md D28): nothing is placed when `allowPlace` is off. Upstream relies on the cost check.
         st.status = MoveStatus::Unreachable;
@@ -127,7 +140,7 @@ pub fn attempt_to_place_a_block<W: WorldView>(env: &Env<'_, W>, st: &mut MoveSta
     for dir in [Direction::North, Direction::South, Direction::East, Direction::West, Direction::Down] {
         let against1 = place_at.relative(dir, 1);
         if env.ctx.can_place_against_bsi(against1.x, against1.y, against1.z) {
-            let Some(_slot) = select_throwaway(env.inv, acceptable) else {
+            let Some(_found) = select_throwaway_at(env, place_at) else {
                 // get ready to place a throwaway block: "bb pls get me some blocks. dirt, netherrack, cobble"
                 st.status = MoveStatus::Unreachable;
                 return PlaceResult::NoOption;
@@ -158,9 +171,9 @@ pub fn attempt_to_place_a_block<W: WorldView>(env: &Env<'_, W>, st: &mut MoveSta
             if would_sneak {
                 st.keys.sneak = true;
             }
-            return match select_throwaway(env.inv, acceptable) {
-                Some(slot) => {
-                    st.select = Some(slot);
+            return match select_throwaway_at(env, place_at) {
+                Some(found) => {
+                    select_found_throwaway(st, found);
                     PlaceResult::ReadyToPlace
                 }
                 None => no_throwaway(st),
@@ -171,9 +184,9 @@ pub fn attempt_to_place_a_block<W: WorldView>(env: &Env<'_, W>, st: &mut MoveSta
         if would_sneak {
             st.keys.sneak = true;
         }
-        return match select_throwaway(env.inv, acceptable) {
-            Some(slot) => {
-                st.select = Some(slot);
+        return match select_throwaway_at(env, place_at) {
+            Some(found) => {
+                select_found_throwaway(st, found);
                 PlaceResult::Attempting
             }
             None => no_throwaway(st),

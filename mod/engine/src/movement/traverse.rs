@@ -60,7 +60,7 @@ pub fn cost<W: WorldView>(ctx: &Ctx<'_, W>, x: i32, y: i32, z: i32, dest_x: i32,
             if is_water(&dest_on) && through_water {
                 return COST_INF;
             }
-            let place_cost = ctx.cost_of_placing_at(dest_x, dest_z, &dest_on);
+            let place_cost = ctx.cost_of_placing_at(dest_x, y - 1, dest_z, dest_on);
             if place_cost >= COST_INF {
                 return COST_INF;
             }
